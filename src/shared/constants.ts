@@ -401,6 +401,12 @@ export const HUNTER_LASER_LOCK = 3 * TICK_HZ;
 export const HUNTER_LASER_HP = 3;
 /** Ticks between two shots of the shoulder cannon held down; `cool` is 4 bits on the wire, so 15 at most. */
 export const HUNTER_LASER_COOL = 15;
+/**
+ * The shoulder cannon's battery (the user, 2026-11-23): its shots when full, kept in `cap`, and
+ * the ticks without firing that bring one back, counted down in `rail` (both u8 on the wire).
+ */
+export const HUNTER_CELLS = 15;
+export const HUNTER_CELL_TICKS = 90;
 /** Plasma balls in flight in a room at most: past it the oldest bursts. They go on the wire. */
 export const PLASMA_MAX = 64;
 /** Ball.power of a vehicle's laser bolt (rover.ts): past CHARGE_MAX, so it names the bolt. It flies at BOLT_SPEED m/s. */

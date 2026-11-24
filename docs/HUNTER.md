@@ -37,9 +37,13 @@ enregistré.
 The Hunter's third weapon, on key 3 (the user, 2026-11-23). He takes no other weapon: the rail gun
 and rifle racks give him nothing, and the gun rack only refills his harpoon bolts.
 
-- **Always carried.** It is his from the spawn (`rail` and `cap` 0: carried, nothing to spend). It
-  never empties, heats or swaps a capsule, and G does not fire the rail gun's ring with it
-  (`src/shared/gun.ts`).
+- **Always carried.** It is his from the spawn. It never heats or swaps a capsule, and G does not
+  fire the rail gun's ring with it (`src/shared/gun.ts`).
+- **Battery.** It holds `HUNTER_CELLS` (15) shots in `cap`. Each shot spends one, and it does not
+  fire empty. Each `HUNTER_CELL_TICKS` (1.5 s) without firing brings one back, counted down in
+  `rail` (both u8 on the wire). A shot starts the count over. He gets a full battery at the spawn
+  and when he takes the class after it (with his harpoon, `ammo` -1). What is left of a marine's
+  rail gun is cut to the battery's. The HUD shows the shots left (`combat.ts`).
 - **Fire and lock.** Each click fires, then one shot each `HUNTER_LASER_COOL` ticks while held
   (`p.cool`, predicted in `gun.ts`). A shot goes down the look and the first enemy in its line takes
   `HUNTER_LASER_HP` (3) (`Room.shoulder()`). The lock starts on the enemy most in line with the
@@ -47,16 +51,27 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   screen (`onScreen()`, `SCREEN`, shared by host and client); once he leaves it, it is lost and
   starts over. After `HUNTER_LASER_LOCK` (3 s) it is locked: the shots go at him and the cannon
   turns to follow him. `HUNTER_LASER_COOL` is 15 at most: `cool` is 4 bits on the wire.
-- **Its sight.** Three red triangles round the foe, each pointing at him: tracking, they stand far
-  out, each drifting on its own beat; they close in over the 3 s and meet on him at the lock
-  (`hunterAim()`). The HUD reads the rule locally and sends nothing to the other players. Every
+- **Its sight.** The three red sides of a triangle round the foe: tracking, they stand far out, each
+  drifting and tilting on its own beat; they close in over the 3 s and join into the triangle at
+  the lock, which then turns at 180° a second (`hunterAim()`). The HUD reads the rule locally and sends nothing to the other players. Every
   shot is seen as a red beam from the cannon's muzzle (`Tracer.laser()`), to the locked foe.
 - **Folds out.** Stowed, it lies back along his left shoulder; taken, it swings out about the top of
   its post (`CANNON_HINGE`) in `CANNON_SWING` (0.35 s) and points along his look. In the own view it
   rises from under the left shoulder into the top left of the view and points at what the look
   meets (`body.ts`), on its post, which stands on the left shoulder and comes into the view from
   its bottom left corner (`SHOULDER`, `postVertices()`). Its shots are seen to leave from its muzzle in both views. With it, his hands
-  hold nothing and move as unarmed (`handsFree()`).
+  hold nothing (`handsFree()`).
+- **Tracking sound.** After the first 5 s of a Predator target-lock clip: on a new target three dry
+  clicks round 700 Hz 75 ms apart and a breath of noise (`SOUND.HUNTER_TRACK`), then a looped
+  electronic hum at 1.5 kHz over 1.2 kHz, each buzzing at 65 Hz, until the lock
+  (`SOUND.HUNTER_SEEK`). The lock keeps its tone (`SOUND.HUNTER_LOCK`).
+- **Wrist computer.** A bronze housing on the back of his left bracer, its lid open, with three
+  square cells of red Yautja-like glyphs (`computer.ts`). Each glyph has `PER_GLYPH` (5) lit
+  segments, one per shot left. They go out from the right glyph to the left. With the cannon out,
+  in the own view (the user, 2026-11-24, after a reference shot), the left arm bends in low on the
+  left of the view, the computer facing up (`COMPUTER`). The right forearm comes in from the right,
+  bent nearly level, the hand straight on its line, the index on the computer (`POKE`). It presses
+  at each shot (`cool`). The view above stays clear.
 
 ## Blades, harpoon and slots (the user, 2026-11-23)
 

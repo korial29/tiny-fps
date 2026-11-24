@@ -873,6 +873,15 @@ describe('Bot: team play', () => {
     expect(bot.view().why).toBe('take flag');
   });
 
+  it('does not take a Hunter’s cannon charging (`rail`) for a rail gun', () => {
+    const world = build(HIGHLINE);
+    const bot = new Bot(0);
+    const me = at(0, 0, 43, 156);
+    Object.assign(me.state, { y: 19, ammo: 10, rail: 40, cap: 3 });
+    const kit = KITS[ROLE.HUNTER];
+    expect(bot.think({ me, others: [], flags: [home, home], world, kit }).keys & KEY.RAIL).toBe(0);
+  });
+
   it('seeks a nearby missing rifle, then equips it, while a carrier goes home', () => {
     const world = build(HIGHLINE);
     const bot = new Bot(0);

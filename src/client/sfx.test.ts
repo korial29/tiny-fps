@@ -83,7 +83,7 @@ const pitch = (s: Float32Array, t: number, lag = 70) => {
 };
 
 describe('the sounds of the game', () => {
-  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid, the ship’s jet and the Hunter’s radio static', () => {
+  it('are one entry per id, and the looped ones are the wind, the scrape, the hum, the buzz, the gun’s charge, the rover’s engine and skid, the ship’s jet, the Hunter’s radio static and his cannon’s tracking hum', () => {
     expect(LAYERS).toHaveLength(Object.keys(SOUND).length);
     expect(Object.values(SOUND).sort((a, b) => a - b)).toEqual(LAYERS.map((_, i) => i));
     expect(LOOPED).toEqual([
@@ -96,6 +96,7 @@ describe('the sounds of the game', () => {
       SOUND.SKID,
       SOUND.JET,
       SOUND.STATIC,
+      SOUND.HUNTER_SEEK,
     ]);
   });
 
@@ -330,6 +331,32 @@ describe('seam', () => {
       expect(peak(s)).toBeLessThan(1.1);
     },
   );
+});
+
+describe('the shoulder cannon’s tracking (the user, 2026-11-23: after the Predator’s)', () => {
+  it('clicks three times 75 ms apart, then breathes', () => {
+    const s = sound('HUNTER_TRACK');
+    const at = (t: number) => rms(s.subarray(Math.round(t * RATE), Math.round((t + 0.012) * RATE)));
+    for (const click of [0, 0.075, 0.15]) {
+      expect(at(click)).toBeGreaterThan(4 * at(click + 0.04));
+    }
+    expect(at(0.36)).toBeGreaterThan(4 * at(0.25));
+  });
+
+  it('hums at 1.5 kHz while it tracks', () => {
+    const s = seam(render(SOUND.HUNTER_SEEK, LAYERS));
+    // The hum's strength at `hz`, over its first 0.2 s.
+    const tone = (hz: number) => {
+      let [re, im] = [0, 0];
+      for (let i = 0; i < RATE / 5; i++) {
+        re += s[i] * Math.cos((2 * Math.PI * hz * i) / RATE);
+        im += s[i] * Math.sin((2 * Math.PI * hz * i) / RATE);
+      }
+      return Math.hypot(re, im);
+    };
+    expect(tone(1507)).toBeGreaterThan(5 * tone(1000));
+    expect(tone(1217)).toBeGreaterThan(5 * tone(1000));
+  });
 });
 
 describe('the Hunter’s views', () => {

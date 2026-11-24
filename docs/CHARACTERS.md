@@ -62,11 +62,15 @@ Every picture costs about a thousand tokens and every script is sent in full, so
 - **Numbers before pictures.** Have the script print what decides a choice (dimensions, bounding
   boxes, a section's radii at given heights) and read that text. Take a picture only to judge a
   silhouette, after a change worth seeing.
-- **Small pictures, few of them.** `get_viewport_screenshot` with `max_size` 512 to 640, the
-  viewport in an orthographic front or side view, the scene holding the sketch alone. Several
-  views at once: put them side by side in one render from the script rather than one picture each.
-- **Ask for little.** `get_scene_info` with the fields needed, `get_object_info` on one object;
-  no asset search, no import, no generator.
+- **Small pictures, few of them.** `look` with `max_size` 512 to 640 and `shading` `solid` (drawn
+  at once; `rendered`, the default, renders every tile and adds nothing to a silhouette). Several
+  sides in one picture: `mode` `angles` with `views` (for instance `front`, `right`, `top`), rather
+  than one `look` each. The scene holds the sketch alone.
+- **Ask for little.** `get_scene_info` with the `fields` needed and a `query` or `root` for one
+  object; anything else, printed by the script. No `search_assets`, `import_asset`,
+  `generate_3d` or `generate_gaussian_world`: their sources are off and their output never ships.
+  Leave the tools' optional `user_prompt` empty: repeating the request on every call costs tokens
+  and goes only to the server's telemetry records, which are off.
 - **Stop at the silhouette.** Colours, materials, levels of detail and fine features are worked out
   in the game's code, where they ship. Once the shape is agreed, have the script print the numbers
   the procedural builder needs (profiles, offsets, radii), write the builder from them and finish

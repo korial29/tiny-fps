@@ -38,6 +38,6 @@ describe('the Hunter’s wrist computer (the user, 2026-11-24)', () => {
   it('is of brushed metal', () => {
     const v = wristComputer(HUNTER_CELLS);
     const brushed = v.filter((l, i) => i % STRIDE === 8 && l === TWILL).length;
-    expect(brushed).toBeGreaterThan(v.length / STRIDE / 4);
+    expect(brushed).toBeGreaterThan(v.length / STRIDE / 5);
   });
 });

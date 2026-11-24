@@ -2,7 +2,7 @@
 // housing along the back of his left bracer, its lid open on a rod hinge. On its deck, from the
 // elbow to the wrist: a plate with the clan's two claws, four square cells in a raised bezel, each a
 // glyph of short dashes, then three bars and the fire key. A ribbed spring runs along its near
-// edge, and a skirt engraved with signs falls round the forearm on each side. The glyphs count the
+// edge, and a skirt engraved with signs falls round the forearm on its near side. The glyphs count the
 // shoulder cannon's shots: two lit dashes are one shot, and they go out from the wrist's cell to
 // the elbow's. Built in the left forearm's frame (body.ts): y up the forearm from the wrist, the
 // bracer's back toward -x.
@@ -157,24 +157,11 @@ export const wristComputer = (shots: number): number[] => {
     }
   };
 
-  // The housing and, on each side, the skirt that falls round the forearm from under it.
+  // The housing and, on the near side, the skirt that falls round the forearm from under it
+  // (the far one would be behind the lid).
   box(BACK, OUT, Y0, Y1, -HALF, HALF, METAL);
-  for (const side of [-1, 1]) {
-    const [a0, a1] = side < 0 ? [-1.75, -0.5] : [0.5, 1.75];
-    tube(0, 0, SKIRT, SKIRT, Y0 + 0.004, Y1 - 0.004, a0, a1, 5, METAL);
-  }
-  // Fins on the near wall at the wrist end, and blocks on the ledge between the cells and the spring.
-  for (let i = 0; i < 4; i++) {
-    box(
-      BACK + 0.006,
-      OUT - 0.002,
-      0.034 + 0.006 * i,
-      0.037 + 0.006 * i,
-      -HALF - 0.003,
-      -HALF,
-      EDGE,
-    );
-  }
+  tube(0, 0, SKIRT, SKIRT, Y0 + 0.004, Y1 - 0.004, -1.75, -0.5, 5, METAL);
+  // Blocks on the ledge between the cells and the spring.
   for (const [y0, y1] of [
     [0.066, 0.08],
     [0.085, 0.09],
@@ -286,7 +273,7 @@ export const wristComputer = (shots: number): number[] => {
   at = (x, y, z) => deck(hx + x * lc - z * ls, y, hz + x * ls + z * lc);
   const [LW, rim] = [2 * HALF - 0.004, 0.005];
   box(0, 0.004, Y0, Y1, -LW, -0.004, METAL);
-  // Its tabs on the free edge, stepped, and three screws in its inner face.
+  // Its tabs on the free edge, stepped.
   for (const [y0, y1, d] of [
     [0.04, 0.075, 0.006],
     [0.048, 0.066, 0.01],
@@ -294,9 +281,6 @@ export const wristComputer = (shots: number): number[] => {
     [0.13, 0.155, 0.01],
   ]) {
     box(0.0005, 0.0035, y0, y1, -LW - d, -LW, EDGE);
-  }
-  for (const y of [0.07, 0.12, 0.17]) {
-    box(-0.001, 0, y, y + 0.003, -LW + 0.012, -LW + 0.015, DARK);
   }
   layer = SHINE;
   for (const [y0, y1, z0, z1] of [

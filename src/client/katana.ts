@@ -225,8 +225,9 @@ export const wristBlade = (lod: number): number[] => {
   const out: number[] = [];
   // The housing (the user's model, 2026-11-24): a low casing over the blades' heels, its top flat
   // and its sides steep, in the bracer's brushed silver (TWILL); a blunt nose over the wrist with
-  // a slot for each blade, and its back sloping gently down onto the bracer's back. Signs are cut
-  // in its top and a ribbed rail runs along each of its shoulders. It is posed on the forearm, so its brushing holds still (wristHousing()).
+  // a slot for each blade, and its back sloping gently down onto the bracer's back. A ribbed
+  // rail runs along each of its shoulders. It is posed on the forearm, so its brushing holds
+  // still (wristHousing()).
   // Its sides and its sloped end sink into the bracer (whose back is some 4.2 cm up), so the two
   // meet in one crease of the same metal, no edge between them.
   // Low (the user, 2026-11-23: a lower block under the blades).
@@ -299,11 +300,6 @@ export const wristBlade = (lod: number): number[] => {
       tri(out, p, away ? r : t, away ? t : r, rgb);
     }
   };
-  /** The point of the top at `y` along the forearm and `z` across, `lift` over it. */
-  const top = (y: number, z: number, lift = 0.0007): Vec3 => {
-    const c = Math.min(1, Math.abs(z) / halfWidth(y)) ** (1 / BOXY);
-    return [bed + (height(y) - bed) * Math.sqrt(1 - c * c) ** BOXY + lift, y, z];
-  };
   const inside: Vec3 = [bed, 0.07, 0];
   // A ribbed rail along each shoulder: ridges up to a crest and down again, seen close; a plain
   // rail from afar.
@@ -327,45 +323,6 @@ export const wristBlade = (lod: number): number[] => {
   }
   for (let i = rails + 8; i < out.length; i += STRIDE) {
     out[i] = TWILL;
-  }
-  // The signs cut in the top, seen close: panel lines, stubs and a ring, each [y, z] to [y, z].
-  const cut = (y0: number, z0: number, y1: number, z1: number) => {
-    const l = Math.hypot(y1 - y0, z1 - z0);
-    const [ny, nz] = [((z1 - z0) / l) * 0.0008, (-(y1 - y0) / l) * 0.0008];
-    face(
-      [top(y0 - ny, z0 - nz), top(y1 - ny, z1 - nz), top(y1 + ny, z1 + nz), top(y0 + ny, z0 + nz)],
-      inside,
-      SLOT,
-    );
-  };
-  if (lod) {
-    for (const z of [-0.013, 0.013]) {
-      for (let y = 0; y < 0.14; y += 0.035) {
-        cut(y, z, y + 0.035, z);
-      }
-    }
-    for (const [y0, z0, y1, z1] of [
-      [0.02, -0.013, 0.02, 0.013],
-      [0.14, -0.013, 0.14, 0.013],
-      [0.075, -0.013, 0.075, 0.002],
-      [0.11, 0.002, 0.11, 0.013],
-      [0.075, 0.002, 0.11, 0.002],
-      [0.035, 0.005, 0.06, 0.005],
-      [0.06, 0.005, 0.06, 0.013],
-      [0.09, -0.007, 0.105, -0.007],
-      [0.12, -0.004, 0.132, -0.004],
-    ]) {
-      cut(y0, z0, y1, z1);
-    }
-    for (let k = 0; k < 6; k++) {
-      const [a, b] = [k, k + 1].map(t => (t * Math.PI) / 3);
-      cut(
-        0.048 + 0.0045 * Math.cos(a),
-        -0.006 + 0.0045 * Math.sin(a),
-        0.048 + 0.0045 * Math.cos(b),
-        -0.006 + 0.0045 * Math.sin(b),
-      );
-    }
   }
   // The slot each blade comes out of, within the nose's flat face.
   for (const side of [-1, 1]) {

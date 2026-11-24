@@ -26,7 +26,7 @@ it('keeps the Hunter’s wrist blades within their housing’s height, clear of 
 
 it('cuts a round notch and two barbs in each blade, seen close and from afar', () => {
   const [far, near] = [wristBlade(0), wristBlade(1)];
-  // The blades are the same at both distances: only the housing's rails and signs change.
+  // The blades are the same at both distances: only the housing's rails change.
   const steel = (v: number[]) => v.filter((_, i) => i % STRIDE === 9 && v[i] > 0.75).length;
   expect(steel(far)).toBe(steel(near));
   expect(near.length).toBeGreaterThan(far.length);

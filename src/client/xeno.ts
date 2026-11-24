@@ -2075,11 +2075,14 @@ const faceAt = (x: number, y: number): Vec3 => {
  * the hinges.
  */
 const HINGE: Vec3 = [0.05, -0.036, -0.02];
-const GAPE = 0.8;
-// A narrow mouth (the user, 2026-11-24).
-const ARC = [0.034, 0.034, -0.045];
+// Shut (the user, 2026-11-24: its mouth closed): the mandible's lip a tooth's length under the
+// upper jaw's edge, the teeth clenched between them. It was 0.8, gaping, FLOOR 3 cm lower with it.
+const GAPE = 0.3;
+// A narrow mouth (the user, 2026-11-24). Its front flush with the face over it: 1 cm further back,
+// as it hung open, the shut mandible sat behind the upper jaw (the user, 2026-11-24).
+const ARC = [0.034, 0.034, -0.055];
 /** The height of the mandible's underside, under the chin and at the hinges. */
-const FLOOR = [-0.108, -0.1];
+const FLOOR = [-0.084, -0.074];
 /** The jaw's plane: the way its teeth point, and its height `z` ahead. */
 const JAW_UP: Vec3 = [0, Math.cos(GAPE), -Math.sin(GAPE)];
 const jawY = (z: number) => HINGE[1] - (HINGE[2] - z) * Math.tan(GAPE);

@@ -75,7 +75,10 @@ const BUDGETS = [
   // 268,100 B for his skirt kept narrow at the sides, clear of the hands (the user, 2026-11-24: 76 B more).
   // 268,800 B for the two together with the Hunter's disc throw and harpoon shock, merged meanwhile
   // inside the room the sash was counted in (the user, 2026-11-24: 700 B more).
-  { file: 'dist/index.js', max: 270_336 },
+  // 270,336 B for the polished harpoon (#376, 2026-11-24).
+  // 272,896 B: 2,560 B more for the Hunter's dreadlocks, netted sleeves, yoke, necklace, spots,
+  // side armour and olive hide (the user, 2026-11-24: raise it, 268,800 to 271,360 before #376).
+  { file: 'dist/index.js', max: 272_896 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

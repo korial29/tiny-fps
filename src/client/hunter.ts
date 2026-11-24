@@ -1,6 +1,7 @@
 // Hunter design study. Parts share the runner's metre scale, -z facing and mesh vertex format.
 import {
   GILT,
+  GLOSS,
   SHINE,
   STRIDE,
   TWILL,
@@ -33,12 +34,30 @@ import type { Quat } from './rig';
 
 const hide: Vec3 = [0.39, 0.42, 0.28];
 const leather: Vec3 = [0.15, 0.12, 0.105];
+/** His hide: its olive, the green beige of the pecs and the abs, and its dark green spots. */
+const HIDE: Vec3 = [0.43, 0.36, 0.25];
+const HIDE_LIGHT: Vec3 = [0.66, 0.6, 0.43];
+const HIDE_SPOT: Vec3 = [0.08, 0.15, 0.08];
 const graphite: Vec3 = [0.18, 0.22, 0.23];
 const silver: Vec3 = [0.57, 0.66, 0.66];
 const bronze: Vec3 = [0.59, 0.37, 0.19];
 const light: Vec3 = [1, 0.24, 0.065];
 
 const stature = 1.2;
+/** The helmet's width against its first build (the user, 2026-11-24: narrower). */
+const HELM_WIDTH = 0.88;
+/** The wrist blades and their housing stand off the back of the hand and sit up the forearm (the user, 2026-11-24: they cut into the hand), in the runner's metres. */
+const WRIST_LIFT = 0.022;
+const WRIST_UP = 0.02;
+/** Where the sleeves' net ends on the arm: its share from the shoulder to the wrist. */
+const NET_SLEEVE = 0.55;
+/** The armpit's cut (the user, 2026-11-24): how far the flank draws in under it, and the width of the upper arm's inside. */
+const PIT = 0.11;
+const PIT_ARM = 0.85;
+/** The hide's round spots to a square metre of its most spotted skin. */
+const SPOTS = 430;
+/** How much thinner the chest is from the side than the runner's (the user, 2026-11-24: too thick in profile). */
+const CHEST_THIN = 0.1;
 /** What the finished model is scaled by from the sculpt, off the head (hunter()'s last pass). */
 const sized = ([x, y, z]: Vec3): Vec3 => [x * stature * 0.9, y * stature, z * stature * 0.92];
 /** The top of the shoulder cannon's post, sculpted (CANNON_HINGE in the finished model). */
@@ -50,7 +69,13 @@ const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
 // Sculpt the Marine's rest skin, including the shared shoulder and crotch vertices.
 // Bone weights distinguish the inside of an arm from the adjacent chest wall.
-function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): number[] {
+function marineBuild(
+  lod: 0 | 1 | 2,
+  chestFaces: number[],
+  swordArm: number[],
+  armFaces: number[],
+  spotFaces: [number, number][],
+): number[] {
   const base = body([0, 1, 3][lod]);
   const points: Vec3[] = [];
   const arm: number[] = [],
@@ -115,6 +140,7 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): 
       }
     }
   }
+  const fadeIn = (v: number) => Math.min(1, Math.max(0, v));
   function shape([x, y, z]: Vec3, armWeight: number, legWeight: number): Vec3 {
     // Fade into the shared shoulder ring before the sleeve joins the trunk.
     armWeight *= Math.min(1, Math.max(0, (1.41 - y) / 0.105));
@@ -122,20 +148,30 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): 
       sign = Math.sign(x),
       torso = 1 - armWeight - legWeight;
     const chest = bell((y - 1.405) / 0.15);
-    const armMass = 0.45 * bell((y - 1.319) / 0.084) + 0.36 * bell((y - 1.098) / 0.073);
+    // The upper arm's swell (the user, 2026-11-24: leaner, a man's proportions) and the forearm's.
+    const armMass = 0.2 * bell((y - 1.319) / 0.084) + 0.36 * bell((y - 1.098) / 0.073);
     const legMass = 0.26 * bell((y - 0.745) / 0.15) + 0.22 * bell((y - 0.35) / 0.095);
-    const shoulder = 0.05 + 0.17 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
+    const shoulder = 0.036 + 0.17 * Math.max(0, 1.45 - y) - 0.024 * bell((y - 1.37) / 0.14);
     const armX = 0.205;
     const deltoid = bell((y - 1.446) / 0.072) * bell((ax - 0.222) / 0.057);
     // Fill the lower rib cage and waist progressively; the shoulder cap tapers separately.
-    const ribWidth = 1.09 + 0.22 * chest + 0.2 * bell((y - 1.178) / 0.16);
+    // Under the armpit the flank draws in, so the arm stands clear of it up to the shoulder.
+    const ribWidth =
+      1.09 + 0.13 * chest + 0.11 * bell((y - 1.178) / 0.16) - PIT * bell((y - 1.33) / 0.075);
     const wide =
       ax * ribWidth * torso +
       0.008 * deltoid +
-      (armX + shoulder + (ax - armX) * (1.18 + armMass)) * armWeight +
+      // The inside of the upper arm is flatter than its outside: it does not sink into the chest.
+      (armX +
+        shoulder +
+        (ax - armX) *
+          (1.18 +
+            armMass -
+            (ax < armX ? (1.18 + armMass - PIT_ARM) * fadeIn((y - 1.2) / 0.1) : 0))) *
+        armWeight +
       (0.125 + (ax - 0.1) * (1.1 + legMass)) * legWeight;
-    let depth = z * (1.18 + 0.23 * chest * torso + armMass * armWeight + legMass * legWeight);
-    depth += z * 0.22 * deltoid;
+    let depth = z * (1.18 - CHEST_THIN * chest * torso + armMass * armWeight + legMass * legWeight);
+    depth += z * 0.1 * deltoid;
     const front = Math.min(1, Math.max(0, -z / 0.074));
     // Broad paired pecs narrowing into the sternum, then three shorter abdominal pairs.
     const pec = 0.067 * bell(((ax - 0.09) / 0.086) ** 2) * bell((y - 1.371 - 0.12 * ax) / 0.096);
@@ -173,7 +209,7 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): 
   };
   const pecSurface = (x: number, y: number) => {
     const ax = Math.sqrt(x * x + 0.0004);
-    const ribs = 0.172 * Math.sqrt(Math.max(0.02, 1 - (x / 0.365) ** 2));
+    const ribs = (0.172 - 0.2 * CHEST_THIN) * Math.sqrt(Math.max(0.02, 1 - (x / 0.365) ** 2));
     const belly = 0.074 * bell((ax - 0.129) / 0.135) * bell((y - 1.371 - 0.12 * ax) / 0.1);
     const sternum = 0.004 * bell(x / 0.04) * bell((y - 1.4) / 0.097);
     return -ribs - belly + sternum + 0.023 * ((y - 1.398) / 0.143) ** 2;
@@ -248,30 +284,60 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): 
     }
     if (face.every(k => arm[k] < 0.5) && face.some(k => points[k][1] > 0.98)) {
       chestFaces.push(result.length);
+    } else if (face.some(k => arm[k] >= 0.5) && face.every(k => points[k][1] > 0.9)) {
+      armFaces.push(result.length);
     }
+    // The faces that take the hide's round spots, and how thickly: the trunk, the arms down to
+    // the bracers and the legs down to the greaves.
+    const spotted =
+      face.every(k => points[k][1] > (arm[k] >= 0.5 ? 0.9 : 0.45)) &&
+      spotFaces.push([result.length, 0]);
     for (const k of face) {
       const y = points[k][1];
       const tint = y < 0.145 ? graphite : hide;
       const [px, py, pz] = vertices[k];
       const coverage =
         tint === hide ? Math.min(1, Math.max(0, (y - 0.15) / 0.07) + arm[k] + leg[k]) : 0;
-      // Pigment follows the flanks and shoulders, with broken mottling over the lighter chest.
+      // His hide (the user, 2026-11-24): olive, lightened to a green beige over the pecs and the
+      // abs, and broken by dark green spots that gather on the flanks, the back and the limbs.
       const flanks = Math.min(1, Math.abs(px) / 0.33);
+      const front = Math.max(0, -smooth[k][2]);
+      // The same on his two sides.
+      const mx = Math.abs(px);
       const pigment =
         0.5 +
         0.5 *
-          Math.sin(91 * px + 29 * py + 1.7 * Math.sin(43 * pz - 52 * py)) *
-          Math.cos(63 * py - 51 * pz + 0.9 * Math.sin(66 * px));
-      const pecLight = 0.086 * bell((Math.abs(px) - 0.13) / 0.09) * bell((py - 1.383) / 0.083);
+          Math.sin(47 * mx + 17 * py + 1.7 * Math.sin(23 * pz - 27 * py)) *
+          Math.cos(33 * py - 29 * pz + 0.9 * Math.sin(35 * mx));
+      const fine =
+        0.5 +
+        0.5 *
+          Math.sin(173 * mx - 131 * py + 2.1 * Math.sin(97 * pz + 61 * mx)) *
+          Math.cos(149 * pz + 113 * py);
+      const belly =
+        front *
+        (1 - arm[k]) *
+        (1 - leg[k]) *
+        bell(px / 0.21) *
+        fade((py - 1.0) / 0.08) *
+        fade((1.47 - py) / 0.07);
       const midline = 0.087 * bell(px / 0.018) * bell((py - 1.32) / 0.18);
-      const shade =
-        0.91 -
-        0.34 * flanks -
-        (0.09 + 0.14 * flanks) * pigment +
-        0.14 * Math.max(0, -smooth[k][2]) +
-        pecLight -
-        midline;
-      const warm = [0.57 * shade, 0.4 * shade, 0.285 * shade];
+      const dark = Math.max(
+        flanks,
+        arm[k],
+        0.8 * leg[k],
+        Math.min(1, Math.max(0, smooth[k][2]) * 1.4),
+      );
+      const spots =
+        fade((pigment - 0.42) / 0.2) *
+        (0.25 + 0.75 * dark) *
+        (1 - 0.75 * belly) *
+        (0.6 + 0.4 * fine);
+      if (spotted) {
+        spotFaces[spotted - 1][1] += ((0.12 + 0.88 * dark) * (1 - 0.85 * belly)) / 3;
+      }
+      const shade = 0.95 - 0.16 * flanks + 0.1 * front - midline;
+      const warm = mix(mix(HIDE, HIDE_LIGHT, belly), HIDE_SPOT, 0.55 * spots).map(c => c * shade);
       const wristBlend = arm[k] * fade((1.015 - y) / 0.09);
       result.push(
         ...vertices[k],
@@ -321,9 +387,18 @@ function marineBuild(lod: 0 | 1 | 2, chestFaces: number[], swordArm: number[]): 
 
 // Cut each diagonal ribbon on the finished skin triangles. Interpolating at
 // their shared edges keeps the diamonds continuous over the pecs and flanks.
-function chestNet(skin: number[], faces: number[]): number[] {
+function net(
+  skin: number[],
+  faces: number[],
+  // Where a point of the skin is on the net: its turn round the body or the limb, how far along,
+  // and its distance inside the net's two ends (cut where one is negative).
+  at: (p: Vec3) => { angle: number; y: number; collar: number; low: number },
+  // The strands round the body and per unit along it.
+  around: number,
+  along: number,
+): number[] {
   const mesh: number[] = [];
-  type Corner = { p: Vec3; angle: number; y: number; collar: number };
+  type Corner = { p: Vec3; angle: number; y: number; collar: number; low: number };
   function clip(polygon: Corner[], distance: (v: Corner) => number): Corner[] {
     const kept: Corner[] = [];
     for (let i = 0; i < polygon.length; i++) {
@@ -343,6 +418,7 @@ function chestNet(skin: number[], faces: number[]): number[] {
         angle: a.angle + (b.angle - a.angle) * t,
         y: a.y + (b.y - a.y) * t,
         collar: a.collar + (b.collar - a.collar) * t,
+        low: a.low + (b.low - a.low) * t,
       });
     }
     return kept;
@@ -350,20 +426,15 @@ function chestNet(skin: number[], faces: number[]): number[] {
   for (const start of faces) {
     const tri = [0, 1, 2].map(k => {
       const i = start + k * STRIDE;
-      const angle = Math.atan2(skin[i], -skin[i + 2]) / (2 * Math.PI);
-      const y = skin[i + 1] / stature;
-      return {
-        p: [0, 1, 2].map(axis => skin[i + axis] + 0.0015 * skin[i + 3 + axis]) as Vec3,
-        angle,
-        y,
-        collar: 1.48 - 0.11 * Math.sin(2 * Math.PI * angle) ** 4 - y,
-      };
+      // A hair over the skin: it follows the same bones (BENDY), so it never sinks in.
+      const p = [0, 1, 2].map(axis => skin[i + axis] + 0.003 * skin[i + 3 + axis]) as Vec3;
+      return { p, ...at([skin[i], skin[i + 1], skin[i + 2]]) };
     });
     for (const v of tri) {
       v.angle -= Math.round(v.angle - tri[0].angle);
     }
     const patch = clip(
-      clip(tri, v => v.y - 1.105),
+      clip(tri, v => v.low),
       v => v.collar,
     );
     if (patch.length < 3) {
@@ -378,7 +449,7 @@ function chestNet(skin: number[], faces: number[]): number[] {
       ab[0] * ac[1] - ab[1] * ac[0],
     ]);
     for (const direction of [-1, 1]) {
-      const phase = (v: Corner) => 28 * v.angle + direction * 18 * v.y;
+      const phase = (v: Corner) => around * v.angle + direction * along * v.y;
       const phases = patch.map(phase);
       for (
         let strand = Math.ceil(Math.min(...phases) - 0.035);
@@ -392,6 +463,130 @@ function chestNet(skin: number[], faces: number[]): number[] {
         for (let k = 2; k < band.length; k++) {
           for (const v of [band[0], band[k - 1], band[k]]) {
             mesh.push(...v.p, ...n, 0.07, 0.063, WEAVE, 0.055);
+          }
+        }
+      }
+    }
+  }
+  return mesh;
+}
+
+/** The yoke's lower edge at `x` across the shoulders, in the runner's metres. */
+const yokeLine = (x: number) => 1.455 + 0.04 * Math.min(1, Math.abs(x) / 0.3) ** 2;
+// The yoke (the user, 2026-11-24): black leather as the belt's strips, over the base of the neck
+// and the collarbones from one shoulder plate to the other. It is the skin's own triangles above
+// yokeLine(), lifted off it, the lift easing to nothing at the edge.
+function yoke(skin: number[], faces: number[]): number[] {
+  const mesh: number[] = [];
+  type Corner = { p: Vec3; n: Vec3; h: number };
+  for (const start of faces) {
+    const tri = [0, 1, 2].map((k): Corner => {
+      const i = start + k * STRIDE;
+      return {
+        p: [skin[i], skin[i + 1], skin[i + 2]],
+        n: [skin[i + 3], skin[i + 4], skin[i + 5]],
+        h: skin[i + 1] / stature - yokeLine(skin[i]),
+      };
+    });
+    const kept: Corner[] = [];
+    tri.forEach((a, i) => {
+      const b = tri[(i + 1) % 3];
+      if (a.h >= 0) {
+        kept.push(a);
+      }
+      if (a.h >= 0 !== b.h >= 0) {
+        const t = a.h / (a.h - b.h);
+        kept.push({ p: mix(a.p, b.p, t), n: unit(mix(a.n, b.n, t)), h: 0 });
+      }
+    });
+    for (let k = 2; k < kept.length; k++) {
+      for (const v of [kept[0], kept[k - 1], kept[k]]) {
+        const lift = 0.002 + 0.006 * Math.min(1, v.h / 0.012);
+        mesh.push(
+          ...v.p.map((c, axis) => c + lift * v.n[axis]),
+          ...v.n,
+          0.056,
+          0.051,
+          WEAVE,
+          0.046,
+        );
+      }
+    }
+  }
+  return mesh;
+}
+
+// The hide's spots (the user, 2026-11-24, after a reference picture): small round dark green dots,
+// the same on his two sides, thick on the flanks, the back and the limbs and thinning out over the
+// chest. Each is a flat hexagon laid on a triangle of his right side's skin, a hair over it, and
+// its mirror on his left. `faces` gives each triangle's place in `skin` and how thickly it is
+// spotted (0 to 1).
+function spots(skin: number[], faces: [number, number][]): number[] {
+  const mesh: number[] = [];
+  // A fixed sequence (mulberry32): the same spots at every build.
+  let seed = 0x2f6e2b1;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (const [start, thick] of faces) {
+    const [a, b, c] = [0, 1, 2].map(
+      k => skin.slice(start + k * STRIDE, start + k * STRIDE + 6) as number[],
+    );
+    if (a[0] + b[0] + c[0] < 0.012) {
+      continue;
+    }
+    const ab = sub(b as never, a as never),
+      ac = sub(c as never, a as never);
+    const area =
+      Math.hypot(
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+      ) / 2;
+    for (let n = Math.floor(SPOTS * thick * area + random()); n > 0; n--) {
+      let u = random(),
+        v = random();
+      if (u + v > 1) {
+        [u, v] = [1 - u, 1 - v];
+      }
+      const at = a.map((x, k) => x + u * (b[k] - x) + v * (c[k] - x));
+      const normal = unit([at[3], at[4], at[5]]);
+      const side = unit(
+        Math.abs(normal[1]) < 0.9 ? [normal[2], 0, -normal[0]] : [0, normal[2], -normal[1]],
+      );
+      const up: Vec3 = [
+        normal[1] * side[2] - normal[2] * side[1],
+        normal[2] * side[0] - normal[0] * side[2],
+        normal[0] * side[1] - normal[1] * side[0],
+      ];
+      const radius = 0.0035 + 0.0065 * random() ** 2;
+      const corner = (i: number): Vec3 => {
+        const turn = (Math.PI * i) / 3,
+          x = radius * Math.cos(turn),
+          y = radius * Math.sin(turn);
+        return [0, 1, 2].map(k => at[k] + 0.002 * normal[k] + x * side[k] + y * up[k]) as Vec3;
+      };
+      // Four triangles from one corner: a third fewer vertices than a fan round the middle.
+      for (let i = 1; i < 5; i++) {
+        const fan = [corner(0), corner(i), corner(i + 1)];
+        for (const mirror of [1, -1]) {
+          // The mirrored triangle is wound the other way round, to face out as well.
+          for (const p of mirror > 0 ? fan : [fan[0], fan[2], fan[1]]) {
+            mesh.push(
+              mirror * p[0],
+              p[1],
+              p[2],
+              mirror * normal[0],
+              normal[1],
+              normal[2],
+              HIDE_SPOT[0],
+              HIDE_SPOT[1],
+              -1,
+              HIDE_SPOT[2],
+            );
           }
         }
       }
@@ -526,25 +721,133 @@ export function hunter(lod: 0 | 1 | 2) {
 
   const chestFaces: number[] = [];
   const swordArm: number[] = [];
-  parts['Marine anatomy'] = marineBuild(lod, chestFaces, swordArm);
+  const armFaces: number[] = [];
+  const spotFaces: [number, number][] = [];
+  parts['Marine anatomy'] = marineBuild(lod, chestFaces, swordArm, armFaces, spotFaces);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
+  const lining = out.length;
   limb([0, 1.59, 0], [0, 1.86, 0.01], [0.084, 0.112, 0.144, 0.13, 0.058], graphite, 1, TWILL);
-  for (const s of [-1, 1]) {
-    part('Quills' + s);
-    const count = [3, 5, 7][lod];
-    for (let j = 0; j < count; j++) {
-      const t = j / (count - 1),
-        x = s * (0.13 - 0.104 * t);
-      const a: Vec3 = [x, 1.784, 0.009 + 0.123 * t],
-        b: Vec3 = [s * (0.182 - 0.117 * t), 1.635, 0.073 + 0.111 * t];
-      const c: Vec3 = [s * (0.205 - 0.134 * t), 1.5 - 0.127 * t, 0.128 + 0.135 * t];
-      limb(a, b, [0.018, 0.024, 0.019], leather);
-      const tip: Vec3 = [c[0] - s * 0.018, c[1] - 0.055 - 0.026 * t, c[2] + 0.027];
-      limb(b, c, [0.02, 0.019, 0.014], graphite);
-      limb(c, tip, [0.014, 0.009, 0.002], graphite);
-      limb(b, [b[0], b[1] - 0.018, b[2] + 0.005], [0.022, 0.021], bronze, 1, SHINE);
+  for (let i = lining; i < out.length; i += STRIDE) {
+    out[i] *= HELM_WIDTH;
+  }
+  // A tube swept along a path, its section carried from point to point without twist, with shared
+  // normals round it and a fan closing its last ring.
+  function sweep(path: Vec3[], radii: number[], sides: number, color: Vec3, layer = -1) {
+    const rings: [Vec3, Vec3][][] = [];
+    let side: Vec3 = [0, 0, 1];
+    path.forEach((p, i) => {
+      const along = unit(sub(path[Math.min(i + 1, path.length - 1)], path[Math.max(i - 1, 0)]));
+      // A path along the section's own axis takes another to start from.
+      if (Math.abs(side[0] * along[0] + side[1] * along[1] + side[2] * along[2]) > 0.99) {
+        side = [1, 0, 0];
+      }
+      const k = side[0] * along[0] + side[1] * along[1] + side[2] * along[2];
+      side = unit([side[0] - k * along[0], side[1] - k * along[1], side[2] - k * along[2]]);
+      const up: Vec3 = [
+        along[1] * side[2] - along[2] * side[1],
+        along[2] * side[0] - along[0] * side[2],
+        along[0] * side[1] - along[1] * side[0],
+      ];
+      rings.push(
+        Array.from({ length: sides }, (_, j): [Vec3, Vec3] => {
+          const a = (2 * Math.PI * j) / sides,
+            c = Math.cos(a),
+            d = Math.sin(a);
+          const n: Vec3 = [
+            c * side[0] + d * up[0],
+            c * side[1] + d * up[1],
+            c * side[2] + d * up[2],
+          ];
+          return [[p[0] + radii[i] * n[0], p[1] + radii[i] * n[1], p[2] + radii[i] * n[2]], n];
+        }),
+      );
+    });
+    const vertex = ([p, n]: [Vec3, Vec3]) =>
+      out.push(...p, ...n, color[0], color[1], layer, color[2]);
+    for (let i = 0; i + 1 < rings.length; i++) {
+      for (let j = 0; j < sides; j++) {
+        const k = (j + 1) % sides;
+        [
+          rings[i][j],
+          rings[i][k],
+          rings[i + 1][k],
+          rings[i][j],
+          rings[i + 1][k],
+          rings[i + 1][j],
+        ].forEach(vertex);
+      }
     }
+    const last = rings.length - 1,
+      end = path[last],
+      along = unit(sub(end, path[last - 1]));
+    for (let j = 0; j < sides; j++) {
+      [rings[last][j], rings[last][(j + 1) % sides], [end, along] as [Vec3, Vec3]].forEach(vertex);
+    }
+  }
+  // The dreadlocks (the user, 2026-11-24, after a reference picture): separate locks rooted under
+  // the shell's rim from each temple round to the nape, each falling on its own, of its own
+  // length, with bronze rings. [degrees round the head from the side to the back, length, reach
+  // out of the head, rings along it, and for those that fall over the chest, how far from the
+  // middle they end].
+  const DREADS: [number, number, number, number[], number?][] = [
+    [-10, 0.44, 0.07, [0.4, 0.52], 0.16],
+    [5, 0.37, 0.08, [0.5], 0.125],
+    [20, 0.47, 0.085, [0.33, 0.45, 0.72], 0.2],
+    [34, 0.43, 0.09, [0.3, 0.42, 0.7]],
+    [48, 0.36, 0.085, [0.5]],
+    [60, 0.48, 0.07, [0.28, 0.4]],
+    [71, 0.39, 0.08, [0.55, 0.68]],
+    [81, 0.5, 0.06, [0.3]],
+  ];
+  for (const s of [-1, 1]) {
+    part('Dreads' + s);
+    const steps = lod === 2 ? 7 : 4,
+      sides = lod === 2 ? 8 : 5;
+    DREADS.forEach(([degrees, length, reach, bands, chest], j) => {
+      const a = (degrees * Math.PI) / 180,
+        dx = s * Math.cos(a),
+        dz = Math.sin(a);
+      const root: Vec3 = [0.13 * HELM_WIDTH * dx, 1.795, 0.035 + 0.165 * dz];
+      // The left ones stay inside the shoulder cannon's post.
+      const out = s < 0 && degrees < 40 ? Math.min(reach, 0.045) : reach;
+      const sway = j % 2 ? 0.02 : -0.015;
+      // Out from under the rim, over, then straight down: a cubic Bezier.
+      const knots: Vec3[] = chest
+        ? [
+            root,
+            [root[0] + out * dx, root[1] + 0.012, root[2] + out * dz - 0.03],
+            [s * (chest + 0.03), root[1] - 0.14, -0.2],
+            [s * chest, root[1] - length, -0.29],
+          ]
+        : [
+            root,
+            [root[0] + out * dx, root[1] + 0.012, root[2] + out * dz],
+            [root[0] + 1.25 * out * dx, root[1] - 0.35 * length, root[2] + 1.25 * out * dz],
+            [root[0] + 1.35 * out * dx, root[1] - length, root[2] + 1.35 * out * dz + sway],
+          ];
+      const at = (t: number): Vec3 =>
+        knots[0].map(
+          (_, k) =>
+            (1 - t) ** 3 * knots[0][k] +
+            3 * (1 - t) ** 2 * t * knots[1][k] +
+            3 * (1 - t) * t ** 2 * knots[2][k] +
+            t ** 3 * knots[3][k],
+        ) as Vec3;
+      const thick = (t: number) => 0.022 - 0.008 * t - 0.009 * Math.max(0, (t - 0.85) / 0.15);
+      const ts = Array.from({ length: steps + 1 }, (_, i) => (i / steps) ** 0.8);
+      sweep(ts.map(at), ts.map(thick), sides, j % 2 ? graphite : leather);
+      for (const t of bands) {
+        const w = 0.012 / length;
+        sweep(
+          [t - 2 * w, t - w, t + w, t + 2 * w].map(at),
+          [0, 0.005, 0.005, 0].map(r => thick(t) + r - (r ? 0 : 0.002)),
+          sides,
+          bronze,
+          SHINE,
+        );
+      }
+    });
   }
   part('Harpoon harness');
   // The single docking shoe remains on the back when the rifle is drawn.
@@ -585,7 +888,7 @@ export function hunter(lod: 0 | 1 | 2) {
         for (const v of [face[0], face[j - 1], face[j]]) {
           const n = unit([v[3], v[4], v[5]]);
           const dorsal = Math.max(0, side * n[0]) ** 4;
-          const offset = 0.0025 + 0.014 * dorsal;
+          const offset = 0.0025 + (side > 0 ? 0.014 + WRIST_LIFT : 0.014) * dorsal;
           out.push(
             v[0] + n[0] * offset,
             v[1] + n[1] * offset,
@@ -604,7 +907,6 @@ export function hunter(lod: 0 | 1 | 2) {
   limb([-0.228, 1.48, 0.079], [-0.233, 1.552, 0.082], [0.045, 0.049, 0.029], graphite, 1.05, TWILL);
   const alloy: Vec3 = [0.42, 0.425, 0.405];
   const rim: Vec3 = [0.36, 0.365, 0.35];
-  const gauze: Vec3 = [0.19, 0.205, 0.2];
   // Angles run from the wearer's left to right across the face. Each panel
   // has its own edge normals so the lip of the visor catches a separate highlight.
   type Surface = (u: number, v: number) => Vec3;
@@ -929,10 +1231,13 @@ export function hunter(lod: 0 | 1 | 2) {
 
   const slices = [16, 36, 72][lod];
   const rings = [5, 10, 18][lod];
-  const brow = (a: number) => 1.739 + (0.116 * (1 - Math.cos(a))) / 2;
-  const aperture = (a: number) => 0.008 + 0.025 * Math.exp(-((Math.abs(a) - 0.82) ** 2) / 0.18);
+  // The shell's lower edge dips to the bridge of the nose and climbs to the temples.
+  const brow = (a: number) =>
+    1.731 + (0.116 * (1 - Math.cos(a))) / 2 + 0.022 * (1 - Math.exp(-((a / 0.55) ** 2)));
+  // The eyes: two slots close to the bridge, a slit beyond them.
+  const aperture = (a: number) => 0.005 + 0.031 * Math.exp(-((Math.abs(a) - 0.5) ** 2) / 0.05);
   const polar = (a: number, w: number, depth: number, y: number, z = 0): Vec3 => [
-    w * Math.sin(a),
+    HELM_WIDTH * w * Math.sin(a),
     y,
     z - depth * Math.cos(a),
   ];
@@ -963,38 +1268,11 @@ export function hunter(lod: 0 | 1 | 2) {
   part('Visor grille');
   const visor: Surface = (u, v) => {
     const a = (u - 0.5) * 3.36;
-    return polar(a, 0.149, 0.174, brow(a) - aperture(a) * (1 - v));
+    // Set back inside the shell and the jaw, its top under the brow's rim: no two faces share a place.
+    return polar(a, 0.1455, 0.1705, brow(a) + 0.004 - (aperture(a) + 0.006) * (1 - v));
   };
-  panel(visor, slices, 2, gauze, false, -1);
-  if (lod) {
-    // Stagger recessed dark cells on the curved band. Use physical pitch across
-    // the eye so the centre bridge contains fewer rows than the wider temples.
-    const columns = lod === 2 ? 64 : 36;
-    const pitch = 0.54 / columns;
-    for (let i = 0; i < columns; i++) {
-      const u = (i + 0.5) / columns,
-        a = (u - 0.5) * 3.36,
-        h = aperture(a);
-      for (let y = pitch * (i % 2 ? 0.62 : 1.09); y < h - pitch * 0.35; y += pitch * 0.94) {
-        const cell: Surface = (s, t) => {
-          const angle = 2 * Math.PI * s;
-          const p = visor(
-            u + Math.cos(angle) * (0.43 / columns) * t,
-            (y + pitch * 0.41 * Math.sin(angle) * t) / h,
-          );
-          return [p[0] * 1.003, p[1], p[2] * 1.003];
-        };
-        // A small planar hexagon, with the normal of the underlying curved grille.
-        const center = cell(0, 0),
-          n: Vec3 = [Math.sin(a), 0, -Math.cos(a)];
-        for (let k = 0; k < 6; k++) {
-          for (const p of [center, cell((k + 1) / 6, 1), cell(k / 6, 1)]) {
-            out.push(...p, ...n, 0.044, 0.049, -1, 0.048);
-          }
-        }
-      }
-    }
-  }
+  // The eyes are glossy black lenses: a highlight, but no sky in them, which would turn them blue.
+  panel(visor, slices, 2, [0.012, 0.012, 0.014], false, GLOSS);
 
   // A bevel around the mouth and two dished cheeks are sculpted into one shell.
   const smoothStep = (lo: number, hi: number, x: number) => {
@@ -1039,26 +1317,33 @@ export function hunter(lod: 0 | 1 | 2) {
   for (const sign of [-1, 1]) {
     part('Swept temple rail' + sign);
     const rail: Surface = (u, v) => {
-      const a = sign * (0.32 + u * 1.95);
-      const taper = Math.sin(Math.PI * u) ** 0.64;
+      const a = sign * u * 2.27;
+      const taper = Math.sin(Math.PI * (0.16 + 0.84 * u)) ** 0.64;
       const sweep = Math.max(0, (u - 0.66) / 0.34) ** 2;
       return polar(
         a,
-        0.154 + 0.008 * taper + 0.013 * Math.sin(Math.PI * v) * taper,
-        0.183 + 0.006 * Math.sin(Math.PI * v) * taper,
-        brow(a) + 0.001 + 0.111 * u * u + v * 0.047 * taper,
+        0.154 + 0.006 * taper + 0.011 * Math.sin(Math.PI * v) * taper,
+        0.183 + 0.008 * Math.sin(Math.PI * v) * taper,
+        brow(a) + 0.001 + 0.111 * u * u + v * 0.082 * taper,
         0.107 * sweep,
       );
     };
-    // Close the swept tip on the inner face where it lifts clear of the shell.
+    // Close the swept tip on the inner face where it lifts clear of the shell: its back half only.
+    // Over the brow the inner face would lie in the outer one and show through it as a grey patch.
     panel(rail, slices / 2, 5, rim, sign < 0);
     panel(
-      (u, v) => {
+      (h, v) => {
+        const u = 0.5 + 0.5 * h;
         const p = rail(u, v);
-        p[0] -= sign * 0.012 * Math.sin(Math.PI * u) * Math.sin(Math.PI * v);
+        p[0] -=
+          sign *
+          0.012 *
+          Math.sin(Math.PI * h) ** 0.5 *
+          Math.sin(Math.PI * u) *
+          Math.sin(Math.PI * v);
         return p;
       },
-      slices / 2,
+      slices / 4,
       5,
       rim,
       sign > 0,
@@ -1067,7 +1352,7 @@ export function hunter(lod: 0 | 1 | 2) {
   // A flush three-port optical cluster sits just above the outer eye.
   part('Temple optics');
   const opticNormal = unit([0.91, 0.02, -0.42]);
-  const socket: Vec3 = [0.146, 1.797, -0.072];
+  const socket: Vec3 = [0.146 * HELM_WIDTH, 1.797, -0.072];
   function port(base: Vec3, length: number, radii: number[], tint: Vec3) {
     const end = base.map((c, k) => c + length * opticNormal[k]) as Vec3;
     limb(base, end, radii, tint, 1, TWILL);
@@ -1097,14 +1382,14 @@ export function hunter(lod: 0 | 1 | 2) {
       continue;
     }
     const rib = torsoFaces.has(i) && corners.some(k => skin[k] < -0.045 && skin[k + 1] < 1.49);
-    for (let course = lod ? -2 : 0; course <= (rib ? 3 : 0); course++) {
-      if (!lod && course > 0 && course !== 2) {
+    for (let course = lod ? -2 : 0; course <= (rib ? 6 : 0); course++) {
+      if (!lod && course > 0 && course !== 2 && course !== 4) {
         continue;
       }
-      const triangle = corners.map(k => {
-        const x = Math.abs(skin[k]),
-          y = skin[k + 1],
-          z = skin[k + 2];
+      const corner = ([px, py, pz]: Vec3, pn: Vec3) => {
+        const x = Math.abs(px),
+          y = py,
+          z = pz;
         const front = Math.max(0, Math.min(1, -z / 0.16));
         const inside = 0.18 - 0.08 * front + 0.026 * bell((y - 1.53) / 0.042);
         const lower =
@@ -1114,7 +1399,7 @@ export function hunter(lod: 0 | 1 | 2) {
         const t = Math.min(1, Math.max(0, (y - 1.035) / 0.425));
         const fullness = Math.sin(Math.PI * t);
         const width = 0.2 + 0.21 * t + 0.25 * fullness;
-        const azimuth = Math.atan2(-skin[k], -z);
+        const azimuth = Math.atan2(-px, -z);
         const centre = 1.3 - 0.25 * t + 0.08 * fullness;
         const flute = centre + (course - 2) * width * 0.57;
         const ribEdge = Math.min(
@@ -1122,28 +1407,76 @@ export function hunter(lod: 0 | 1 | 2) {
           y - 1.035 - 0.018 * Math.abs(course - 2),
           1.425 - y - 0.008 * Math.abs(course - 2),
         );
+        // The side armour (the user, 2026-11-24, after a reference picture): a plate over his left
+        // pec (course 4), from beside the breastbone to the flank and up under the yoke, its lower
+        // edge drawn to a point, and two lames under it over the side of the abs (5 and 6), each
+        // tucked under the one above and narrower.
+        const left = -px;
+        const flank = (0.02 - z) * 0.6;
+        const top = 1.31 - 0.13 * (course - 5);
+        // It goes under the shoulder plate: it ends a little way inside that plate's edge, and
+        // sinks to the skin as it nears it (`tuck`, 1 clear of the shoulder plate).
+        const shoulder = Math.min(x - inside, y - lower);
+        const plateEdge =
+          course === 4
+            ? Math.min(
+                left - 0.022,
+                1.478 - y,
+                y - 1.3 + 0.035 * bell((left - 0.12) / 0.07),
+                flank,
+                0.016 - shoulder,
+              )
+            : Math.min(
+                left - 0.065 - 0.05 * (course - 5) - 0.42 * (top - y),
+                top - y,
+                y - top + 0.15,
+                flank,
+              );
         return {
-          p: skin.slice(k, k + 3) as Vec3,
+          tuck: Math.min(1, Math.max(0, (0.004 - shoulder) / 0.05)),
+          p: [px, py, pz] as Vec3,
           n:
             course > 0
-              ? (skin.slice(k + 3, k + 6) as Vec3)
-              : unit([
-                  Math.sign(skin[k]) * Math.max(0.015, x - 0.205),
-                  (y - 1.325) * 0.72,
-                  z * 1.35,
-                ]),
+              ? pn
+              : unit([Math.sign(px) * Math.max(0.015, x - 0.205), (y - 1.325) * 0.72, z * 1.35]),
           edge:
-            course > 0
-              ? ribEdge
-              : Math.min(
-                  x - inside,
-                  y - lower,
-                  course === 0
-                    ? 1
-                    : y - lower + course * 0.043 - 0.023 * Math.min(1, Math.abs(z) / 0.16),
-                ),
+            course > 3
+              ? plateEdge
+              : course > 0
+                ? ribEdge
+                : Math.min(
+                    x - inside,
+                    y - lower,
+                    course === 0
+                      ? 1
+                      : y - lower + course * 0.043 - 0.023 * Math.min(1, Math.abs(z) / 0.16),
+                  ),
         };
-      });
+      };
+      // The side armour's edges are cut in each face's sixteenths: the near level's faces are too
+      // large to carry its outline.
+      type Sample = [Vec3, Vec3];
+      const quarter = (faces: Sample[][]) =>
+        faces.flatMap(([a, b, c]) => {
+          const mid = (u: Sample, v: Sample): Sample => [
+            mix(u[0], v[0], 0.5),
+            mix(u[1], v[1], 0.5),
+          ];
+          const [ab, bc, ca] = [mid(a, b), mid(b, c), mid(c, a)];
+          return [
+            [a, ab, ca],
+            [ab, b, bc],
+            [ca, bc, c],
+            [ab, bc, ca],
+          ];
+        });
+      const whole = corners.map((k): Sample => [
+        skin.slice(k, k + 3) as Vec3,
+        skin.slice(k + 3, k + 6) as Vec3,
+      ]);
+      const triangles = (course > 3 && lod ? quarter(quarter([whole])) : [whole]).map(face =>
+        face.map(([at, normal]) => corner(at, normal)),
+      );
       // Bevel the cut edge into a dark welt under the brushed metal face.
       const bevels = [
         [0, 0.005, 0.003, 0.005, graphite],
@@ -1151,48 +1484,56 @@ export function hunter(lod: 0 | 1 | 2) {
         [0.014, 1, 0.014, 0, alloy],
       ] as const;
       const distant = [[0, 1, 0.009, 0, alloy]] as const;
-      for (const [lo, hi, base, rise, tint] of lod ? bevels : distant) {
-        let polygon = triangle;
-        for (const bound of [lo, hi]) {
-          const kept: typeof triangle = [];
-          for (let j = 0; j < polygon.length; j++) {
-            const a = polygon[j],
-              b = polygon[(j + 1) % polygon.length];
-            const keep = bound === lo ? a.edge >= bound : a.edge <= bound;
-            if (keep) {
-              kept.push(a);
+      for (const triangle of triangles) {
+        for (const [lo, hi, base, rise, tint] of lod ? bevels : distant) {
+          let polygon = triangle;
+          for (const bound of [lo, hi]) {
+            const kept: typeof triangle = [];
+            for (let j = 0; j < polygon.length; j++) {
+              const a = polygon[j],
+                b = polygon[(j + 1) % polygon.length];
+              const keep = bound === lo ? a.edge >= bound : a.edge <= bound;
+              if (keep) {
+                kept.push(a);
+              }
+              const crosses = (a.edge - bound) * (b.edge - bound) < 0;
+              if (!crosses) {
+                continue;
+              }
+              const t = (bound - a.edge) / (b.edge - a.edge);
+              kept.push({
+                p: a.p.map((v, k) => v + t * (b.p[k] - v)) as Vec3,
+                n: a.n.map((v, k) => v + t * (b.n[k] - v)) as Vec3,
+                tuck: a.tuck + t * (b.tuck - a.tuck),
+                edge: bound,
+              });
             }
-            const crosses = (a.edge - bound) * (b.edge - bound) < 0;
-            if (!crosses) {
-              continue;
-            }
-            const t = (bound - a.edge) / (b.edge - a.edge);
-            kept.push({
-              p: a.p.map((v, k) => v + t * (b.p[k] - v)) as Vec3,
-              n: a.n.map((v, k) => v + t * (b.n[k] - v)) as Vec3,
-              edge: bound,
-            });
+            polygon = kept;
           }
-          polygon = kept;
-        }
-        for (let j = 2; j < polygon.length; j++) {
-          for (const v of [polygon[0], polygon[j - 1], polygon[j]]) {
-            const n = unit(v.n);
-            const bevel = base + (rise * (v.edge - lo)) / (hi - lo);
-            const lift =
-              course > 0 ? 0.002 + 0.55 * bevel + 0.0015 * (3 - course) : bevel - course * 0.007;
-            const color = course > 0 ? (lo === 0 ? leather : lo < 0.014 ? rim : graphite) : tint;
-            const target = course > 0 ? ribGuard : out;
-            target.push(
-              v.p[0] + lift * n[0],
-              v.p[1] + lift * n[1],
-              v.p[2] + lift * n[2],
-              ...n,
-              color[0],
-              color[1],
-              TWILL,
-              color[2],
-            );
+          for (let j = 2; j < polygon.length; j++) {
+            for (const v of [polygon[0], polygon[j - 1], polygon[j]]) {
+              const n = unit(v.n);
+              const bevel = base + (rise * (v.edge - lo)) / (hi - lo);
+              const lift =
+                course > 3
+                  ? (bevel + 0.004 * (7 - course)) * (0.12 + 0.88 * v.tuck)
+                  : course > 0
+                    ? 0.002 + 0.55 * bevel + 0.0015 * (3 - course)
+                    : bevel - course * 0.007;
+              const color =
+                course > 3 || course <= 0 ? tint : lo === 0 ? leather : lo < 0.014 ? rim : graphite;
+              const target = course > 0 ? ribGuard : out;
+              target.push(
+                v.p[0] + lift * n[0],
+                v.p[1] + lift * n[1],
+                v.p[2] + lift * n[2],
+                ...n,
+                color[0],
+                color[1],
+                TWILL,
+                color[2],
+              );
+            }
           }
         }
       }
@@ -1297,8 +1638,8 @@ export function hunter(lod: 0 | 1 | 2) {
   const twin = wristBlade(lod);
   for (let i = 0; i < twin.length; i += STRIDE) {
     out.push(
-      0.392 + twin[i] * 0.86,
-      0.884 + twin[i + 1] * 0.86,
+      0.392 + WRIST_LIFT + twin[i] * 0.86,
+      0.884 + WRIST_UP + twin[i + 1] * 0.86,
       twin[i + 2] * 0.86,
       twin[i + 3],
       twin[i + 4],
@@ -1408,7 +1749,7 @@ export function hunter(lod: 0 | 1 | 2) {
       ['Mandible shell', 'Visor grille', 'Cranial shell', 'Temple optics', 'Mask lining'].includes(
         name,
       ) ||
-      name.startsWith('Quills') ||
+      name.startsWith('Dreads') ||
       name.startsWith('Swept temple rail');
     const anatomy = name === 'Marine anatomy';
     const trunkFit = anatomy || name === 'Rib guard';
@@ -1463,7 +1804,7 @@ export function hunter(lod: 0 | 1 | 2) {
         mesh[i + 5] = n[2];
       }
       if (head) {
-        // Seat the mask over the neck, keeping the shell, optics and quills together.
+        // Seat the mask over the neck, keeping the shell, optics and dreadlocks together.
         mesh[i + 1] += (stature - 1) * 1.55 - 0.065;
       } else {
         mesh[i] *= stature * 0.9;
@@ -1477,7 +1818,157 @@ export function hunter(lod: 0 | 1 | 2) {
     }
   }
   if (lod) {
-    parts['Chest net'] = chestNet(skin, chestFaces);
+    parts['Yoke'] = yoke(skin, chestFaces.concat(armFaces));
+    parts['Spots'] = spots(skin, spotFaces);
+    // A tribal necklace (the user, 2026-11-24): a cord from the neck down to the breastbone,
+    // strung with small rodent skulls and fangs, a round jewel at its lowest. It lies on the
+    // chest: `front` is where the skin's front, or the armour's, is at a place across it.
+    part('Necklace');
+    const breast: Vec3[] = chestFaces.flatMap(start =>
+      [0, 1, 2].map((k): Vec3 => {
+        const i = start + k * STRIDE;
+        return [skin[i], skin[i + 1], skin[i + 2]];
+      }),
+    );
+    // It lies over the side armour too.
+    const guard = parts['Rib guard'];
+    for (let i = 0; i < guard.length; i += STRIDE) {
+      breast.push([guard[i], guard[i + 1], guard[i + 2]]);
+    }
+    const front = (x: number, y: number) => {
+      let z = 0;
+      for (let i = 0; i < breast.length; i += 3) {
+        const [a, b, c] = [breast[i], breast[i + 1], breast[i + 2]];
+        const d = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        const u = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / d,
+          v = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / d;
+        if (u >= 0 && v >= 0 && u + v <= 1) {
+          z = Math.min(z, u * a[2] + v * b[2] + (1 - u - v) * c[2]);
+        }
+      }
+      return z;
+    };
+    const cordAt = (t: number, off = 0.011): Vec3 => {
+      const a = (t * Math.PI) / 2,
+        x = 0.125 * Math.sin(a),
+        y = 1.87 - 0.215 * Math.cos(a) ** 1.3;
+      return [x, y, front(x, y) - off];
+    };
+    const beads = lod === 2 ? 8 : 6;
+    const cord = Array.from({ length: 25 }, (_, i) => cordAt(i / 12 - 1));
+    sweep(
+      cord,
+      cord.map(() => 0.0035),
+      lod === 2 ? 6 : 4,
+      [0.056, 0.051, 0.046],
+      WEAVE,
+    );
+    const bone: Vec3 = [0.74, 0.69, 0.56],
+      ivory: Vec3 = [0.78, 0.6, 0.34],
+      socket: Vec3 = [0.03, 0.028, 0.025];
+    // A rodent's skull hung by its crown: the round brain case, the long narrowing snout, two
+    // sockets and the pair of long incisors.
+    for (const t of [-0.56, -0.27, 0.27, 0.56]) {
+      const [x, y, z] = cordAt(t, 0.02);
+      sweep(
+        [0, -0.007, -0.016, -0.026, -0.036, -0.041].map((d, i): Vec3 => [x, y + d, z - 0.0012 * i]),
+        [0.001, 0.0105, 0.0115, 0.0065, 0.004, 0.003],
+        beads,
+        bone,
+      );
+      for (const side of [-1, 1]) {
+        sweep(
+          [0, -0.004, -0.008].map((d): Vec3 => [x + side * 0.0058, y - 0.019, z - 0.004 + d]),
+          [0.001, 0.0036, 0.001],
+          6,
+          socket,
+        );
+        sweep(
+          [0, -0.005, -0.01].map((d): Vec3 => [x + side * 0.0016, y - 0.04 + d, z - 0.008]),
+          [0.0016, 0.0012, 0.0003],
+          4,
+          ivory,
+        );
+      }
+    }
+    // Fangs between the skulls.
+    for (const t of [-0.78, -0.42, -0.13, 0.13, 0.42, 0.78]) {
+      const [x, y, z] = cordAt(t, 0.014);
+      sweep(
+        [0, -0.008, -0.018, -0.027].map((d, i): Vec3 => [x - 0.0015 * i * Math.sign(t), y + d, z]),
+        [0.0025, 0.0036, 0.0026, 0.0003],
+        6,
+        bone,
+      );
+    }
+    // The jewel: a bronze ring round a red stone, hung under the cord's lowest point.
+    const [, low, lie] = cordAt(0, 0.016);
+    const hub: Vec3 = [0, low - 0.034, lie];
+    sweep(
+      Array.from({ length: 2 * beads + 1 }, (_, i): Vec3 => {
+        const a = (Math.PI * i) / beads;
+        return [hub[0] + 0.026 * Math.sin(a), hub[1] + 0.026 * Math.cos(a), hub[2]];
+      }),
+      Array.from({ length: 2 * beads + 1 }, () => 0.0055),
+      beads,
+      bronze,
+      SHINE,
+    );
+    sweep(
+      [0.004, 0, -0.005, -0.008].map((d): Vec3 => [hub[0], hub[1], hub[2] + d]),
+      [0.022, 0.0215, 0.014, 0.001],
+      2 * beads,
+      [0.42, 0.05, 0.04],
+      GLOSS,
+    );
+    // From the waist up to the yoke.
+    parts['Chest net'] = net(
+      skin,
+      chestFaces,
+      ([x, y, z]) => ({
+        angle: Math.atan2(x, -z) / (2 * Math.PI),
+        y: y / stature,
+        collar: yokeLine(x) + 0.01 - y / stature,
+        low: y / stature - 1.105,
+      }),
+      28,
+      18,
+    );
+    // The sleeves: round each arm's line from the shoulder to the wrist, down to the bracer.
+    parts['Arm net'] = net(
+      skin,
+      armFaces,
+      p => {
+        const side = p[0] < 0 ? 0 : 1;
+        const from = HUNTER_REST[[J.ARM_L, J.ARM_R][side]],
+          to = HUNTER_REST[[J.HAND_L, J.HAND_R][side]];
+        const line = sub(to, from),
+          length = Math.hypot(...line),
+          u = unit(line),
+          d = sub(p, from);
+        const t = d[0] * u[0] + d[1] * u[1] + d[2] * u[2];
+        // Round the line, from two axes across it.
+        const ax = unit([u[1], -u[0], 0]),
+          az: Vec3 = [
+            u[1] * ax[2] - u[2] * ax[1],
+            u[2] * ax[0] - u[0] * ax[2],
+            u[0] * ax[1] - u[1] * ax[0],
+          ];
+        return {
+          angle:
+            Math.atan2(
+              d[0] * ax[0] + d[1] * ax[1] + d[2] * ax[2],
+              d[0] * az[0] + d[1] * az[1] + d[2] * az[2],
+            ) /
+            (2 * Math.PI),
+          y: t,
+          collar: length * NET_SLEEVE - t,
+          low: 1,
+        };
+      },
+      10,
+      16,
+    );
   }
   // Split at the upper arm ring hidden under the pauldron. All fitting and
   // shading used the joined skin, so the rest pose retains the same surface.
@@ -1505,8 +1996,8 @@ export const hunterWristEnds = () =>
   wristEnds([0, 0, 0], [0, 0, 0, 1]).map(
     ([x, y, z]) =>
       [
-        (0.392 + x * 0.86) * stature * 0.9,
-        (0.884 + y * 0.86) * stature,
+        (0.392 + WRIST_LIFT + x * 0.86) * stature * 0.9,
+        (0.884 + WRIST_UP + y * 0.86) * stature,
         z * 0.86 * stature * 0.92,
       ] as Vec3,
   );
@@ -2340,7 +2831,7 @@ const LEGS = [
   [J.THIGH_R, J.SHIN_R, J.FOOT_R, J.TOE_R],
 ];
 const HEAD_PARTS =
-  /^(Mask lining|Quills|Cranial shell|Visor grille|Mandible shell|Swept temple rail|Temple optics|Rangefinder)/;
+  /^(Mask lining|Dreads|Cranial shell|Visor grille|Mandible shell|Swept temple rail|Temple optics|Rangefinder)/;
 const TRUNK_PARTS = new Set([
   'Harpoon harness',
   'Laser saddle',
@@ -2348,7 +2839,7 @@ const TRUNK_PARTS = new Set([
   'Shoulder laser',
   'Harpoon',
   'Rib guard',
-  'Chest net',
+  'Necklace',
 ]);
 // The skin leaves the collarbones out, the chest carrying the shoulder (BENDS), and the neck and
 // head: the neck's stump stays on the chest inside the mask's lining, which turns over it.
@@ -2470,14 +2961,14 @@ const shareOf = (p: Vec3, k: number) => {
 
 /** Whether a part's skin bends at its joints: the anatomy and the soft leg kit, not the knee cap. */
 const BENDY =
-  /^(Marine anatomy|Right arm|Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Boot lames|Boot side)/;
+  /^(Marine anatomy|Right arm|Chest net|Arm net|Yoke|Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Boot lames|Boot side)/;
 const rigs: Partial<Record<0 | 1 | 2, HunterRig>> = {};
 
 /**
  * The Hunter cut into rigid pieces, one per joint (and shadow flag, and the stowed harpoon), so the runner's animated
  * skeleton can carry him: each triangle goes to the nearest bone its part may follow. Above the
  * far level, the triangles across a bend go to a blended band instead (BENDS).
- * `skip` leaves out parts (the far level's quills and grille).
+ * `skip` leaves out parts (the far level's dreadlocks and grille).
  */
 export const hunterRig = (
   lod: 0 | 1 | 2,
@@ -2498,9 +2989,12 @@ export const hunterRig = (
       const corners = [0, 1, 2].map(
         k => [v[i + k * STRIDE], v[i + k * STRIDE + 1], v[i + k * STRIDE + 2]] as Vec3,
       );
-      const c: Vec3 = [0, 1, 2].map(
-        k => (corners[0][k] + corners[1][k] + corners[2][k]) / 3,
-      ) as Vec3;
+      // A spot goes whole to one bone, by the corner its four triangles share: split between two,
+      // it would open as they part.
+      const c: Vec3 =
+        name === 'Spots'
+          ? corners[0]
+          : ([0, 1, 2].map(k => (corners[0][k] + corners[1][k] + corners[2][k]) / 3) as Vec3);
       const allowed = followed(name, c);
       let joint = -1,
         best = Infinity;

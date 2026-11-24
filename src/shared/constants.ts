@@ -383,7 +383,11 @@ export const RIFLE_SPEED = 400;
 export const PLASMA_R = 0.12;
 /** Ball.power of the Hunter's harpoon: its own projectile kind in snapshots. */
 export const HARPOON = 8;
-export const HARPOON_SPEED = 72;
+/**
+ * The bolt reaches its target almost at once, like a sniper round (the user, 2026-11-24): 10 m a
+ * tick, the full HARPOON_RANGE in 0.15 s. It was 72.
+ */
+export const HARPOON_SPEED = 600;
 export const HARPOON_RANGE = 90;
 export const HARPOON_R = 0.08;
 export const HARPOON_HP = 4;

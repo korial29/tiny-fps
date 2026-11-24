@@ -210,7 +210,7 @@ export const SOUND = {
   /** A rising three-step target lock and a heavy shoulder-mounted laser discharge. */
   HUNTER_LOCK: 85,
   HUNTER_LASER: 86,
-  /** The harpoon's next bolt racked in from behind: a servo's whine, the slide, the lock home. */
+  /** The harpoon's next bolt racked in from behind: steel sliding along steel, then the lock home. */
   HARPOON_RELOAD: 87,
   /**
    * The Hunter's views (the user, 2026-11-23): the flash of a view switched with V, then, while a
@@ -227,6 +227,8 @@ export const SOUND = {
    */
   HUNTER_TRACK: 91,
   HUNTER_SEEK: 92,
+  /** A harpoon bolt striking (the user, 2026-11-24: a shock, not a laser's splash). */
+  HARPOON_HIT: 93,
 } as const;
 
 /**
@@ -791,15 +793,20 @@ export const LAYERS: Voice[][] = [
     [2, 82, -2.2, 0.002, 0.025, 0.28, 0, 0.42, 0, 1, 0.88, 0.025],
     [0, 1850, -1.4, 0.001, 0.01, 0.095, 0.1, 0.22, 0, 1, 0.32, 0.04],
   ],
-  // HARPOON_RELOAD: a servo's saw whine climbing as the next bolt is driven in, the scrape of its
-  // shaft along the tube, then, as it seats (0.62 s in: harpoonFeed()'s 85 % of the 1.3 s reload), a heavy low clunk, a hard tick
-  // and a short metal ring.
+  // HARPOON_RELOAD: the next bolt sliding home (the user, 2026-11-24: a metallic slide): a catch
+  // let go, then the shaft's steel scraping along the steel of the tube for half a second, a gritty
+  // hiss rising a little with two inharmonic partials chattering in it; as it seats (0.62 s in:
+  // harpoonFeed()'s 85 % of the 1.3 s reload) a crisp latch, a small knock and a short ring.
   [
-    [1, 160, 1.2, 0.02, 0.35, 0.15, 0.05, 0.25, 0, 1, 0.22],
-    [3, 3200, 0.6, 0.03, 0.4, 0.12, 0.2, 0.15, 0, 1, 0.3],
-    [2, 140, -3, 0.001, 0.01, 0.12, 0, 1, 0, 1, 0.7, 0.62],
+    [0, 2400, 0, 0.001, 0, 0.012, 0, 0.4, 0, 1, 0.25],
+    [3, 5200, 0.5, 0.04, 0.44, 0.1, 0.15, 0.3, 0, 1, 0.34, 0.03],
+    [1, 620, 0.5, 0.04, 0.44, 0.1, 0.3, 0.12, 0, 1, 0.12, 0.03],
+    [2, 2900, 0.35, 0.05, 0.42, 0.08, 0.04, 1, 0, 1, 0.06, 0.03],
+    [2, 4370, 0.35, 0.05, 0.42, 0.08, 0.05, 1, 0, 1, 0.04, 0.03],
     [0, 2600, -2, 0.001, 0, 0.015, 0, 0.6, 0, 1, 0.45, 0.62],
-    [2, 1900, -0.3, 0.001, 0.02, 0.18, 0.08, 1, 0, 1, 0.18, 0.63],
+    [2, 220, -2.5, 0.001, 0.01, 0.07, 0, 1, 0, 1, 0.4, 0.62],
+    [2, 1900, -0.3, 0.001, 0.02, 0.18, 0.08, 1, 0, 1, 0.16, 0.63],
+    [2, 3050, -0.3, 0.001, 0.01, 0.12, 0.08, 1, 0, 1, 0.08, 0.63],
   ],
   // HUNTER_FLASH: a flash unit's whine charging up in 80 ms, then its pop: a burst of bright noise,
   // a low thump under it and an electric zap falling away.
@@ -841,6 +848,15 @@ export const LAYERS: Voice[][] = [
     [2, 1217, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.15],
     [2, 1152, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.07],
     [2, 1282, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.07],
+  ],
+  // HARPOON_HIT: a hard crack, a deep thump under it, a dull burst of debris and the bolt's steel
+  // ringing briefly.
+  [
+    [3, 9000, -2, 0.001, 0, 0.04, 0, 0.6, 0, 1, 0.55],
+    [2, 95, -2.5, 0.001, 0.015, 0.16, 0, 1, 0, 1, 0.8],
+    [3, 1200, -1, 0.001, 0.01, 0.12, 0, 0.2, 0, 1, 0.45],
+    [2, 2650, -0.2, 0.001, 0.005, 0.2, 0.03, 1, 0, 1, 0.14, 0.004],
+    [2, 4100, -0.2, 0.001, 0.003, 0.12, 0.03, 1, 0, 1, 0.08, 0.004],
   ],
 ];
 

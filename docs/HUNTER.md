@@ -157,5 +157,9 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   one shoulder plate to the other (`yoke()`, above `yokeLine()`); the net ends under it.
 - **Necklace.** A cord from the neck to the breastbone with four rodent skulls, six fangs and a
   bronze ring round a red stone, laid on the chest's triangles (`front()`), rigid on the chest.
+- **Side armour.** A plate over his left pec, from beside the breastbone to the flank and up under
+  the yoke, its lower edge drawn to a point, and two lames under it down the side of the abs
+  (courses 4 to 6 of the `Rib guard`, cut on the skin's faces in sixteenths). It goes under the
+  shoulder plate (`tuck`), and the necklace lies over it.
 - **Wrist blades.** They and their housing stand off the back of the hand and sit up the forearm
   (`WRIST_LIFT`, `WRIST_UP`); the cut trail (`hunterWristEnds()`) moves with them.

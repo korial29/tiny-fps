@@ -1382,14 +1382,14 @@ export function hunter(lod: 0 | 1 | 2) {
       continue;
     }
     const rib = torsoFaces.has(i) && corners.some(k => skin[k] < -0.045 && skin[k + 1] < 1.49);
-    for (let course = lod ? -2 : 0; course <= (rib ? 3 : 0); course++) {
-      if (!lod && course > 0 && course !== 2) {
+    for (let course = lod ? -2 : 0; course <= (rib ? 6 : 0); course++) {
+      if (!lod && course > 0 && course !== 2 && course !== 4) {
         continue;
       }
-      const triangle = corners.map(k => {
-        const x = Math.abs(skin[k]),
-          y = skin[k + 1],
-          z = skin[k + 2];
+      const corner = ([px, py, pz]: Vec3, pn: Vec3) => {
+        const x = Math.abs(px),
+          y = py,
+          z = pz;
         const front = Math.max(0, Math.min(1, -z / 0.16));
         const inside = 0.18 - 0.08 * front + 0.026 * bell((y - 1.53) / 0.042);
         const lower =
@@ -1399,7 +1399,7 @@ export function hunter(lod: 0 | 1 | 2) {
         const t = Math.min(1, Math.max(0, (y - 1.035) / 0.425));
         const fullness = Math.sin(Math.PI * t);
         const width = 0.2 + 0.21 * t + 0.25 * fullness;
-        const azimuth = Math.atan2(-skin[k], -z);
+        const azimuth = Math.atan2(-px, -z);
         const centre = 1.3 - 0.25 * t + 0.08 * fullness;
         const flute = centre + (course - 2) * width * 0.57;
         const ribEdge = Math.min(
@@ -1407,28 +1407,76 @@ export function hunter(lod: 0 | 1 | 2) {
           y - 1.035 - 0.018 * Math.abs(course - 2),
           1.425 - y - 0.008 * Math.abs(course - 2),
         );
+        // The side armour (the user, 2026-11-24, after a reference picture): a plate over his left
+        // pec (course 4), from beside the breastbone to the flank and up under the yoke, its lower
+        // edge drawn to a point, and two lames under it over the side of the abs (5 and 6), each
+        // tucked under the one above and narrower.
+        const left = -px;
+        const flank = (0.02 - z) * 0.6;
+        const top = 1.31 - 0.13 * (course - 5);
+        // It goes under the shoulder plate: it ends a little way inside that plate's edge, and
+        // sinks to the skin as it nears it (`tuck`, 1 clear of the shoulder plate).
+        const shoulder = Math.min(x - inside, y - lower);
+        const plateEdge =
+          course === 4
+            ? Math.min(
+                left - 0.022,
+                1.478 - y,
+                y - 1.3 + 0.035 * bell((left - 0.12) / 0.07),
+                flank,
+                0.016 - shoulder,
+              )
+            : Math.min(
+                left - 0.065 - 0.05 * (course - 5) - 0.42 * (top - y),
+                top - y,
+                y - top + 0.15,
+                flank,
+              );
         return {
-          p: skin.slice(k, k + 3) as Vec3,
+          tuck: Math.min(1, Math.max(0, (0.004 - shoulder) / 0.05)),
+          p: [px, py, pz] as Vec3,
           n:
             course > 0
-              ? (skin.slice(k + 3, k + 6) as Vec3)
-              : unit([
-                  Math.sign(skin[k]) * Math.max(0.015, x - 0.205),
-                  (y - 1.325) * 0.72,
-                  z * 1.35,
-                ]),
+              ? pn
+              : unit([Math.sign(px) * Math.max(0.015, x - 0.205), (y - 1.325) * 0.72, z * 1.35]),
           edge:
-            course > 0
-              ? ribEdge
-              : Math.min(
-                  x - inside,
-                  y - lower,
-                  course === 0
-                    ? 1
-                    : y - lower + course * 0.043 - 0.023 * Math.min(1, Math.abs(z) / 0.16),
-                ),
+            course > 3
+              ? plateEdge
+              : course > 0
+                ? ribEdge
+                : Math.min(
+                    x - inside,
+                    y - lower,
+                    course === 0
+                      ? 1
+                      : y - lower + course * 0.043 - 0.023 * Math.min(1, Math.abs(z) / 0.16),
+                  ),
         };
-      });
+      };
+      // The side armour's edges are cut in each face's sixteenths: the near level's faces are too
+      // large to carry its outline.
+      type Sample = [Vec3, Vec3];
+      const quarter = (faces: Sample[][]) =>
+        faces.flatMap(([a, b, c]) => {
+          const mid = (u: Sample, v: Sample): Sample => [
+            mix(u[0], v[0], 0.5),
+            mix(u[1], v[1], 0.5),
+          ];
+          const [ab, bc, ca] = [mid(a, b), mid(b, c), mid(c, a)];
+          return [
+            [a, ab, ca],
+            [ab, b, bc],
+            [ca, bc, c],
+            [ab, bc, ca],
+          ];
+        });
+      const whole = corners.map((k): Sample => [
+        skin.slice(k, k + 3) as Vec3,
+        skin.slice(k + 3, k + 6) as Vec3,
+      ]);
+      const triangles = (course > 3 && lod ? quarter(quarter([whole])) : [whole]).map(face =>
+        face.map(([at, normal]) => corner(at, normal)),
+      );
       // Bevel the cut edge into a dark welt under the brushed metal face.
       const bevels = [
         [0, 0.005, 0.003, 0.005, graphite],
@@ -1436,48 +1484,56 @@ export function hunter(lod: 0 | 1 | 2) {
         [0.014, 1, 0.014, 0, alloy],
       ] as const;
       const distant = [[0, 1, 0.009, 0, alloy]] as const;
-      for (const [lo, hi, base, rise, tint] of lod ? bevels : distant) {
-        let polygon = triangle;
-        for (const bound of [lo, hi]) {
-          const kept: typeof triangle = [];
-          for (let j = 0; j < polygon.length; j++) {
-            const a = polygon[j],
-              b = polygon[(j + 1) % polygon.length];
-            const keep = bound === lo ? a.edge >= bound : a.edge <= bound;
-            if (keep) {
-              kept.push(a);
+      for (const triangle of triangles) {
+        for (const [lo, hi, base, rise, tint] of lod ? bevels : distant) {
+          let polygon = triangle;
+          for (const bound of [lo, hi]) {
+            const kept: typeof triangle = [];
+            for (let j = 0; j < polygon.length; j++) {
+              const a = polygon[j],
+                b = polygon[(j + 1) % polygon.length];
+              const keep = bound === lo ? a.edge >= bound : a.edge <= bound;
+              if (keep) {
+                kept.push(a);
+              }
+              const crosses = (a.edge - bound) * (b.edge - bound) < 0;
+              if (!crosses) {
+                continue;
+              }
+              const t = (bound - a.edge) / (b.edge - a.edge);
+              kept.push({
+                p: a.p.map((v, k) => v + t * (b.p[k] - v)) as Vec3,
+                n: a.n.map((v, k) => v + t * (b.n[k] - v)) as Vec3,
+                tuck: a.tuck + t * (b.tuck - a.tuck),
+                edge: bound,
+              });
             }
-            const crosses = (a.edge - bound) * (b.edge - bound) < 0;
-            if (!crosses) {
-              continue;
-            }
-            const t = (bound - a.edge) / (b.edge - a.edge);
-            kept.push({
-              p: a.p.map((v, k) => v + t * (b.p[k] - v)) as Vec3,
-              n: a.n.map((v, k) => v + t * (b.n[k] - v)) as Vec3,
-              edge: bound,
-            });
+            polygon = kept;
           }
-          polygon = kept;
-        }
-        for (let j = 2; j < polygon.length; j++) {
-          for (const v of [polygon[0], polygon[j - 1], polygon[j]]) {
-            const n = unit(v.n);
-            const bevel = base + (rise * (v.edge - lo)) / (hi - lo);
-            const lift =
-              course > 0 ? 0.002 + 0.55 * bevel + 0.0015 * (3 - course) : bevel - course * 0.007;
-            const color = course > 0 ? (lo === 0 ? leather : lo < 0.014 ? rim : graphite) : tint;
-            const target = course > 0 ? ribGuard : out;
-            target.push(
-              v.p[0] + lift * n[0],
-              v.p[1] + lift * n[1],
-              v.p[2] + lift * n[2],
-              ...n,
-              color[0],
-              color[1],
-              TWILL,
-              color[2],
-            );
+          for (let j = 2; j < polygon.length; j++) {
+            for (const v of [polygon[0], polygon[j - 1], polygon[j]]) {
+              const n = unit(v.n);
+              const bevel = base + (rise * (v.edge - lo)) / (hi - lo);
+              const lift =
+                course > 3
+                  ? (bevel + 0.004 * (7 - course)) * (0.12 + 0.88 * v.tuck)
+                  : course > 0
+                    ? 0.002 + 0.55 * bevel + 0.0015 * (3 - course)
+                    : bevel - course * 0.007;
+              const color =
+                course > 3 || course <= 0 ? tint : lo === 0 ? leather : lo < 0.014 ? rim : graphite;
+              const target = course > 0 ? ribGuard : out;
+              target.push(
+                v.p[0] + lift * n[0],
+                v.p[1] + lift * n[1],
+                v.p[2] + lift * n[2],
+                ...n,
+                color[0],
+                color[1],
+                TWILL,
+                color[2],
+              );
+            }
           }
         }
       }
@@ -1766,7 +1822,7 @@ export function hunter(lod: 0 | 1 | 2) {
     parts['Spots'] = spots(skin, spotFaces);
     // A tribal necklace (the user, 2026-11-24): a cord from the neck down to the breastbone,
     // strung with small rodent skulls and fangs, a round jewel at its lowest. It lies on the
-    // chest: `front` is where the skin's front is at a place across it.
+    // chest: `front` is where the skin's front, or the armour's, is at a place across it.
     part('Necklace');
     const breast: Vec3[] = chestFaces.flatMap(start =>
       [0, 1, 2].map((k): Vec3 => {
@@ -1774,6 +1830,11 @@ export function hunter(lod: 0 | 1 | 2) {
         return [skin[i], skin[i + 1], skin[i + 2]];
       }),
     );
+    // It lies over the side armour too.
+    const guard = parts['Rib guard'];
+    for (let i = 0; i < guard.length; i += STRIDE) {
+      breast.push([guard[i], guard[i + 1], guard[i + 2]]);
+    }
     const front = (x: number, y: number) => {
       let z = 0;
       for (let i = 0; i < breast.length; i += 3) {

@@ -2684,6 +2684,7 @@ const TRUNK_PARTS = new Set([
   'Shoulder laser',
   'Harpoon',
   'Rib guard',
+  'Necklace',
 ]);
 // The skin leaves the collarbones out, the chest carrying the shoulder (BENDS), and the neck and
 // head: the neck's stump stays on the chest inside the mask's lining, which turns over it.
@@ -2805,21 +2806,26 @@ const shareOf = (p: Vec3, k: number) => {
 
 /** Whether a part's skin bends at its joints: the anatomy and the soft leg kit, not the knee cap. */
 const BENDY =
-  /^(Marine anatomy|Right arm|Chest net|Arm net|Yoke|Necklace|Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Boot lames|Boot side)/;
-const rigs: Partial<Record<0 | 1 | 2, HunterRig>> = {};
+  /^(Marine anatomy|Right arm|Chest net|Arm net|Yoke|Thigh net|Leg straps|Shin plates|Shin seams|Ankle cuff|Boot lames|Boot side)/;
+const rigs: Record<string, HunterRig> = {};
 
 /**
  * The Hunter cut into rigid pieces, one per joint (and shadow flag, and the stowed harpoon), so the runner's animated
  * skeleton can carry him: each triangle goes to the nearest bone its part may follow. Above the
  * far level, the triangles across a bend go to a blended band instead (BENDS).
- * `skip` leaves out parts (the far level's dreadlocks and grille).
+ * `skip` leaves out parts (the far level's dreadlocks and grille). `stiff` keeps the chest's and the
+ * arms' nets off the bands, each triangle whole on its nearest bone: the bands are blended on the
+ * CPU each frame and the nets are most of them (11 700 vertices a Hunter), so only one seen close
+ * pays for nets that bend with the skin.
  */
 export const hunterRig = (
   lod: 0 | 1 | 2,
   skip: (name: string) => boolean = () => false,
+  stiff = false,
 ): HunterRig => {
-  if (rigs[lod]) {
-    return rigs[lod]!;
+  const cached = `${lod} ${stiff}`;
+  if (rigs[cached]) {
+    return rigs[cached];
   }
   const pieces = new Map<number, HunterPiece>();
   const bands = BENDS.map(() => ({ vertices: [] as number[], w: [] as number[] }));
@@ -2828,7 +2834,7 @@ export const hunterRig = (
       continue;
     }
     const thin = name.startsWith('Temple') || name === 'Rangefinder';
-    const bendy = lod > 0 && BENDY.test(name);
+    const bendy = lod > 0 && BENDY.test(name) && !(stiff && /^(Chest|Arm) net/.test(name));
     for (let i = 0; i < v.length; i += 3 * STRIDE) {
       const corners = [0, 1, 2].map(
         k => [v[i + k * STRIDE], v[i + k * STRIDE + 1], v[i + k * STRIDE + 2]] as Vec3,
@@ -2899,7 +2905,7 @@ export const hunterRig = (
       }
     }
   }
-  return (rigs[lod] = {
+  return (rigs[cached] = {
     pieces: [...pieces.keys()].sort((a, b) => a - b).map(k => pieces.get(k)!),
     bands: bands
       .map((band, k) => ({

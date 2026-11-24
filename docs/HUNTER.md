@@ -145,10 +145,14 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   dark green spots gathered on the flanks, the back and the limbs (`HIDE_SPOT`). Painted per vertex.
   The hands (`HUNTER_HAND`, `body.ts`) take the same olive in both views.
 - **Net.** The chest's net and the new sleeves (`Arm net`, down to the bracers) follow the skin's
-  bones and bends (`BENDY`), so they no longer sink into it as the trunk twists.
+  bones and bends (`BENDY`), so they no longer sink into it as the trunk twists. That is for a
+  Hunter within 4 m (`CLOSE`): the bands are blended on the CPU each frame and the nets are
+  11 700 vertices of them, so from 4 to 10 m each of the nets' triangles rides whole on its nearest
+  bone (`hunterRig()`'s `stiff`). Nine Hunters cost 2.16 ms a frame near (2.14 on master) and
+  4.16 ms if all nine are close (2.13).
 - **Yoke.** Black leather as the belt's strips over the base of the neck and the collarbones, from
   one shoulder plate to the other (`yoke()`, above `yokeLine()`); the net ends under it.
 - **Necklace.** A cord from the neck to the breastbone with four rodent skulls, six fangs and a
-  bronze ring round a red stone, laid on the chest's triangles (`front()`), following the skin.
+  bronze ring round a red stone, laid on the chest's triangles (`front()`), rigid on the chest.
 - **Wrist blades.** They and their housing stand off the back of the hand and sit up the forearm
   (`WRIST_LIFT`, `WRIST_UP`); the cut trail (`hunterWristEnds()`) moves with them.

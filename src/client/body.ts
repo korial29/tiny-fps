@@ -29,7 +29,7 @@ import type { World } from '../shared/world';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { FIRE_KEY, wristComputer } from './computer';
 import { fetched, pouch, pouchAt } from './pouch';
-import { buckle, tails } from './buckle';
+import { blades, drape } from './sash';
 import { createFours } from './fours';
 import type { Floor } from './gait';
 import {
@@ -2921,15 +2921,8 @@ export const createBody = (world?: World): Body => {
         }
         pouch(out, s.pos[J.PELVIS], s.rot[J.PELVIS]);
         if (ninja) {
-          buckle(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build);
-          tails(
-            out,
-            s.pos[J.PELVIS],
-            s.rot[J.PELVIS],
-            build,
-            clock,
-            me ? Math.hypot(me.vx, me.vz) : 0,
-          );
+          blades(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build);
+          drape(out, s, build, clock, me ? Math.hypot(me.vx, me.vz) : 0, color, 1);
         }
         // The right thumb presses the button of the katana or the plasma gun as it comes on.
         const tk = me?.wield ? 1 : me ? kindOf(me) : -1;

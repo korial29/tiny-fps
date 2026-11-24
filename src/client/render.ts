@@ -246,6 +246,8 @@ export const SPEC = [
 const BANDS = 22;
 /** Diamonds a metre of the quilting on the trunk of the ninja's armour, along each diagonal: 2.5 cm each. */
 const QUILT = 40;
+/** Folds a metre up the ninja's sash (the user, 2026-11-24: a big cloth belt with folds): 2.6 cm each, wavering round the waist. */
+const PLEATS = 38;
 /** Threads a metre of the woven cloth (WEAVE): 1.6 mm each, coarse enough to show on a runner a few metres off. */
 const PITCH = 620;
 /** Metres a height of 1 in a texture's alpha stands for. */
@@ -447,6 +449,8 @@ c=vec3(.3,.305,.315)*mix(.8,.5+.75*rr,fr)*C.y;h+=fr*.0005*rr;rr=mix(.6,rr,fr);}
 float kw=clamp((L+1.)/(${WEAVE}+1.),0.,1.)*step(-1.,L)*step(L,-.5);
 if(kw>0.){vec3 gx=dFdx(Rp),gy=dFdy(Rp),w3=abs(cross(gx,gy));vec2 q=(w3.x>max(w3.y,w3.z)?Rp.zy:w3.y>w3.z?Rp.xz:Rp.xy)*${PITCH}.,i=floor(q),f=(q-i-.5)*3.1416;float fw=1.-smoothstep(.35,1.,max(length(gx),length(gy))*${PITCH}.),v=step(.5,mod(i.x+i.y,2.)),th=mix(cos(f.y)*(.55+.45*cos(f.x)),cos(f.x)*(.55+.45*cos(f.y)),v);
 c*=1.+kw*(fw*(.9*th-.35+.25*(v-.5))+.3*(n3(Rp*35.)-.5));h+=kw*fw*.00035*th;}
+if(Wq*step(abs(L-(${WEAVE})),.004)>0.){float an=atan(Rp.x,-Rp.z),y=Rp.y+.005*sin(an*3.+1.)+.003*sin(an*7.+2.)+.012*(n3(vec3(Rp.xz*9.,Rp.y*7.))-.5),t=fract(y*${PLEATS}.),fl=1.-smoothstep(.2,.6,max(length(dFdx(Rp)),length(dFdy(Rp)))*${PLEATS}.),r=sin(t*3.1416);
+c*=1.+fl*(.4*r-.22-.4*smoothstep(.14,0.,t));h+=fl*.004*r;}
 float bz=step(${BOOT_LAYER - 0.025},L)*step(L,${BOOT_LAYER + 0.02});
 if(bz>0.){float y=Rp.y,an=atan(Rp.z,abs(Rp.x)-.1),wz=smoothstep(.085,.1,y)*(1.-smoothstep(.2,.215,y)),t=fract(y*34.+an*.3183),fb=1.-smoothstep(.3,.8,max(length(dFdx(Rp)),length(dFdy(Rp)))*34.);
 c*=1.+wz*fb*(.5*(1.-t)-.2-.6*smoothstep(.12,0.,t));h+=wz*fb*.0012*(1.-t);

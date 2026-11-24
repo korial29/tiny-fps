@@ -1183,6 +1183,10 @@ describe('drawing and sheathing the katana', () => {
       }
       expect(draws()).toBe(take);
     }
+    // Heard: at full level. Its gain went through db() as 0, minus infinity decibels, and the
+    // blades came out in silence (the user, 2026-11-25).
+    const drawn = t.audio.play.mock.calls.filter(c => c[0] === SOUND.HUNTER_BLADE_DRAW);
+    expect(drawn.map(c => c[2])).toEqual([0, 0]);
   });
 
   it('play the draw for a katana picked up with no gun, which is in hand at once', () => {

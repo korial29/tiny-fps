@@ -2,10 +2,10 @@ import { expect, it } from 'vitest';
 import { STILL } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { counter, createBody, hands, HUNTER_HAND } from './body';
-import { JOINT, rest, solve } from './rig';
+import { JOINT, rest, solve, turn } from './rig';
 import { SHINE, STRIDE } from './mesh';
 import { mesh } from './store';
-import { wristComputer } from './computer';
+import { FIRE_KEY, wristComputer } from './computer';
 import { HUNTER_CELLS } from '../shared/constants';
 import type { Pieces } from './store';
 
@@ -159,4 +159,46 @@ it('swings the guard hand with a cut: out through the wind-up, tucked in on the 
   expect(out).toBe(0);
   expect(tucked).toBe(1);
   expect(counter(cut, 1)).toEqual([0, 0]);
+});
+
+/** The poses of a second's run at 7 m/s after the weapon has come to hand, the cannon out or the harpoon in hand. */
+const running = (railed: boolean) => {
+  const body = createBody();
+  body.wear(0, undefined, false, false, true);
+  const p = { ...player, vz: -7, railed, ammo: 3, mag: 1 };
+  const poses = [];
+  for (let i = 0; i < 150; i++) {
+    body.update(p, 1 / 60);
+    if (i >= 90) {
+      poses.push(body.pose([0, 1.6, 0], 0, -0.1)!);
+    }
+  }
+  return poses;
+};
+
+it('keeps the index on the wrist computer’s fire key through a run with the cannon out (the user, 2026-11-25)', () => {
+  // The index lies on the forearm's line, 0.165 m from the wrist to its tip; it hovers 34 mm
+  // off the key between shots. As the shoulders moved through a stride it went centimetres past
+  // the key, into the computer.
+  for (const s of running(true)) {
+    const key = turn(s.rot[JOINT.FOREARM_L], FIRE_KEY).map((v, k) => v + s.pos[JOINT.HAND_L][k]);
+    const fore = s.pos[JOINT.HAND_R].map((v, k) => v - s.pos[JOINT.FOREARM_R][k]);
+    const long = Math.hypot(...fore);
+    const tip = s.pos[JOINT.HAND_R].map((v, k) => v + (fore[k] / long) * 0.165);
+    expect(Math.hypot(...tip.map((v, k) => v - key[k]))).toBeLessThan(0.04);
+  }
+});
+
+it('holds the shoulders steadier through a stride with the cannon out (the user, 2026-11-25)', () => {
+  /** How far the left shoulder travels across a second's run, metres, the eye still. */
+  const travel = (railed: boolean) => {
+    const at = running(railed).map(s => s.pos[JOINT.ARM_L]);
+    return Math.max(
+      ...[0, 1, 2].map(k => Math.max(...at.map(v => v[k])) - Math.min(...at.map(v => v[k]))),
+    );
+  };
+  // 23 mm, against 40 with the harpoon in hand; 49 with each joint stilled apart, which left the
+  // pelvis's sway whole.
+  expect(travel(true)).toBeLessThan(0.03);
+  expect(travel(true)).toBeLessThan(0.7 * travel(false));
 });

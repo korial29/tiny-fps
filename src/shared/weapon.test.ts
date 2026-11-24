@@ -1292,13 +1292,13 @@ describe('ammo packs', () => {
 });
 
 describe('the rack through the room', () => {
-  it('gives the gun at the team’s rack, the other team’s rack nothing', () => {
+  it('gives the gun at a rack to either team (the user, 2026-11-24: no rack is a team’s own)', () => {
     const m = match();
     m.put(m.cy, -20, 40);
     m.put(m.bob, -20, 40);
     m.hold(m.cy, 1, 0);
     m.hold(m.bob, 1, 0);
-    expect([m.state(m.cy).ammo, m.state(m.bob).ammo]).toEqual([AMMO_MAX, -1]);
+    expect([m.state(m.cy).ammo, m.state(m.bob).ammo]).toEqual([AMMO_MAX, AMMO_MAX]);
     // Down, he has none and takes none.
     m.put(m.ann, -20, 40, { hp: 0, down: 20 });
     m.hold(m.ann, 1, 0);
@@ -2446,15 +2446,15 @@ describe('a cut as the cutter saw it', () => {
 });
 
 describe('the katana rack through the room', () => {
-  it('gives the katana at the team’s rack, the other team’s rack nothing, and shows it in the snapshot', () => {
+  it('gives the katana at a rack to either team, and shows it in the snapshot', () => {
     const m = match();
     m.put(m.cy, -20, 43);
     m.put(m.bob, -20, 43);
     m.hold(m.cy, 1, 0);
     m.hold(m.bob, 1, 0);
-    expect([m.state(m.cy).blade, m.state(m.bob).blade]).toEqual([true, false]);
+    expect([m.state(m.cy).blade, m.state(m.bob).blade]).toEqual([true, true]);
     // No gun, so it is in hand.
-    expect([m.state(m.cy).wield, m.state(m.bob).wield]).toEqual([true, false]);
+    expect([m.state(m.cy).wield, m.state(m.bob).wield]).toEqual([true, true]);
     m.ticks(SNAP_EVERY);
     expect(m.snap(m.ann).players.find(p => p.id === 2)).toMatchObject({ blade: true, wield: true });
     // Down, he has none and takes none.

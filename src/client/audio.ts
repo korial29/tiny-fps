@@ -73,7 +73,7 @@ export const LOUD: Record<number, number> = {};
 export const GROUP =
   '111111111155552022225522222222222222222233344333333333005533002200120120002000' +
   '2222222222' +
-  '244222';
+  '2442222';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
 let mixed = () => {};
 /** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */

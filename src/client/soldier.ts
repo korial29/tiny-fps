@@ -779,6 +779,15 @@ const carried = (from: Pose, s0: ReturnType<typeof solve>, r: Runner): Pose => {
  * foe's throat. The guard's numbers (see katana.ts) from the eye.
  */
 const CARRY = [-0.02, -0.5, 0.26, 0, 0.45, 0.89];
+/** How far left of the right hand the Hunter's left one is in his guard (brandish()), metres. */
+const OFF_HAND = 0.26;
+/**
+ * The Hunter's guard, as CARRY: the claw higher and further ahead than a katana's grip, a
+ * predator's (the user, 2026-11-24: more aggressive), its blades rising toward a foe.
+ */
+const HUNT = [0, -0.36, 0.42, 0, 0.6, 0.8];
+/** How far the Hunter's trunk bends forward over his guard, radians (none through a cut). */
+const HUNCH = 0.2;
 
 /**
  * The pose with the katana in both hands: in the guard, or in a cut, which is the first person's cut
@@ -800,14 +809,17 @@ export const brandish = (
   const k = lk ? locked(t) : poised(p, Math.max(prog, 0), t);
   // A parry snaps the blade across from whatever hold it is in, and holds its line (clasp()).
   const pe = parrying(parry);
+  const base = oneHand ? HUNT : CARRY;
   const g = deflect(
-    CARRY.map((v, i) => v + (k[i] - v) * e),
+    base.map((v, i) => v + (k[i] - v) * e),
     pe,
     DEFLECT_LOW,
   );
   g[1] += 0.02 * Math.sin(TAU * ph) * (1 - e);
   // A cut turns the whole body on its feet with a share of the trunk's twist.
-  const [tw, bd, ln] = lk ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
+  const [tw, sweep, ln] = lk ? [0, 0.15, 0] : prog < 0 ? [0, 0, 0] : bent(p, prog).map(v => v * e);
+  // The Hunter hunched over his guard.
+  const bd = sweep + (oneHand ? HUNCH * (1 - e) : 0);
   const spin = prog < 0 ? 0 : SWAY * tw;
   const pose = { ...from, yaw: from.yaw + spin };
   // The hands go round with the chest's whole twist and down and up with its bend.
@@ -840,7 +852,13 @@ export const brandish = (
   shrug(q, s, J.ARM_R, at);
   const poles: [Vec3, Vec3] = [turn([0.5, -1, -0.35]), turn([-0.5, -1, -0.35])];
   if (oneHand) {
-    wield(q, s, J.ARM_R, at, dir, poles[0]);
+    // The claw rides the forearm: each fist straight in line with its arm (the user, 2026-11-24),
+    // the wrist left as the pose has it rather than turned onto a handle as wield() does. The
+    // left hand up in the guard too, at the right one's height beside it, held there through a cut.
+    reach(q, solve(q), J.ARM_R, at, poles[0]);
+    const left = add(eye, turn([HUNT[0] - OFF_HAND, HUNT[1], HUNT[2]]));
+    shrug(q, s, J.ARM_L, left);
+    reach(q, solve(q), J.ARM_L, left, poles[1]);
     return q;
   }
   shrug(q, s, J.ARM_L, add(at, dir.map(v => -BEHIND * v) as Vec3));

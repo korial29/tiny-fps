@@ -46,6 +46,8 @@ const light: Vec3 = [1, 0.24, 0.065];
 const stature = 1.2;
 /** The helmet's width against its first build (the user, 2026-11-24: narrower). */
 const HELM_WIDTH = 0.88;
+/** How far the Hunter's right fingers close (hand()'s curl): a fist, the claw's housing on its back. */
+const HUNTER_FIST = 0.9;
 /** The wrist blades and their housing stand off the back of the hand and sit up the forearm (the user, 2026-11-24: they cut into the hand), in the runner's metres. */
 const WRIST_LIFT = 0.022;
 const WRIST_UP = 0.02;
@@ -359,7 +361,8 @@ function marineBuild(
       fingers,
       skeleton,
       0,
-      [0.19, 0.19],
+      // The left hand half open, the right one a fist round the claw's grip (the user, 2026-11-24).
+      [0.19, HUNTER_FIST],
       HUNTER_HAND,
       HUNTER_HAND,
       { claws: 'short' },
@@ -2392,6 +2395,7 @@ export function hunter(lod: 0 | 1 | 2) {
 }
 
 /** Model-space cut trail on the same scaled mount as the baked blades. */
+
 export const hunterWristEnds = () =>
   wristEnds([0, 0, 0], [0, 0, 0, 1]).map(
     ([x, y, z]) =>

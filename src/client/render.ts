@@ -973,7 +973,13 @@ export const PORTRAIT = { y: 500, eye: 1.3, away: 2.5, turn: -0.35, sun: 0.9, fo
 /** A haircut's picture: the head alone, seen three quarters from behind so a tail or a bun shows. */
 export const HEAD = { ...PORTRAIT, eye: 1.6, away: 1.5, turn: -0.9, fov: 20, side: -0.12 };
 /** A picture's framing, and whether he grins in it. */
-export type Shot = typeof PORTRAIT & { grin?: boolean };
+export type Shot = typeof PORTRAIT & {
+  grin?: boolean;
+  /** What he holds, over the empty hands of a picture (the character screen's weapon). */
+  hold?: Partial<PlayerState>;
+  /** Radians he is turned from his usual pose, towards his left: a weapon held ahead then shows across the picture. */
+  spin?: number;
+};
 /** An ally's face on the radio screen: the head nearly from the front, grinning. */
 export const FACE: Shot = { ...PORTRAIT, eye: 1.64, away: 1.4, turn: -0.3, fov: 14, grin: true };
 
@@ -1875,7 +1881,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         ? kept.model
         : {
             ...p,
-            ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face, pitch: 0, mode: MODE.GROUND, t: 0 },
+            ...{ y: shot.y, vx: 0, vy: 0, vz: 0, yaw: face + (shot.spin ?? 0), pitch: 0 },
+            ...{ mode: MODE.GROUND, t: 0 },
             ...{ down: 0, stun: 0, swing: 0, ev: 0, fall: 0, held: 0 },
             // Empty handed.
             ...{
@@ -1887,6 +1894,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
               railed: false,
               rifled: false,
             },
+            ...shot.hold,
           };
       // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.
       const r = again ? kept.r : createRunner(model, undefined, build, look ?? {}, true);

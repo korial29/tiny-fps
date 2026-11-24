@@ -3,7 +3,7 @@
 // weaknesses under it, Start in the middle at the bottom. Nothing of the match loads and the room
 // is not joined before Start: the picture has a renderer of its own over an empty studio, one
 // brush under the map's sky, which goes when Start is pressed.
-import { PARRY, TEAM_COLOR, XENO_HP } from '../shared/constants';
+import { PARRY, RIFLE_CLIP, TEAM_COLOR, XENO_HP } from '../shared/constants';
 import { ROLE, buildOf, rolesOf } from '../shared/kit';
 import { STILL, spawn } from '../shared/physics';
 import type { Choice, PlayerState } from '../shared/types';
@@ -82,6 +82,20 @@ const idOf = (role: number) => 10 + role;
 const HZ = 30;
 /** The whole runner, feet to head, in a picture about as wide as high (the Hunter has his own in portrait()). */
 const FULL: Shot = { ...PORTRAIT, eye: 0.95, away: 3.9, turn: -0.35, fov: 30 };
+/**
+ * The weapon each class holds in its big picture (the user, 2026-11-24): the marine's assault
+ * rifle, the ninja's katana, the Hunter's wrist blades; the others empty-handed.
+ */
+const ARMED: Partial<Record<number, Partial<Shot>>> = {
+  // The rifle low, at the ready, rather than aimed at the camera.
+  [ROLE.MARINE]: {
+    hold: { rifle: RIFLE_CLIP, clip: RIFLE_CLIP, rifled: true, pitch: -0.2 },
+    spin: 0.35,
+  },
+  [ROLE.NINJA]: { hold: { blade: true, wield: true } },
+  // His disc put away (the user, 2026-11-24): as while it flies (`clip`), none hangs at his belt.
+  [ROLE.HUNTER]: { hold: { blade: true, wield: true, clip: 1 }, spin: 0.45 },
+};
 /** A tile's picture: head and shoulders. */
 const BUST: Shot = { ...PORTRAIT, eye: 1.5, away: 1.6, turn: -0.4, fov: 22 };
 
@@ -338,7 +352,10 @@ export const createLobby = (
       }
     } else if (now >= next || !shown) {
       next = Math.max(next, now - 1000 / HZ) + 1000 / HZ;
-      drew = rd.portrait(picture, me(c.role!), buildOf(c, def), color, c, FULL);
+      drew = rd.portrait(picture, me(c.role!), buildOf(c, def), color, c, {
+        ...FULL,
+        ...ARMED[c.role!],
+      });
       if (drew && !shown) {
         shown = true;
         loader.hidden = true;

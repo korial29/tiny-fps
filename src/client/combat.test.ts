@@ -17,6 +17,7 @@ import {
   PLASMA_R,
   PLASMA_SPEED,
   RECOIL,
+  HARPOON,
   NADE,
   NADE_COOL,
 } from '../shared/constants';
@@ -632,6 +633,22 @@ describe('the others shots', () => {
     expect(bursts).toEqual([[5, 1.6, -7]]);
     expect(audio.play).toHaveBeenLastCalledWith(SOUND.SPLASH, [5, 1.6, -7], 0, 1);
     expect(orbs()).toEqual([]);
+  });
+
+  it('strike a harpoon bolt as a shock with its own crack, not a plasma splash', () => {
+    const { frame, balls, bursts, audio, at, tracer } = setup();
+    const impact = vi.spyOn(tracer, 'impact');
+    const p = other(1);
+    frame(player(), [p]);
+    const bolt = { id: 1, by: 2, x: 5, y: 1.6, z: -5, dx: 0, dy: 0, dz: -1, burst: false };
+    balls.snapshot([{ ...bolt, power: HARPOON }], 1, at());
+    balls.snapshot([{ ...bolt, z: -7, power: HARPOON, burst: true }], 1, at());
+    for (let k = 0; k < 20 && !impact.mock.calls.length; k++) {
+      frame(player(), [p]);
+    }
+    expect(impact).toHaveBeenCalledWith([5, 1.6, -7]);
+    expect(bursts).toEqual([]);
+    expect(audio.play.mock.lastCall?.slice(0, 2)).toEqual([SOUND.HARPOON_HIT, [5, 1.6, -7]]);
   });
 });
 

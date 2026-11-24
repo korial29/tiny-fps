@@ -14,6 +14,7 @@ import {
   CHARGE_TICKS,
   FALL_SAFE,
   GUN_RANGE,
+  HARPOON,
   MAX_PITCH,
   NADE,
   NADE_R,
@@ -220,6 +221,7 @@ export const createCombat = (
     Tracer,
     | 'flash'
     | 'burst'
+    | 'impact'
     | 'blast'
     | 'orbs'
     | 'update'
@@ -431,9 +433,10 @@ export const createCombat = (
   /** The sounds of a swap as it passes its cues (CUES), the boot of a gun that comes to hand or whose swap is done, and the hiss of an overheating, at `at`. */
   const reloads = (was: Blade, now: Blade, at?: Vec3, first = -1, harpoon = false) => {
     const [a, b, r] = [swapOf(was), swapOf(now), +!!now.railed];
-    if (harpoon && !r) {
-      // The Hunter's harpoon racks its next bolt in from behind (harpoonFeed(), from HARPOON_RACK).
-      if (a < HARPOON_RACK && b >= HARPOON_RACK) {
+    if (harpoon) {
+      // The Hunter's harpoon racks its next bolt in from behind (harpoonFeed(), from HARPOON_RACK);
+      // his shoulder cannon reloads in silence (the user, 2026-11-24).
+      if (!r && a < HARPOON_RACK && b >= HARPOON_RACK) {
         audio.play(SOUND.HARPOON_RELOAD, at, -2);
       }
     } else {
@@ -599,7 +602,9 @@ export const createCombat = (
           rail < 0 ? -1 : own ? 0 : charge(rail),
           !!me.railed,
           me.rifled
-            ? (me.clip ?? 0)
+            ? own
+              ? +!me.clip
+              : (me.clip ?? 0)
             : me.railed
               ? own
                 ? (me.cap ?? 0)
@@ -796,7 +801,7 @@ export const createCombat = (
           audio.play(
             kind === 'return' ? SOUND.HUNTER_DISC_RETURN : SOUND.HUNTER_DISC_CATCH,
             at,
-            -2.8,
+            kind === 'return' ? -2.8 : -1.2,
             rate(),
           ),
       );
@@ -812,6 +817,11 @@ export const createCombat = (
           audio.play(SOUND.SPLASH, at, 1.6, 0.35);
           const d = me ? Math.hypot(at[0] - me.x, at[1] - me.y - 1, at[2] - me.z) : Infinity;
           fx.quake(Math.max(0, 1 - d / (3 * NADE_R * wide)));
+          continue;
+        }
+        if (k === HARPOON) {
+          tracer.impact(at);
+          audio.play(SOUND.HARPOON_HIT, at, 0.5, rate());
           continue;
         }
         tracer.burst(at, !k);

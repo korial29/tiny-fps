@@ -1553,7 +1553,7 @@ export const soldier = (
         blendHunter(out, band, joints, s.rot);
       }
       for (const piece of rig.pieces) {
-        if ((piece.harpoon && handOf(p) === 0) || (piece.disc && p.rifled)) {
+        if ((piece.harpoon && handOf(p) === 0) || (piece.disc && (p.rifled || !!p.clip))) {
           continue;
         }
         if (piece.cannon) {
@@ -1859,7 +1859,9 @@ export const soldier = (
   ) {
     // A swap shows: the battery or the capsule out and in, the glow off until it is.
     const sp = swapOf(p);
-    if (isHunter && p.rifled) {
+    if (isHunter && p.rifled && p.clip) {
+      // His disc is out: the hand is empty until it comes back (gun.ts DISK_LOST).
+    } else if (isHunter && p.rifled) {
       // The disc held by its hub (the user, 2026-11-23): the palm on the hub, the disc beyond the
       // palm, its face along the back of the hand (axes()' right).
       const q = s.rot[J.HAND_R];

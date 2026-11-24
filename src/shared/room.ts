@@ -988,6 +988,12 @@ export class Room {
     const foes = peers.filter(q => q.info.team !== b.team && !q.state.down);
     const by = peers.find(q => q.info.id === b.by);
     const o: [number, number, number] = [b.x, b.y, b.z];
+    // A disc still out when its DISK_LOST ticks ran out is in its owner's hand again (gun.ts): the
+    // one in flight is gone.
+    if ((b.power === DISK || b.power === DISK_RETURN) && by && !by.state.clip) {
+      b.burst = true;
+      return;
+    }
     if (b.returning || b.power === DISK_RETURN) {
       if (!by) {
         b.burst = true;
@@ -1001,7 +1007,9 @@ export class Room {
       const delta = target.map((v, i) => v - o[i]);
       const distance = Math.hypot(...delta);
       if (distance < 0.65) {
+        // Caught: back in his hand, to be thrown again.
         b.burst = true;
+        by.state.clip = 0;
         return;
       }
       [b.dx, b.dy, b.dz] = delta.map(v => v / distance) as [number, number, number];

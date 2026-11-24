@@ -186,6 +186,35 @@ const [X, Y, Z]: Vec3[] = [
 ];
 const POLE: Vec3 = [0.7, -1, -0.5];
 const clamp = (v: number, lo = 0, hi = 1) => Math.min(Math.max(v, lo), hi);
+
+/**
+ * The own Hunter's disc throw, seconds from the click: the hand winds back across the chest until
+ * `wound`, sweeps out to the right until `swept` and lets the disc go at `release` on the way,
+ * then is back at the hold at `back`. Its arc round `centre` (camera space), `radius` metres.
+ */
+const THROW = {
+  wound: 0.08,
+  release: 0.12,
+  swept: 0.17,
+  back: 0.42,
+  centre: [0.06, -0.15, 0.24] as Vec3,
+  radius: 0.36,
+  /** The arc's angle from straight ahead, radians: wound back to the left, swept out to the right. */
+  from: -1,
+  to: 0.95,
+};
+
+/** The weight of the throw's pose over the hold, and the hand's angle on its arc, `t` seconds after the click. */
+const throwOf = (t: number): [number, number] => {
+  const k =
+    t < THROW.wound
+      ? ease(t / THROW.wound)
+      : t < THROW.swept
+        ? 1
+        : 1 - ease(clamp((t - THROW.swept) / (THROW.back - THROW.swept)));
+  const phi = THROW.from + (THROW.to - THROW.from) * ease(span(t, THROW.wound, THROW.swept));
+  return [k, phi];
+};
 export const inv = ([x, y, z, w]: Quat): Quat => [-x, -y, -z, w];
 const dist = (a: Vec3, b: Vec3) => Math.hypot(...sub(a, b));
 
@@ -1971,6 +2000,10 @@ export const createBody = (world?: World): Body => {
   let harpoonDraw = 0;
   /** Seconds since the harpoon's last shot: its bolt is drawn leaving the tube (HARPOON_OUT). */
   let harpoonShot = Infinity;
+  /** Seconds since the own Hunter threw his disc, and since he caught it back; whether it is out (`clip`, gun.ts). */
+  let [discThrow, discBack, discOut] = [Infinity, Infinity, false];
+  /** Whether the disc is drawn in his hand: not out, or still in it before the release of a throw. */
+  const discIn = () => !discOut || discThrow < THROW.release;
   /** How far the Hunter's own shoulder cannon is folded out: 0 stowed, 1 out (unfold()). */
   let cannon = 0;
   /** Whether the Hunter's own shoulder cannon is in use (the state drawn has it masked). */
@@ -2003,6 +2036,11 @@ export const createBody = (world?: World): Body => {
       fours.update(p, dt, floor);
       clung = p.mode == MODE.CLING || (clung && fours.weight > 0.002);
     }
+    // A new shot with the disc in hand is a throw (gun.ts STRIKE.DISK): the arm sweeps it out.
+    discThrow = hunter && p.rifled && me && p.shots !== me.shots ? 0 : discThrow + dt;
+    const out = hunter && !!p.clip;
+    discBack = discOut && !out ? 0 : discBack + dt;
+    discOut = out;
     const now = handOf(p);
     harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / 0.55) : 0;
     const f = fresh(p);
@@ -2130,7 +2168,35 @@ export const createBody = (world?: World): Body => {
       // The disc as in the user's picture (2026-11-23): the back of the hand to the eye, the
       // fingers up and leaning ahead by DISC_TILT, the palm flat on the hub of the disc standing
       // behind it, the fingers over its face between the blades.
-      return [at, pointed(at, add(at, [0, 1, DISC_TILT]), [0, 0, -1], [-1, 0, 0])];
+      const hold = pointed(at, add(at, [0, 1, DISC_TILT]), [0, 0, -1], [-1, 0, 0]);
+      // Empty, the hand sinks a little; the disc caught back knocks it back and down.
+      const empty = discIn() ? 0 : 1;
+      const caught = Math.max(0, 1 - discBack / 0.25) ** 2;
+      at[1] -= 0.035 * empty + 0.03 * caught;
+      at[2] -= 0.05 * caught;
+      const [k, phi] = throwOf(discThrow);
+      if (k <= 0) {
+        return [at, hold];
+      }
+      // The throw (the user, 2026-11-24): a flat backhand, the disc lying under the palm. The hand
+      // swings on an arc round the chest from across it on the left out to the right, the fingers
+      // along the arc's radius, and comes back to the hold.
+      const [s, c] = [Math.sin(phi), Math.cos(phi)];
+      const [side, up, fingers]: Vec3[] = [
+        [0, 1, 0],
+        [-c, 0, s],
+        [s, -0.15, c],
+      ];
+      const to: Vec3 = [
+        THROW.centre[0] + THROW.radius * s,
+        THROW.centre[1],
+        THROW.centre[2] + THROW.radius * c,
+      ];
+      const p = mix(at, to, k);
+      return [
+        p,
+        pointed(p, add(p, mix(hold[2], fingers, k)), mix(hold[0], side, k), mix(hold[1], up, k)),
+      ];
     }
     const [rc, rs] = [Math.cos(roll), Math.sin(roll)];
     return [at, pointed(at, to, [rc, rs, 0], [-rs, rc, 0])];
@@ -2395,7 +2461,14 @@ export const createBody = (world?: World): Body => {
       // The Hunter's blades come out of the bracer over a clenched fist (the user, 2026-11-23).
       curls[(sd + 1) / 2] =
         curl +
-        ((hunter && onSword ? 1 : hunter && me?.rifled && sd > 0 ? DISC_CURL : 0.9) - curl) *
+        ((hunter && onSword
+          ? 1
+          : hunter && me?.rifled && sd > 0
+            ? discIn()
+              ? DISC_CURL
+              : 0.3
+            : 0.9) -
+          curl) *
           taken +
         (GUARD_CURL + 0.5 * tucked - curl) * guard +
         (0.55 - curl) * reading;
@@ -2878,8 +2951,8 @@ export const createBody = (world?: World): Body => {
             lights: suit && !!plate,
             claws: hunter ? 'short' : xeno,
             // The fingers fanned out over the disc's hub (the user, 2026-11-23).
-            spread: hunter && me?.rifled ? DISC_SPREAD : 1,
-            hook: hunter && me?.rifled ? DISC_HOOK : 0,
+            spread: hunter && me?.rifled && discIn() ? DISC_SPREAD : 1,
+            hook: hunter && me?.rifled && discIn() ? DISC_HOOK : 0,
           },
         );
         if (hold > 0.2) {
@@ -2903,6 +2976,8 @@ export const createBody = (world?: World): Body => {
               pieces,
               (HARPOON_GONE * harpoonShot) / HARPOON_OUT,
             );
+          } else if (hunter && kind === 3 && !discIn()) {
+            // Thrown: the hand is empty until it comes back.
           } else if (hunter && kind === 3) {
             // The armour's disc held by its hub (the user, 2026-11-23): the palm on the hub, the
             // fingers over its face between the blades; its face along the back of the hand

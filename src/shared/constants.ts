@@ -383,7 +383,11 @@ export const RIFLE_SPEED = 400;
 export const PLASMA_R = 0.12;
 /** Ball.power of the Hunter's harpoon: its own projectile kind in snapshots. */
 export const HARPOON = 8;
-export const HARPOON_SPEED = 72;
+/**
+ * The bolt reaches its target almost at once, like a sniper round (the user, 2026-11-24): 10 m a
+ * tick, the full HARPOON_RANGE in 0.15 s. It was 72.
+ */
+export const HARPOON_SPEED = 600;
 export const HARPOON_RANGE = 90;
 export const HARPOON_R = 0.08;
 export const HARPOON_HP = 4;
@@ -394,7 +398,12 @@ export const DISK_SPEED = 52;
 export const DISK_RANGE = 28;
 export const DISK_R = 0.16;
 export const DISK_HP = 3;
-export const DISK_COOL = 75;
+/**
+ * Ticks a thrown disc may stay out (the user, 2026-11-24): it can be thrown again only once it is
+ * back in the hand, and one that has not come back by then (stuck) is in the hand again. Counted
+ * down in the Hunter's `clip` (gun.ts), which his disc's slot takes from the laser rifle.
+ */
+export const DISK_LOST = 2 * 60;
 /** Ticks a Hunter must keep a target in the shoulder laser's sight to lock on. */
 export const HUNTER_LASER_LOCK = 3 * TICK_HZ;
 /** Damage dealt by a locked Hunter shoulder laser. */

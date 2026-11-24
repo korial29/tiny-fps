@@ -73,7 +73,9 @@ const BUDGETS = [
   // 267,000 B for the Hunter's unmasked HUD face (the user, 2026-11-24).
   // 268,024 B for the ninja's wide pleated sash, quilted tabard and skirt (the user, 2026-11-24: 1 KB more).
   // 268,100 B for his skirt kept narrow at the sides, clear of the hands (the user, 2026-11-24: 76 B more).
-  { file: 'dist/index.js', max: 268_100 },
+  // 268,800 B for the two together with the Hunter's disc throw and harpoon shock, merged meanwhile
+  // inside the room the sash was counted in (the user, 2026-11-24: 700 B more).
+  { file: 'dist/index.js', max: 268_800 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

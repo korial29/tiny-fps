@@ -39,7 +39,9 @@ module (rings, sections, `mesh()` pieces), in metres with y up, then compared si
 its Blender render on the turntable.
 
 Setup, once: Blender (`brew install --cask blender`), `uv` (`brew install uv`), then the add-on
-(`DISABLE_TELEMETRY=true uvx mcp-for-blender install-addon`) and the server in Claude Code
+(`DISABLE_TELEMETRY=true uvx mcp-for-blender install-addon`; on a fresh install, open Blender once
+first, or create `~/Library/Application Support/Blender/<version>/scripts/addons` and pass it as
+`BLENDERMCP_ADDONS_DIR`: the command finds no add-ons folder otherwise) and the server in Claude Code
 (`claude mcp add blender -s user -e DISABLE_TELEMETRY=true -- uvx mcp-for-blender`, then restart
 it). The variable turns off the anonymous usage record the server sends by default; the add-on's
 content telemetry and its asset and generator integrations (Poly Haven, Sketchfab, Hyper3D, Meshy,

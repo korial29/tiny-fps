@@ -2,7 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { FRAG } from '../shared/protocol';
 import type { Vec3 } from './mesh';
 import { SOUND, secondsOf } from './sfx';
-import { TAUNT_DELAY, TAUNT_GAP, TAUNT_LATE, createTaunts, speakerOf, tauntOf } from './taunt';
+import {
+  HUNTER_CALLS,
+  TAUNT_DELAY,
+  TAUNT_GAP,
+  TAUNT_LATE,
+  createTaunts,
+  mimicSeconds,
+  speakerOf,
+  tauntOf,
+} from './taunt';
 import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
 
 /** The kind of line a clip is, and whose voice says it. */
@@ -138,6 +147,36 @@ describe('createTaunts', () => {
     expect(speak).not.toHaveBeenCalled();
     expect(play.mock.calls).toEqual([[SOUND.ROAR, undefined, -3.1, expect.any(Number), true]]);
     expect(said).toEqual([{ by: 5, s: expect.closeTo(secondsOf(SOUND.ROAR), 0) }]);
+  });
+
+  it('has a Hunter who fragged the own player mimic his voice over the radio, then his own calls', () => {
+    const speak = vi.fn((..._: [number, Vec3?, number?, number?, boolean?, boolean?]) => true);
+    const play = vi.fn();
+    // Hunter 5 is an enemy; player 7 is a xenomorph, with no voice to mimic.
+    const taunts = createTaunts(
+      { speak, play },
+      id => speakerOf(id),
+      id => +(id == 5),
+      id => id == 7,
+      id => id == 5,
+    );
+    // His 5th frag (HUNTER_CALLS[0], a mimicry): the own player's voice, deep, over the radio.
+    taunts.frag(frag(5, ME, 5), ME, 10);
+    const said = taunts.frame(20, () => undefined);
+    const clip = tauntOf(speakerOf(ME), FRAG.GUN, 5);
+    expect(speak.mock.calls).toEqual([[clip, undefined, -3.1, expect.any(Number), true, true]]);
+    expect(said).toEqual([{ by: 5, s: mimicSeconds(clip, speak.mock.calls[0][3]!) }]);
+    expect(play).not.toHaveBeenCalled();
+    // His next frag: his clicks, no words.
+    taunts.frag(frag(5, ME, 6), ME, 30);
+    taunts.frame(40, () => undefined);
+    expect(play.mock.calls[0][0]).toBe(HUNTER_CALLS[1]);
+    expect(play.mock.calls[0][0]).toBe(SOUND.HUNTER_CLICKS);
+    // A xenomorph has no voice to mimic: the next call in its place.
+    taunts.frag(frag(5, 7, 5), ME, 50);
+    taunts.frame(60, id => [id, 0, 0]);
+    expect(speak).toHaveBeenCalledTimes(1);
+    expect(play.mock.calls[1][0]).toBe(SOUND.HUNTER_CLICKS);
   });
 
   it('says nothing of a player it does not draw', () => {

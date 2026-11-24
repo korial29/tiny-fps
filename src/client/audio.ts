@@ -35,9 +35,17 @@ export interface Audio {
    * Says clip `id` of the players' voices (CAST): placed and fainter with distance as play() with
    * `at`, centred without; over the `radio`, clipped and thin as through a cheap headset, a burst
    * of squelch before and after it and a hiss under it. False, and silent, until the voices are
-   * decoded.
+   * decoded. As a Hunter's `mimic` (the Predator's: he says back what he heard), deeper, through a
+   * ring modulator, its first syllable stuttered twice.
    */
-  speak(id: number, at?: Vec3, db?: number, rate?: number, radio?: boolean): boolean;
+  speak(
+    id: number,
+    at?: Vec3,
+    db?: number,
+    rate?: number,
+    radio?: boolean,
+    mimic?: boolean,
+  ): boolean;
   /** The sound `id` (one of LOOPED) as a loop, silent until its first set; the own player's, centred. */
   loop(id: number): Loop;
   /** Fades the music out (true) or back in (false), the other sounds untouched: the Hunter's visions. */
@@ -73,7 +81,8 @@ export const LOUD: Record<number, number> = {};
 export const GROUP =
   '111111111155552022225522222222222222222233344333333333005533002200120120002000' +
   '2222222222' +
-  '2442222';
+  '2442222' +
+  '00';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
 let mixed = () => {};
 /** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */
@@ -114,6 +123,11 @@ const CLIP = Float32Array.from({ length: 257 }, (_, i) => {
 });
 /** Seconds of squelch before a radio line and after it, its loudness and the hiss's under the line. */
 const SQUELCH = [0.08, 0.14, 0.35, 0.06];
+/**
+ * A Hunter's mimicry: the speed (and so the pitch) of the line, the ring modulator's Hz and its
+ * share of the mix, and the stutter: the seconds of the line's start said before it, and how often.
+ */
+export const MIMIC = { rate: 0.74, ring: 48, wet: 0.65, stutter: 0.13, times: 2 };
 
 /**
  * The announcer's sprite (voice/clips.ts), each as base64 and loaded only when asked for: Ogg Opus,
@@ -236,6 +250,7 @@ export const createAudio = (
     rate: number,
     clip?: readonly [number, number],
     radio = false,
+    mimic = false,
   ): boolean => {
     const loud = gain(level);
     /** What reaches the listener, for the voices' priority: the panner's own fall with distance. */
@@ -273,6 +288,33 @@ export const createAudio = (
     let head: AudioNode = src;
     /** When the voice starts: after the squelch over the radio. */
     let at0 = 0;
+    /** The seconds a mimic's stutter adds before the line. */
+    const lead = mimic && clip ? (MIMIC.times * MIMIC.stutter) / rate : 0;
+    /** The stuttered starts: sources of their own, into the same chain. */
+    const bits: AudioBufferSourceNode[] = [];
+    if (mimic) {
+      // Half dry, half ring-modulated: the voice times a sine, its sidebands a metallic, alien buzz.
+      const sum = ctx.createGain();
+      const ring = ctx.createGain();
+      ring.gain.value = 0;
+      const osc = ctx.createOscillator();
+      osc.frequency.value = MIMIC.ring;
+      osc.connect(ring.gain);
+      osc.start();
+      osc.stop(ctx.currentTime + 1 + lead + (clip?.[1] ?? b.duration) / rate);
+      const dry = out(sum, 1 - MIMIC.wet);
+      ring.connect(out(sum, 2 * MIMIC.wet));
+      for (let i = 0; i < (clip ? MIMIC.times : 0); i++) {
+        const s = source(b);
+        s.playbackRate.value = rate;
+        bits.push(s);
+      }
+      for (const s of [src, ...bits]) {
+        s.connect(dry);
+        s.connect(ring);
+      }
+      head = sum;
+    }
     if (radio) {
       const shaper = ctx.createWaveShaper();
       shaper.curve = CLIP;
@@ -289,7 +331,7 @@ export const createAudio = (
       // The squelch and the hiss: white noise through the same amplifier, loud at the two ends.
       const [pre, post, loud, low] = SQUELCH;
       const t = ctx.currentTime;
-      const len = (clip?.[1] ?? b.duration) / rate;
+      const len = (clip?.[1] ?? b.duration) / rate + lead;
       const n = source(
         (noise ??= buffer(Float32Array.from({ length: RATE / 2 }, () => Math.random() * 2 - 1))),
       );
@@ -307,7 +349,9 @@ export const createAudio = (
     voices.add(v);
     src.onended = () => voices.delete(v);
     if (clip) {
-      src.start(at0, ...clip);
+      const t0 = mimic ? at0 || ctx.currentTime : at0;
+      bits.forEach((s, i) => s.start(t0 + (i * MIMIC.stutter) / rate, clip[0], MIMIC.stutter));
+      src.start(t0 + lead, ...clip);
     } else if (radio) {
       src.start(at0);
     } else {
@@ -349,8 +393,11 @@ export const createAudio = (
         }
       }
     },
-    speak(id, at, db = 0, rate = 1, radio = false) {
-      return !!cast && emit(cast, at, db + LEVELS[0], rate, CAST[id], radio);
+    speak(id, at, db = 0, rate = 1, radio = false, mimic = false) {
+      return (
+        !!cast &&
+        emit(cast, at, db + LEVELS[0], mimic ? rate * MIMIC.rate : rate, CAST[id], radio, mimic)
+      );
     },
     loop(id) {
       let src: AudioBufferSourceNode | undefined;

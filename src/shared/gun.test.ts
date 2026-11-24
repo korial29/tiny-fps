@@ -541,11 +541,12 @@ describe('the rack', () => {
     expect(p.x).toBeLessThan(5 + RACK_R);
   });
 
-  it('is the own team’s only, and is out of reach beyond RACK_R sideways or PICK_H up', () => {
+  it('serves both teams, and is out of reach beyond RACK_R sideways or PICK_H up', () => {
+    // Blue takes the gun at red's rack (the user, 2026-11-24: no rack is a team's own)…
     const blue = at5();
     go(blue, 0, EAST, 0, racked, 1);
-    expect(blue.ammo).toBe(-1);
-    // A step toward blue's own rack at x = -5 does.
+    expect(blue.ammo).toBe(AMMO_MAX);
+    // …and at his own at x = -5.
     const mine = Object.assign(at(-5, 0, EAST).p, { ammo: -1 });
     go(mine, 0, EAST, 0, racked, 1);
     expect(mine.ammo).toBe(AMMO_MAX);
@@ -704,10 +705,11 @@ describe('the katana rack', () => {
     expect([q.blade, q.ammo]).toEqual([false, AMMO_MAX]);
   });
 
-  it('is the own team’s only, and out of reach beyond RACK_R sideways or PICK_H up', () => {
+  it('serves both teams, and is out of reach beyond RACK_R sideways or PICK_H up', () => {
+    // Blue takes the katana at red's rack (the user, 2026-11-24).
     const blue = at53();
     go(blue, 0, EAST, 0, bladed, 1);
-    expect(blue.blade).toBe(false);
+    expect(blue.blade).toBe(true);
     const mine = Object.assign(at(-5, 3, EAST).p, {});
     go(mine, 0, EAST, 0, bladed, 1);
     expect(mine.blade).toBe(true);

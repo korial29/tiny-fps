@@ -101,7 +101,7 @@ export type Strike = (typeof STRIKE)[keyof typeof STRIKE];
  * One input: the move, then the weapons. Returns what struck on this step (STRIKE), for the host to
  * resolve it: a shot, or a cut, which is not a shot.
  * - Down: the keys are dropped, and when `down` runs out the player is back at a spawn.
- * - The team's rack fills the gun when the player steps into its circle (`rack` tells he is in it),
+ * - Either team's rack fills the gun when the player steps into its circle (`rack` tells he is in it),
  *   and again each time he comes back; staying gives nothing. The katana rack gives the katana,
  *   once and for good: it stays until he goes down.
  * - The rail rack fills the rail gun with RAIL_MAX ticks of lightning on arrival, as the gun's does.
@@ -175,8 +175,11 @@ export const step = (
   const fresh = !!(i.keys & KEY.FIRE) && !p.pressed;
   p.pressed = !!(i.keys & KEY.FIRE);
   // The rack fills the gun on arrival, not on every step spent in its circle.
-  const { rack, blade, rail, rifle } = w.def.teams[team];
-  const inside = !!rack && within(p, rack, RACK_R);
+  // Every rack serves both teams (the user, 2026-11-24): red takes from blue's and blue from
+  // red's. The xenomorph (no gear) and the Hunter (his own arms) still take none of their weapons.
+  const near = (key: 'rack' | 'blade' | 'rail' | 'rifle') =>
+    w.def.teams.some(t => !!t[key] && within(p, t[key], RACK_R));
+  const inside = near('rack');
   // A class with no gear takes nothing from the racks, and carries nothing.
   const gear = kit.gear;
   if (!gear) {
@@ -214,13 +217,13 @@ export const step = (
     [p.ammo, p.mag] = [kit.ammo, kit.mag];
   }
   p.rack = inside;
-  p.blade = !!kit.katana || !!p.blade || (armed && gear && !!blade && within(p, blade, RACK_R));
-  const inRail = !!rail && within(p, rail, RACK_R);
+  p.blade = !!kit.katana || !!p.blade || (armed && gear && near('blade'));
+  const inRail = near('rail');
   if (armed && gear && !own && inRail && !p.inRail) {
     [p.rail, p.cap] = [kit.rail, kit.cap];
   }
   p.inRail = inRail;
-  const inRifle = !!rifle && within(p, rifle, RACK_R);
+  const inRifle = near('rifle');
   if (armed && gear && !own && inRifle && !p.inRifle) {
     [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
   }

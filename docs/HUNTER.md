@@ -180,3 +180,16 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   shoulder plate (`tuck`), and the necklace lies over it.
 - **Wrist blades.** They and their housing stand off the back of the hand and sit up the forearm
   (`WRIST_LIFT`, `WRIST_UP`); the cut trail (`hunterWristEnds()`) moves with them.
+
+## Radio, racks and HUD (the user, 2026-11-24)
+
+- **Racks.** Every rack serves both teams (`step()`, `src/shared/gun.ts`). The xenomorph takes
+  nothing from them and the Hunter only his harpoon's bolts, at either team's gun rack.
+- **Radio.** After each frag the Hunter answers in turn (`HUNTER_CALLS`, `src/client/taunt.ts`):
+  his victim's own voice mimicked, `SOUND.HUNTER_CLICKS` (a trill of throat clicks over a gurgle),
+  `SOUND.HUNTER_TAUNT`, a mimicry again, `SOUND.HUNTER_GROWL`. The mimicry is one of the victim's
+  taunts said back, as the Predator does: slower and deeper, half ring-modulated at 48 Hz, its
+  first 0.13 s stuttered twice (`MIMIC`, `speak()` in `src/client/audio.ts`). A victim with no
+  voice (a xenomorph, a Hunter) gets the next call instead.
+- **HUD.** His own glyphs over the counter, one for the weapon in hand (`dl.h0` to `dl.h3`):
+  the blades in steel blue, the harpoon in bronze, the cannon in plasma red, the disc in silver.

@@ -234,6 +234,12 @@ export const SOUND = {
    * the stock grinding out, a ratchet over them, and a heavy lock as they reach their stops.
    */
   HARPOON_OPEN: 94,
+  /**
+   * The Hunter's radio (the user, 2026-11-24: sounds and radio voices of his own): CLICKS his
+   * rattle, a trill of throat clicks over a low gurgle; GROWL a deep rolling roar.
+   */
+  HUNTER_CLICKS: 95,
+  HUNTER_GROWL: 96,
 } as const;
 
 /**
@@ -902,6 +908,26 @@ export const LAYERS: Voice[][] = [
     [2, 110, -2.5, 0.001, 0.015, 0.14, 0, 1, 0, 1, 0.7, 0.98],
     [2, 2100, -0.2, 0.001, 0.02, 0.3, 0.03, 1, 0, 1, 0.12, 0.99],
     [2, 3350, -0.2, 0.001, 0.01, 0.2, 0.03, 1, 0, 1, 0.06, 0.99],
+  ], // HUNTER_CLICKS: fourteen throat clicks speeding up then slowing, each a dry square tick with a
+  // grain of noise, alternately higher and lower, over a gurgling 85 Hz saw that rises and falls.
+  [
+    ...[
+      0, 0.07, 0.13, 0.18, 0.225, 0.265, 0.3, 0.335, 0.37, 0.41, 0.455, 0.505, 0.565, 0.635,
+    ].flatMap((late, i): Voice[] => [
+      [0, i % 2 ? 1250 : 1650, -1, 0.001, 0.004, 0.016, 0, 0.3, 0, 1, 0.34, late],
+      [3, 6000, 0, 0.001, 0, 0.01, 0, 0.45, 0, 1, 0.18, late],
+    ]),
+    [1, 85, 0.4, 0.04, 0.45, 0.2, 0.3, 0.12, 0, 1, 0.3, 0.02],
+    [3, 420, 0, 0.05, 0.4, 0.2, 0, 0.08, 0, 1, 0.2, 0.02],
+  ],
+  // HUNTER_GROWL: a deep roar rolling under a rasp: two saws an octave and a fifth apart sliding
+  // down with a wide vibrato, a breath of low noise, and a guttural tail.
+  [
+    [1, 72, -0.35, 0.08, 0.45, 0.35, 0.5, 0.14, 0, 1, 0.5],
+    [1, 108, -0.4, 0.08, 0.4, 0.35, 0.6, 0.12, 0, 1, 0.3],
+    [1, 144, -0.3, 0.06, 0.35, 0.3, 0.4, 0.1, 0, 1, 0.22],
+    [3, 900, -0.6, 0.06, 0.4, 0.4, 0, 0.1, 0, 1, 0.32],
+    [1, 58, -0.8, 0.02, 0.06, 0.26, 0.7, 0.12, 0, 1, 0.35, 0.6],
   ],
 ];
 

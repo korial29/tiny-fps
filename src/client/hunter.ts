@@ -2994,9 +2994,12 @@ export const hunterRig = (
       const corners = [0, 1, 2].map(
         k => [v[i + k * STRIDE], v[i + k * STRIDE + 1], v[i + k * STRIDE + 2]] as Vec3,
       );
-      const c: Vec3 = [0, 1, 2].map(
-        k => (corners[0][k] + corners[1][k] + corners[2][k]) / 3,
-      ) as Vec3;
+      // A spot goes whole to one bone, by the corner its four triangles share: split between two,
+      // it would open as they part.
+      const c: Vec3 =
+        name === 'Spots'
+          ? corners[0]
+          : ([0, 1, 2].map(k => (corners[0][k] + corners[1][k] + corners[2][k]) / 3) as Vec3);
       const allowed = followed(name, c);
       let joint = -1,
         best = Infinity;

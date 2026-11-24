@@ -132,12 +132,13 @@ const CSS =
   `li::before{position:absolute;left:0;font-weight:900}.p li::before{content:"+";color:#5ad17a}.c li::before{content:"−";color:#ff5a4f}` +
   `.go{grid-area:go;justify-self:center;min-width:min(320px,80vw);padding:clamp(12px,2vh,18px) 48px;border:0;background:linear-gradient(#ff9a4a,#e8590c);box-shadow:0 10px 30px -8px #e8590ccc;` +
   `font:900 clamp(18px,3vh,24px)/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#fff}.go:hover{filter:brightness(1.1)}` +
-  // The renderer's own canvas: the size of the picture, under it, never seen (portrait() copies from it).
-  // In a match (Again): no pictures (no second renderer beside the game's, the user, 2026-11-25),
-  // the class's name and its lists in the middle, and the way back, left of Apply.
+  // In a match (`now`): no second renderer beside the game's (the user, 2026-11-25), which draws
+  // the big picture alone (paint()): the tiles are words without a head shot, and the way back is
+  // left of Apply.
   // The logo's place stays, empty: the page may show something of its own there (the demo's bar).
-  `.ag h6{visibility:hidden}.ag figure,.ag .tl canvas{display:none}.ag .tl button{grid-template:1fr/auto 1fr;padding-left:16px;max-height:64px}.ag .tl b,.ag .tl small{align-self:center}.ag main{grid-template-rows:auto auto;align-content:center}` +
+  `.ag h6{visibility:hidden}.ag .tl canvas{display:none}.ag .tl button{grid-template:1fr/auto 1fr;padding-left:16px;max-height:64px}.ag .tl b,.ag .tl small{align-self:center}` +
   `.bk{grid-area:go;justify-self:start;align-self:center;padding:10px 14px;font-size:15px;font-weight:700;color:#8d9aa7}.bk:hover{color:#fff}` +
+  // The renderer's own canvas: the size of the picture, under it, never seen (portrait() copies from it).
   `.gl{position:absolute;left:0;top:0;visibility:hidden;pointer-events:none}`;
 
 const load = (): Partial<Cast> => {
@@ -150,13 +151,19 @@ const load = (): Partial<Cast> => {
 
 export interface Lobby {
   destroy(): void;
+  /**
+   * In a match: the game's frame at `now` (ms) offers its renderer. `draw` is asked for the picture
+   * of the choice shown, HZ times a second at most, and says whether it drew it.
+   */
+  paint(now: number, draw: (into: HTMLCanvasElement, c: Cast, shot: Shot) => boolean): void;
 }
 
 /**
  * Shows the character screen in `container` for the map `def` (the classes it offers, its sky);
  * `start` hears the whole choice on Start, after the screen is gone. `now`: opened again in a
- * match from the pause menu (the user, 2026-11-25), over the game, on what the player wears: without the
- * pictures, Apply for Start and a way back (Escape too) that changes nothing.
+ * match from the pause menu (the user, 2026-11-25), over the game, on what the player wears: no
+ * renderer of its own (the game's draws the big picture, paint()), no head shots on the tiles, Apply
+ * for Start and a way back (Escape too) that changes nothing.
  */
 export const createLobby = (
   container: HTMLElement,
@@ -315,9 +322,7 @@ export const createLobby = (
     }
   };
   const seen = new ResizeObserver(fit);
-  if (!again) {
-    seen.observe(figure);
-  }
+  seen.observe(figure);
   const color = TEAM_COLOR[0];
   const lookOf = (role: number): Choice => ({ ...c, role });
   const tick = (now: number) => {
@@ -378,7 +383,7 @@ export const createLobby = (
       }
     }
   };
-  // In a match the screen draws nothing: the game's renderer stays the only one.
+  // In a match the screen has no renderer: the game's stays the only one (paint()).
   const timer =
     again ||
     setTimeout(() => {
@@ -428,5 +433,15 @@ export const createLobby = (
     $<HTMLElement>('.bk').onclick = destroy;
   }
   $<HTMLElement>('.go').onclick = go;
-  return { destroy };
+  return {
+    destroy,
+    paint(at, draw) {
+      if (!gone && picture.height && at >= next) {
+        next = Math.max(next, at - 1000 / HZ) + 1000 / HZ;
+        if (draw(picture, c, { ...FULL, ...ARMED[c.role!] })) {
+          loader.hidden = true;
+        }
+      }
+    },
+  };
 };

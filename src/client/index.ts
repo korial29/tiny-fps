@@ -1153,6 +1153,10 @@ const play = (
       if (previewActive && !posed) {
         previewJobs.shift()?.();
       }
+      // The character screen open in the match: its picture by this renderer, before the view too.
+      recast?.paint(now, (into, c, shot) =>
+        rd!.portrait(into, me, buildOf(c, world.def), colors.get(you.id) ?? '', c, shot),
+      );
       if (step == 2) {
         progress((step = 3));
         return;

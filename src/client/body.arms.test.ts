@@ -438,7 +438,11 @@ describe('the fists chosen with a gun in the bag (the marine on 1)', () => {
   it('draws no gun in his hands: the same picture as with no gun at all, from the start or after the gun', () => {
     const bare = man({ ammo: -1, fists: true });
     const none = count(watch(bare, 90), bare);
-    for (const carried of [{ ammo: 12 }, { ammo: 12, rail: 30 }, { ammo: 12, rifle: 30, clip: 20 }]) {
+    for (const carried of [
+      { ammo: 12 },
+      { ammo: 12, rail: 30 },
+      { ammo: 12, rifle: 30, clip: 20 },
+    ]) {
       const gun = man(carried);
       const fists = man({ ...carried, fists: true });
       // The gun in hand is drawn: more than the bare hands.

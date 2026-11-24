@@ -102,7 +102,7 @@ import type { Pieces } from './store';
 import { CLOTH, dress, mask } from './mask';
 import { cigar } from './cigar';
 import { pads } from './pads';
-import { ROLE } from '../shared/kit';
+import { KITS, ROLE } from '../shared/kit';
 import { SASH, armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
@@ -249,6 +249,8 @@ export interface Runner {
    */
   mate?: number;
   mount?: number;
+  /** The size of its prey's body to a man's (Kit size), for the xenomorph's holds on him. */
+  size?: number;
   with?: Vec3;
   /** The xenomorph's belly as last drawn, for its prey's hands; the seconds it eats on after the kill. */
   bust?: Vec3;
@@ -501,6 +503,7 @@ export const animate = (
       const mate = foe && !p.exec && xeno != (book.get(foe.id)?.look?.role === ROLE.XENO);
       if (mate) {
         [r.mate, r.mount] = [foe.id, mounted(p.lock!)];
+        r.size = KITS[book.get(foe.id)?.look?.role ?? ROLE.MARINE].size;
       } else {
         r.mount = Math.max((r.mount ?? 0) - dt / FEAST.DROP, 0);
       }
@@ -1130,7 +1133,7 @@ export const stance = (r: Runner) => {
     if (mate) {
       // After the kill it hops back off him on an arc (FEAST.HOP), its head still at his.
       const hop = p.lock ? 0 : Math.sin(Math.PI * (1 - r.mount!));
-      pose = seize(pose, mate, r.mount!, p.lock ? swaying(p.lock, r.mount!) : 0, hop);
+      pose = seize(pose, mate, r.mount!, p.lock ? swaying(p.lock, r.mount!) : 0, hop, r.size);
     }
     // Chewing as it bites, and on after the kill, dying out as its head lifts.
     pose = chew(pose, p.lock ? eating(p.lock, r.mount ?? 0) : fed, r.t);

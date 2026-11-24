@@ -595,7 +595,8 @@ describe('the fists’ execution drawn (pummel())', () => {
   // Standing as the fist goes in, kneeling and bowed toward him for the smash.
   const feet: Vec3 = [0, 0, -EXEC.FIST];
   const belly: Vec3 = [0, 1.1, -EXEC.FIST];
-  const head: Vec3 = [0, 1.17, -EXEC.FIST + 0.25];
+  // His head where kneel() draws it, bowed toward the killer at the origin.
+  const head = solve(kneel(rest(feet, Math.PI), [0, 0, 0], 1)).pos[J.HEAD] as Vec3;
   const prey = { feet, belly, head };
   const [, , home, held] = PUMMEL.GUT;
   const [, raised, , smash] = PUMMEL.SMASH;

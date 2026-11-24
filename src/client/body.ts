@@ -1038,6 +1038,8 @@ export const GUARD: Vec3 = [0.3, -0.24, 0.44];
 export const COMPUTER: Vec3 = [0.065, -0.195, 0.435];
 /** The right forearm and hand's line to the key (view space): in from the right, nearly level, a little ahead. */
 const POKE: Vec3 = [-0.95, 0.15, 0.25];
+/** How much of a stride's sway the trunk and the shoulders lose with the cannon out. */
+const CANNON_STEADY = 0.8;
 /** Where its elbow goes then (view space, mirrored): out to the left, down and back. */
 const COMPUTER_POLE: Vec3 = [1, -0.5, -0.6];
 /** How closed that guard hand is: open, the fingers a little bent. */
@@ -2242,6 +2244,19 @@ export const createBody = (world?: World): Body => {
       rest: g.rest,
     };
     const pawed = g.rot;
+    // With the shoulder cannon out the trunk and the shoulders keep still through a stride (the
+    // user, 2026-11-25: less arm movement walking and running with the cannon): they carry the
+    // wrist computer and the hand on its key.
+    const steady = railed ? CANNON_STEADY * ease(cannon) : 0;
+    if (steady) {
+      // The chest is squared to the hips' heading rather than each joint stilled: the gait turns
+      // the chest against the pelvis, and stilling the one alone left the other's sway whole.
+      const below = mul(q.rot[J.PELVIS], q.rot[J.SPINE]);
+      q.rot[J.CHEST] = mul(inv(below), slerp(mul(below, q.rot[J.CHEST]), ID, steady));
+      for (const j of [J.CLAVICLE_L, J.CLAVICLE_R]) {
+        q.rot[j] = slerp(q.rot[j], ID, steady);
+      }
+    }
     const [r, u, f] = basis(yaw, pitch, roll);
     /** Camera space (right, up, forward) as a direction in the world, and a world direction in it. */
     const turn = ([a, b, c]: Vec3): Vec3 => [
@@ -2487,6 +2502,8 @@ export const createBody = (world?: World): Body => {
       // 4 ticks of the cannon's 15 between shots (`cool`), let go over the next 6, else hovering
       // 3 cm off it.
       const typing = sd > 0 ? keyW * free : 0;
+      /** Where the index's tip goes: on the fire key, or hovering off it. */
+      let tip = key;
       if (sd > 0) {
         poking = typing;
         // The other fingers loosely bent under the index.
@@ -2498,6 +2515,7 @@ export const createBody = (world?: World): Body => {
         // The forearm comes into the view from its lower right corner, running ahead, the hand on
         // its line (the user's reference, 2026-11-23): the wrist the index's length back from its
         // tip on the key, along POKE.
+        tip = off;
         to = mix(to, along(off, unit(turn(POKE)), -0.165), typing);
       }
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
@@ -2510,6 +2528,16 @@ export const createBody = (world?: World): Body => {
         bend = mix(bend, unit(sub(elbow, mix(s.pos[J.ARM_R], to, 0.5))), typing);
       }
       reach(q, s, arm, to, bend);
+      if (typing > 0.002) {
+        // The index lies on the forearm's line, which the shoulder's place bends off POKE as he
+        // runs: its tip went past the key and into the computer (the user, 2026-11-25). The wrist
+        // set again the index's length back along the forearm as it is solved, twice.
+        for (let n = 0; n < 2; n++) {
+          const solved = solve(q);
+          const fore = unit(sub(solved.pos[J.HAND_R], solved.pos[J.FOREARM_R]));
+          reach(q, s, arm, mix(to, along(tip, fore, -0.165), typing), bend);
+        }
+      }
       // The palm turns down, the back of the hand to the view, flat on a ledge or the floor;
       // raking, it turns to face the way of the slash.
       q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide) + 0.9 * clutch));

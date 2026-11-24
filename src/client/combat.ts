@@ -479,7 +479,8 @@ export const createCombat = (
     if (now.wield) {
       // The Hunter's blades slide out each time they are taken, after the press (body.ts): their
       // sound with them, not only on a first taking (the user, 2026-11-24).
-      boot(sound, at, isHunter ? 0 : 0.6, isHunter ? rate() : 1, isHunter ? 1 : first);
+      // boot() takes a gain, not decibels: at 0 the draw was silent (the user, 2026-11-24: not heard).
+      boot(sound, at, isHunter ? 1 : 0.6, isHunter ? rate() : 1, isHunter ? 1 : first);
     } else {
       audio.play(sound, at, isHunter ? -2.5 : -4.4, isHunter ? rate() : 0.85);
     }

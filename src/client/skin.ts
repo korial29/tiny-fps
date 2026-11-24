@@ -1005,10 +1005,10 @@ const PROFILE = [0.42, 1.685, 0.21, 0.084, 0.095];
 /** The exponent of the dome's sections, 2 an ellipse: over it, a flatter top and fuller corners (the user, 2026-11-24: flatten the top a little, no egg). */
 export const CREST_E = 2.5;
 /**
- * How much larger its head is than it was drawn (the user, 2026-11-16: a bigger head), about the
- * head joint: the dome here (CREST), the face's pieces in xeno.ts (grow()).
+ * How much larger its head is than it was drawn (the user, 2026-11-16: a bigger head, 2026-11-24:
+ * a little bigger still), about the head joint: the dome here (CREST), the face's pieces in xeno.ts (grow()).
  */
-export const HEAD_K = 1.12;
+export const HEAD_K = 1.2;
 /** And how much narrower (the user, 2026-11-16: less round, the sides in), across it alone. */
 // Narrower again (the user, 2026-11-24: a narrower head, as the reference seen from the front).
 export const HEAD_X = 0.78;

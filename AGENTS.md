@@ -99,6 +99,9 @@ in the same change and consult the user about any remaining increase.
 
 ## Git, PRs and releases
 
+- Before starting a feature, fetch `origin/master`, create a worktree on it
+  and create the feature's branch there. Never start on the branch or the
+  uncommitted changes of another task.
 - Branch from `master` (`feature/…` or `fix/…`). Rebase on `origin/master`
   and use `--force-with-lease` when updating a rebased public branch.
 - Give every PR one release label (`release:major`, `release:minor`,

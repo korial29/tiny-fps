@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { duo } from '../../test/teams';
 import {
-  DISK_COOL,
+  DISK,
+  DISK_LOST,
+  DISK_RETURN,
   HUNTER_CELLS,
   HUNTER_CELL_TICKS,
   HUNTER_LASER_COOL,
@@ -13,9 +15,10 @@ import {
 import { STRIKE, step } from './gun';
 import { KITS, ROLE } from './kit';
 import { STILL, spawn } from './physics';
-import { encodeInput } from './protocol';
+import { decodeSnapshot, encodeInput } from './protocol';
 import { Room } from './room';
 import { CUT, KEY, TEX } from './types';
+import type { Flying } from './plasma';
 import type { Conn, PlayerState } from './types';
 import { build } from './world';
 import type { WorldDef } from './world';
@@ -235,17 +238,63 @@ describe('the shoulder cannon through the room', () => {
     m.hold(2, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp);
   });
+
+  it('throws his disc again only once he caught it, and the snapshot carries it out (the user, 2026-11-24)', () => {
+    const m = match();
+    // A disc in flight, out or coming back.
+    const discs = () =>
+      (m.room['balls'] as Flying[]).filter(
+        b => !b.burst && (b.power === DISK || b.power === DISK_RETURN),
+      ).length;
+    m.hold(1, RIFLE);
+    const shots = m.hunter.shots;
+    m.hold(1, RIFLE | FIRE);
+    expect(m.hunter.shots).toBe(shots + 1);
+    expect(m.hunter.clip).toBeGreaterThan(0);
+    // Clicking on while it is out throws nothing: once the client throws at will (`cool` has 4 bits
+    // on the wire), but `clip` goes whole, and so does the next throw's prediction.
+    let snap: ArrayBuffer | undefined;
+    for (const c of (m.room['peers'] as Map<Conn, unknown>).keys()) {
+      c.send = d => typeof d !== 'string' && (snap = d as ArrayBuffer);
+    }
+    while (!snap) {
+      m.hold(1, RIFLE);
+    }
+    const sent = decodeSnapshot(snap)!.players.find(q => q.id === m.hunter.id)!;
+    expect(sent.clip).toBe(m.hunter.clip);
+    expect(sent.clip).toBeGreaterThan(15);
+    let n = 0;
+    while (m.hunter.clip && n < DISK_LOST) {
+      expect(discs()).toBe(1);
+      m.hold(1, RIFLE | (n & 1 ? FIRE : 0));
+      n++;
+    }
+    // It hit the foe 12 m away and came back into his hand well before DISK_LOST.
+    expect(m.hunter.shots).toBe(shots + 1);
+    expect(n).toBeLessThan(DISK_LOST / 2);
+    expect(discs()).toBe(0);
+    m.hold(1, RIFLE);
+    m.hold(1, RIFLE | FIRE);
+    expect(m.hunter.shots).toBe(shots + 2);
+  });
 });
 
 describe('the Hunter’s wrist blades and harpoon (the user, 2026-11-23)', () => {
-  it('throws his disc on FIRE from slot 4, once each DISK_COOL ticks held, and not with G and the blades', () => {
+  it('throws his disc on FIRE from slot 4, again only once it is back, and not with G and the blades', () => {
     const p = hunter();
     expect(go(p, SPECIAL)).toBe(STRIKE.NONE);
     go(p, RIFLE);
     expect(p).toMatchObject({ rifled: true, wield: false, reload: 0 });
-    const strikes = Array.from({ length: DISK_COOL + 1 }, () => go(p, RIFLE | FIRE));
+    // Out, it cannot be thrown again (the user, 2026-11-24): one not caught (the room's catch sets
+    // `clip` to 0) is back in the hand DISK_LOST ticks after the throw.
+    const strikes = Array.from({ length: DISK_LOST + 1 }, () => go(p, RIFLE | FIRE));
     expect(strikes[0]).toBe(STRIKE.DISK);
-    expect(strikes.filter(s => s === STRIKE.DISK)).toHaveLength(2);
+    expect(strikes.map((s, i) => (s === STRIKE.DISK ? i : -1)).filter(i => i >= 0)).toEqual([
+      0,
+      DISK_LOST,
+    ]);
+    p.clip = 0;
+    expect(go(p, RIFLE | FIRE)).toBe(STRIKE.DISK);
   });
 
   it('has his harpoon from the start, also when he took the class after his spawn', () => {

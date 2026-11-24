@@ -126,3 +126,29 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 - **Alien scan.** Shows the xenomorphs only: an orange world, each xenomorph glowing cyan (`av()`).
 - **Music.** Either vision fades the music out; the heartbeat and the static play in its place
   (`Audio.hush()`).
+
+## Look (the user, 2026-11-24, after a reference picture)
+
+All in `src/client/hunter.ts`; nothing here is on the wire.
+
+- **Dreadlocks.** Eight separate locks a side (`DREADS`, part `Dreads`), rooted under the shell's rim
+  from the temple round to the nape, each of its own length with bronze rings. The first three of
+  each side fall in front of the shoulder plates onto the chest. They are tubes swept along a curve
+  (`sweep()`) and turn with the head as one piece, so they pass through the chest when it turns far.
+  The left ones stay inside the shoulder cannon's post. The far level leaves them out.
+- **Helmet.** Narrower (`HELM_WIDTH`). The shell's lower edge dips to the bridge of the nose
+  (`brow()`), the eyes are two glossy black slots close to it (`aperture()`, set back under the brow),
+  and the two brow bands meet in a V on the bridge and climb to the temples, nearly twice as tall.
+- **Body.** The armpit is cut about 9 cm higher (`PIT`, `PIT_ARM`), the upper arm and the shoulders
+  are leaner, the chest thinner from the side (`CHEST_THIN`) and the flanks straighter.
+- **Hide.** Olive (`HIDE`), lightened to a green beige over the pecs and the abs (`HIDE_LIGHT`), with
+  dark green spots gathered on the flanks, the back and the limbs (`HIDE_SPOT`). Painted per vertex.
+  The hands (`HUNTER_HAND`, `body.ts`) take the same olive in both views.
+- **Net.** The chest's net and the new sleeves (`Arm net`, down to the bracers) follow the skin's
+  bones and bends (`BENDY`), so they no longer sink into it as the trunk twists.
+- **Yoke.** Black leather as the belt's strips over the base of the neck and the collarbones, from
+  one shoulder plate to the other (`yoke()`, above `yokeLine()`); the net ends under it.
+- **Necklace.** A cord from the neck to the breastbone with four rodent skulls, six fangs and a
+  bronze ring round a red stone, laid on the chest's triangles (`front()`), following the skin.
+- **Wrist blades.** They and their housing stand off the back of the hand and sit up the forearm
+  (`WRIST_LIFT`, `WRIST_UP`); the cut trail (`hunterWristEnds()`) moves with them.

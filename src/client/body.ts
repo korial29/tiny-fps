@@ -1007,7 +1007,7 @@ const LANK = 1.28;
 export const RAKE = 0.35;
 /** How far each of the xenomorph's claws reaches past the root of its last phalanx, metres. */
 const CLAW_L = 0.042;
-export const HUNTER_HAND: Vec3 = [0.45, 0.315, 0.22];
+export const HUNTER_HAND: Vec3 = [0.36, 0.31, 0.21];
 /** Where the back of the Hunter's right wrist faces, in the view, with the blades out: up and well over to the right. */
 export const CLAW_ROLL: Vec3 = [0.8, 0.45, -0.4];
 

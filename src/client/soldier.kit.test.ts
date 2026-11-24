@@ -244,7 +244,7 @@ describe('the Hunter', () => {
     const out: number[] = [];
     soldier(out, r, [0.15, 0.4, 1], 0);
     const expected = Object.entries(hunter(0))
-      .filter(([name]) => !name.startsWith('Quills') && name !== 'Visor grille')
+      .filter(([name]) => !name.startsWith('Dreads') && name !== 'Visor grille')
       .reduce((n, [, part]) => n + part.length, 0);
     const heights = Array.from({ length: out.length / STRIDE }, (_, i) => out[i * STRIDE + 1]);
     expect(out.length).toBeGreaterThanOrEqual(expected);

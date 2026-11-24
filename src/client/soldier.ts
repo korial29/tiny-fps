@@ -1281,9 +1281,9 @@ const LIMBS_X = [
 const BOOT = [0.06, 0.06, 0.066];
 type HunterLod = 0 | 1;
 const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]));
-/** The far level leaves out the quills and the visor grille. */
+/** The far level leaves out the dreadlocks and the visor grille. */
 const hunterPieces = (lod: HunterLod) =>
-  hunterRig(lod, name => lod === 0 && (name.startsWith('Quills') || name === 'Visor grille'));
+  hunterRig(lod, name => lod === 0 && (name.startsWith('Dreads') || name === 'Visor grille'));
 const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
   `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon} ${+piece.disc}`;
 /**

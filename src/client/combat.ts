@@ -14,6 +14,7 @@ import {
   CHARGE_TICKS,
   FALL_SAFE,
   GUN_RANGE,
+  HARPOON,
   MAX_PITCH,
   NADE,
   NADE_R,
@@ -220,6 +221,7 @@ export const createCombat = (
     Tracer,
     | 'flash'
     | 'burst'
+    | 'impact'
     | 'blast'
     | 'orbs'
     | 'update'
@@ -815,6 +817,11 @@ export const createCombat = (
           audio.play(SOUND.SPLASH, at, 1.6, 0.35);
           const d = me ? Math.hypot(at[0] - me.x, at[1] - me.y - 1, at[2] - me.z) : Infinity;
           fx.quake(Math.max(0, 1 - d / (3 * NADE_R * wide)));
+          continue;
+        }
+        if (k === HARPOON) {
+          tracer.impact(at);
+          audio.play(SOUND.HARPOON_HIT, at, 0.5, rate());
           continue;
         }
         tracer.burst(at, !k);

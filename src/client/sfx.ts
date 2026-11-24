@@ -752,12 +752,12 @@ export const LAYERS: Voice[][] = [
     [1, 1350, -1.9, 0.001, 0.008, 0.12, 0.1, 0.3, 0, 1, 0.32, 0.016],
     [0, 2900, 0, 0.001, 0, 0.013, 0, 0.35, 0, 1, 0.25, 0.038],
   ],
-  // HUNTER_DISC_THROW: a bracer release, three rising spinning harmonics and a thin flight zing.
+  // HUNTER_DISC_THROW: a blade cutting the air (the user, 2026-11-24: sharper): a bright hiss of
+  // air torn open, falling fast, a thinner body under it and a high steel whistle bending down.
   [
-    [0, 1200, 0, 0.001, 0, 0.016, 0, 0.4, 0, 1, 0.36],
-    [1, 430, 3.2, 0.004, 0.025, 0.18, 0.18, 0.22, 0, 1, 0.28],
-    [2, 860, 3.2, 0.004, 0.02, 0.19, 0.12, 0.2, 0, 1, 0.25, 0.025],
-    [3, 7200, -0.5, 0.001, 0, 0.12, 0, 0.12, 0, 1, 0.22, 0.055],
+    [3, 9500, -2.6, 0.002, 0.012, 0.15, 0, 0.55, 0, 1, 0.48],
+    [3, 4200, -1.6, 0.008, 0.02, 0.16, 0, 0.3, 0, 1, 0.28, 0.008],
+    [2, 3400, -1.9, 0.002, 0.012, 0.17, 0.06, 1, 0, 1, 0.16],
   ],
   // HUNTER_DISC_RETURN: an inward-bending whistle with two short locator clicks.
   [
@@ -766,11 +766,16 @@ export const LAYERS: Voice[][] = [
     [0, 2250, 0, 0.001, 0, 0.014, 0, 0.35, 0, 1, 0.2, 0.045],
     [0, 2850, 0, 0.001, 0, 0.014, 0, 0.35, 0, 1, 0.18, 0.11],
   ],
-  // HUNTER_DISC_CATCH: the disc seats back into its wrist mount with a weighty click and ring.
+  // HUNTER_DISC_CATCH: the disc slapped into the palm (the user, 2026-11-24: a dull, light knock):
+  // a clap in the low mids (2026-11-24: neither boomy nor sharp): two bursts of dull noise 8 ms
+  // apart, as palms meet, over a short body at 210 Hz; then the metal of the disc in the
+  // gauntlet (the user, 2026-11-24): two inharmonic partials ringing briefly.
   [
-    [2, 145, -2.4, 0.001, 0.012, 0.15, 0, 0.4, 0, 1, 0.62],
-    [0, 1750, -0.7, 0.001, 0, 0.035, 0, 0.3, 0, 1, 0.44],
-    [1, 840, -1.4, 0.004, 0.018, 0.11, 0.12, 0.24, 0, 1, 0.3, 0.018],
+    [3, 1100, -1, 0.001, 0, 0.045, 0, 0.2, 0, 1, 0.55],
+    [3, 950, -1, 0.001, 0, 0.06, 0, 0.18, 0, 1, 0.45, 0.008],
+    [2, 210, -1.5, 0.001, 0.004, 0.06, 0, 0.5, 0, 1, 0.45],
+    [2, 2380, -0.1, 0.001, 0.004, 0.22, 0.02, 1, 0, 1, 0.16, 0.004],
+    [2, 3710, -0.1, 0.001, 0.002, 0.14, 0.02, 1, 0, 1, 0.1, 0.004],
   ],
   // HUNTER_LOCK: three rising finder pulses resolve into a steady confirmation tone.
   [

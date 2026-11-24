@@ -10,7 +10,7 @@ import {
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
-  DISK_COOL,
+  DISK_LOST,
   HUNTER_CELL_TICKS,
   HUNTER_LASER_COOL,
   CUTS,
@@ -189,7 +189,10 @@ export const step = (
   // without firing, counted down in `rail` (the user, 2026-11-23).
   const own = kit.hunter;
   if (own) {
-    [p.rifle, p.clip, p.nades] = [0, 0, 0];
+    [p.rifle, p.nades] = [0, 0];
+    // His `clip`: the ticks before his thrown disc is in his hand again (DISK_LOST), 0 when it is;
+    // the room sets it to 0 as he catches it (Room.fly()).
+    p.clip = Math.max(0, (p.clip ?? 0) - 1);
     // His harpoon and a full battery are his from the start too, also when he took the class
     // after his spawn (a class changes at the next step, not at a respawn): no harpoon (-1) gives
     // him both, whatever was left of a marine's rail gun in `rail` and `cap`.
@@ -229,7 +232,7 @@ export const step = (
   [p.mag, p.cap, p.clip] = [
     Math.min(p.mag ?? 0, kit.mag),
     Math.min(p.cap ?? 0, kit.cap),
-    Math.min(p.clip ?? 0, kit.clip),
+    own ? p.clip! : Math.min(p.clip ?? 0, kit.clip),
   ];
   p.cool = Math.max(0, p.cool - 1);
   p.lob = Math.max(0, (p.lob ?? 0) - 1);
@@ -427,9 +430,9 @@ export const step = (
       launch(p);
     } else if (p.rifled && own) {
       // The Hunter's disc (the user, 2026-11-23: a weapon of its own, on key 4): thrown on FIRE,
-      // it comes back like a boomerang (Room.fly()); DISK_COOL ticks to the next throw.
-      if (!p.cool) {
-        p.cool = DISK_COOL;
+      // it comes back like a boomerang (Room.fly()); thrown again only once it is back in the hand.
+      if (!p.clip) {
+        p.clip = DISK_LOST;
         p.shots = (p.shots + 1) & 255;
         return STRIKE.DISK;
       }

@@ -81,9 +81,16 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   class after his spawn has it too: a class changes at the next step, not at a respawn. Only the
   client's key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE`
   is the same.
-- **Disc.** It takes the laser rifle's slot (`KEY.RIFLE`, `rifled`, `rifle` and `clip` 0: carried,
-  nothing to spend), so the wire is unchanged. FIRE throws it (`STRIKE.DISK`), once each
-  `DISK_COOL` ticks; it flies out and comes back to him like a boomerang (`Room.fly()`). G with the
+- **Disc.** It takes the laser rifle's slot (`KEY.RIFLE`, `rifled`, `rifle` 0: carried, nothing
+  to spend), so the wire is unchanged. FIRE throws it (`STRIKE.DISK`) only while it is in his hand:
+  it flies out and comes back to him like a boomerang (`Room.fly()`). His `clip` counts the ticks
+  before a thrown disc is in his hand again, `DISK_LOST` (2 s) at the throw; the room sets it to 0
+  as he catches it, and a disc still out when it runs down (stuck) is gone and back in the hand.
+  `clip` is sent in the snapshot, so the client predicts the next throw exactly; the old cooldown
+  in `cool` had only 4 bits on the wire and let the client throw at will. In the own view the arm
+  throws it flat, backhand, and the hand stays empty while it is out (`throwOf()`, `body.ts`); the
+  others see the hand and the hip empty too. The throw sounds like a blade cutting the air, the
+  catch like a clap with a short metal ring, and the shoulder cannon reloads in silence. G with the
   blades no longer throws it. In hand it is the hip's disc (`discVertices()`, `src/client/hunter.ts`),
   and the hip's is hidden. In the own view the hand lies on the disc, both nearly flat, the fingers ahead (`DISC_TILT`), the
   palm flat on its hub and the fingers and the thumb fanned out

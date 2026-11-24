@@ -451,7 +451,12 @@ export const createCombat = (
       if (handOf(was) != h) {
         audio.play(SOUND.HARPOON_OPEN, at, -2);
       }
-    } else if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
+    } else if (
+      h != 1 &&
+      h >= 0 &&
+      // The shoulder cannon's reload ends in silence too: it boots only as it comes to hand.
+      (handOf(was) != h || (a >= 0 && b < 0 && !(harpoon && r)))
+    ) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
     }
     // The rail gun overheating hisses.
@@ -563,7 +568,12 @@ export const createCombat = (
         } else if (was && life(me) > life(was) && !was.down) {
           audio.play((me.armor ?? 0) > (was.armor ?? 0) ? SOUND.ARMOR : SOUND.PACK);
         }
-        if (was && ((was.ammo < 0 && me.ammo >= 0) || (me.rail ?? -1) > (was.rail ?? -1))) {
+        // The Hunter's `rail` is his shoulder cannon's countdown to a shot back (gun.ts), not a rail
+        // gun picked up: it rises on each shot, silently (the user, 2026-11-24).
+        if (
+          was &&
+          ((was.ammo < 0 && me.ammo >= 0) || (!hunter(me.id) && (me.rail ?? -1) > (was.rail ?? -1)))
+        ) {
           audio.play(SOUND.GUN);
         } else if (
           was &&
@@ -582,7 +592,9 @@ export const createCombat = (
         if (me.railed || hum) {
           hum ??= audio.loop?.(SOUND.HUM);
           buzzing ??= audio.loop?.(SOUND.BUZZ);
-          const on = me.railed && !me.down;
+          // The Hunter's shoulder cannon takes the rail gun's slot but not its hum (the user,
+          // 2026-11-24: no sound while it reloads).
+          const on = me.railed && !me.down && !hunter(me.id);
           hum?.set(on ? 0.18 : 0, 1);
           buzzing?.set(on && me.zapping ? 0.55 : 0, wail(now));
         }
@@ -591,7 +603,12 @@ export const createCombat = (
         if (me.ammo >= 0 || charging) {
           charging ??= audio.loop?.(SOUND.CHARGE);
           // The xenomorph's charge is its tail's: no gun whine (the user, 2026-11-23).
-          const off = me.wield || me.down || beast(me.id) || (me.charge ?? 0) < CHARGE_TAP;
+          const off =
+            me.wield ||
+            me.down ||
+            beast(me.id) ||
+            (hunter(me.id) && me.railed) ||
+            (me.charge ?? 0) < CHARGE_TAP;
           const c = off ? -1 : filled(me.charge);
           charging?.set(c < 0 ? 0 : 0.2 + 0.25 * c, 0.8 + 1.2 * Math.max(c, 0));
         }

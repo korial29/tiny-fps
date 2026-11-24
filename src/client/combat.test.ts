@@ -22,7 +22,10 @@ import {
   NADE_COOL,
 } from '../shared/constants';
 import { swingOf } from '../shared/blade';
-import { STILL } from '../shared/physics';
+import { step } from '../shared/gun';
+import { KITS, ROLE } from '../shared/kit';
+import { MAPS } from '../shared/maps';
+import { STILL, spawn } from '../shared/physics';
 import { BODY, CUT, KEY, LIMB } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { build } from '../shared/world';
@@ -1073,6 +1076,50 @@ describe('drawing and sheathing the katana', () => {
       rail.frame(player({ ammo: -1, rail: 160, railed: true, cap: r ? 0 : 80, reload: r }));
     }
     expect(rail.ids()).toEqual([SOUND.POP, SOUND.SCREW, SOUND.SCREW, SOUND.SCREW, SOUND.BOOT]);
+  });
+
+  it('play nothing for the Hunter’s shoulder cannon but its shots: no hum, whine, pickup or boot as its shots come back (the user, 2026-11-24)', () => {
+    const highline = build(MAPS.highline);
+    const kit = KITS[ROLE.HUNTER];
+    const t = setup();
+    const loud = new Set<number>();
+    const audio = {
+      ...t.audio,
+      loop: (id: number) => ({ set: (v: number) => void (v > 0 && loud.add(id)) }),
+    };
+    const combat = createCombat(
+      highline,
+      audio,
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+    );
+    const p = Object.assign(spawn(0, highline, 0, 0, kit), { id: 1 });
+    let now = 1000;
+    /** `n` ticks of the real step with `keys`, two frames each, as the client sees them. */
+    const run = (keys: number, n: number) => {
+      for (let k = 0; k < n; k++) {
+        step(p, { seq: k, keys, yaw: 0, pitch: 0 }, highline, 0, true, [], kit);
+        for (let f = 0; f < 2; f++) {
+          combat.frame(VIEW, { ...p }, [], keys, 1 / 60, (now += 1000 / 60));
+        }
+      }
+    };
+    run(KEY.RAIL, 60);
+    t.audio.play.mockClear();
+    run(KEY.RAIL | KEY.FIRE, 120);
+    // Its shots are spent: their sound is the step's (fired()), not the frame's.
+    expect(p.shots).toBeGreaterThan(1);
+    run(KEY.RAIL, 240);
+    expect(t.ids()).toEqual([]);
+    expect([...loud]).toEqual([]);
   });
 
   it('play the Hunter’s own rack of a harpoon bolt, not the battery’s swap', () => {

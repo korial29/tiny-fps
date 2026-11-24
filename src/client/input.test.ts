@@ -90,22 +90,23 @@ describe('CODES', () => {
 
 describe('the weapon choice', () => {
   const { GUN, BLADE, RAIL } = WEAPON;
-  it('picks the gun on 1, the katana on 2, the rail gun on 3 the rifle on 4 and fists on 5, and keeps the choice on any other key', () => {
-    expect(picked(BLADE, 'Digit1')).toBe(GUN);
-    expect(picked(GUN, 'Digit2')).toBe(BLADE);
-    expect(picked(BLADE, 'Digit2')).toBe(BLADE);
-    expect(picked(GUN, 'Digit3')).toBe(RAIL);
+  it('picks fists on 1, the katana on 2, the gun on 3, the rifle on 4 and the rail gun on 5, the numpad alike, and keeps the choice on any other key (the user, 2026-11-24)', () => {
+    const order = [WEAPON.FISTS, BLADE, GUN, WEAPON.RIFLE, RAIL];
+    for (const pad of ['Digit', 'Numpad']) {
+      // From every weapon in hand, the key's own included.
+      for (const from of order) {
+        expect([1, 2, 3, 4, 5].map(n => picked(from, `${pad}${n}`))).toEqual(order);
+      }
+    }
     expect(picked(RAIL, 'KeyW')).toBe(RAIL);
-    expect(picked(GUN, 'Digit4')).toBe(WEAPON.RIFLE);
-    expect(picked(GUN, 'Digit5')).toBe(WEAPON.FISTS);
-    expect(picked(GUN, 'Numpad5')).toBe(WEAPON.RIFLE);
-    expect(
-      ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5'].map(code => picked(GUN, code)),
-    ).toEqual([WEAPON.FISTS, GUN, BLADE, RAIL, WEAPON.RIFLE]);
+    expect(picked(RAIL, 'Digit6')).toBe(RAIL);
+    expect([0, 1, 2, 3, 4].map(i => slotted(i))).toEqual(order);
     expect(withWeapon(KEY.FIRE, WEAPON.FISTS)).toBe(KEY.FIRE | KEY.FISTS);
     expect(withWeapon(KEY.FIRE, WEAPON.RIFLE)).toBe(KEY.FIRE | KEY.RIFLE);
-    expect(turned(RAIL, 1, [true, true, true, true])).toBe(WEAPON.RIFLE);
-    expect(turned(WEAPON.RIFLE, 1, [true, true, true, true])).toBe(GUN);
+    // The wheel goes round in the keys' order.
+    const all = [true, true, true, true, true];
+    expect(order.map(w => turned(w, 1, all))).toEqual([...order.slice(1), order[0]]);
+    expect(order.map(w => turned(w, -1, all))).toEqual([order[4], ...order.slice(0, 4)]);
   });
 
   it('gives the Hunter his wrist blades on 1 and his harpoon on 2, the wheel in that order (the user, 2026-11-23)', () => {
@@ -181,8 +182,8 @@ describe('the weapon choice', () => {
   });
 
   it('turns the wheel to the next weapon he has, either way', () => {
-    expect(turned(GUN, 1, [true, true, true])).toBe(BLADE);
-    expect(turned(GUN, -1, [true, true, true])).toBe(RAIL);
+    expect(turned(GUN, 1, [true, true, true])).toBe(RAIL);
+    expect(turned(GUN, -1, [true, true, true])).toBe(BLADE);
     expect(turned(GUN, 1, [true, false, true])).toBe(RAIL);
     expect(turned(RAIL, 1, [true, false, true])).toBe(GUN);
     expect(turned(BLADE, 1, [false, true, false])).toBe(BLADE);
@@ -251,19 +252,19 @@ describe('createInput', () => {
     expect(right()).toBe(KEY.BLADE);
   });
 
-  it('selects fists from 5 on the main keyboard and maps the number pad from fists to rifle', () => {
+  it('selects fists from 1 on the main keyboard and maps the number pad as the digits', () => {
     make();
     lock(true);
-    key('keydown', 'Digit5');
+    key('keydown', 'Digit1');
     expect(ctl.weapon).toBe(WEAPON.FISTS);
     expect(ctl.take() & KEY.FISTS).toBe(KEY.FISTS);
-    key('keyup', 'Digit5');
+    key('keyup', 'Digit1');
     for (const [code, weapon] of [
+      ['Numpad2', WEAPON.BLADE],
+      ['Numpad3', WEAPON.GUN],
+      ['Numpad4', WEAPON.RIFLE],
+      ['Numpad5', WEAPON.RAIL],
       ['Numpad1', WEAPON.FISTS],
-      ['Numpad2', WEAPON.GUN],
-      ['Numpad3', WEAPON.BLADE],
-      ['Numpad4', WEAPON.RAIL],
-      ['Numpad5', WEAPON.RIFLE],
     ] as const) {
       key('keydown', code);
       expect(ctl.weapon).toBe(weapon);
@@ -719,7 +720,7 @@ describe('createInput', () => {
       expect(ctl.take()).toBe(KEY.FORWARD);
     });
 
-    it('takes the katana on 2 and the gun on 1, and every step carries BLADE while it is chosen', () => {
+    it('takes the katana on 2 and the gun on 3, and every step carries BLADE while it is chosen', () => {
       make();
       lock(true);
       key('keydown', 'Digit2');
@@ -729,7 +730,7 @@ describe('createInput', () => {
       expect(ctl.take()).toBe(KEY.FORWARD | KEY.BLADE);
       // The held keys stay as they are: BLADE is not a held key.
       expect(ctl.keys).toBe(KEY.FORWARD);
-      key('keydown', 'Digit1');
+      key('keydown', 'Digit3');
       expect(ctl.take()).toBe(KEY.FORWARD);
     });
 
@@ -758,19 +759,19 @@ describe('createInput', () => {
       make();
       lock(true);
       expect(wheel(100).defaultPrevented).toBe(true);
-      expect(ctl.weapon).toBe(WEAPON.BLADE);
+      expect(ctl.weapon).toBe(WEAPON.RIFLE);
       clock += WHEEL_MS / 2;
       expect(wheel(100).defaultPrevented).toBe(true);
-      expect(ctl.weapon).toBe(WEAPON.BLADE);
+      expect(ctl.weapon).toBe(WEAPON.RIFLE);
       clock += WHEEL_MS;
       wheel(-100);
       expect(ctl.weapon).toBe(WEAPON.GUN);
     });
 
-    it('takes the rail gun on 3, and every step carries RAIL while it is chosen', () => {
+    it('takes the rail gun on 5, and every step carries RAIL while it is chosen', () => {
       make();
       lock(true);
-      key('keydown', 'Digit3');
+      key('keydown', 'Digit5');
       expect(ctl.weapon).toBe(WEAPON.RAIL);
       expect(ctl.take()).toBe(KEY.RAIL);
     });
@@ -797,13 +798,13 @@ describe('createInput', () => {
       expect(ctl.weapon).toBe(WEAPON.GUN);
     });
 
-    it('follows the steps: a katana picked up is chosen, going down chooses the gun, and 1 wins after the pickup', () => {
+    it('follows the steps: a katana picked up is chosen, going down chooses the gun, and 3 wins after the pickup', () => {
       make();
       lock(true);
       ctl.track(player(), player({ blade: true }));
       expect(ctl.weapon).toBe(WEAPON.BLADE);
       expect(ctl.take() & KEY.BLADE).toBe(KEY.BLADE);
-      key('keydown', 'Digit1');
+      key('keydown', 'Digit3');
       ctl.track(player({ blade: true }), player({ blade: true }));
       expect(ctl.weapon).toBe(WEAPON.GUN);
       key('keydown', 'Digit2');

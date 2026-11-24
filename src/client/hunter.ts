@@ -54,6 +54,8 @@ const NET_SLEEVE = 0.55;
 /** The armpit's cut (the user, 2026-11-24): how far the flank draws in under it, and the width of the upper arm's inside. */
 const PIT = 0.11;
 const PIT_ARM = 0.85;
+/** The hide's round spots to a square metre of its most spotted skin. */
+const SPOTS = 430;
 /** How much thinner the chest is from the side than the runner's (the user, 2026-11-24: too thick in profile). */
 const CHEST_THIN = 0.1;
 /** What the finished model is scaled by from the sculpt, off the head (hunter()'s last pass). */
@@ -72,6 +74,7 @@ function marineBuild(
   chestFaces: number[],
   swordArm: number[],
   armFaces: number[],
+  spotFaces: [number, number][],
 ): number[] {
   const base = body([0, 1, 3][lod]);
   const points: Vec3[] = [];
@@ -284,6 +287,11 @@ function marineBuild(
     } else if (face.some(k => arm[k] >= 0.5) && face.every(k => points[k][1] > 0.9)) {
       armFaces.push(result.length);
     }
+    // The faces that take the hide's round spots, and how thickly: the trunk, the arms down to
+    // the bracers and the legs down to the greaves.
+    const spotted =
+      face.every(k => points[k][1] > (arm[k] >= 0.5 ? 0.9 : 0.45)) &&
+      spotFaces.push([result.length, 0]);
     for (const k of face) {
       const y = points[k][1];
       const tint = y < 0.145 ? graphite : hide;
@@ -294,15 +302,17 @@ function marineBuild(
       // abs, and broken by dark green spots that gather on the flanks, the back and the limbs.
       const flanks = Math.min(1, Math.abs(px) / 0.33);
       const front = Math.max(0, -smooth[k][2]);
+      // The same on his two sides.
+      const mx = Math.abs(px);
       const pigment =
         0.5 +
         0.5 *
-          Math.sin(47 * px + 17 * py + 1.7 * Math.sin(23 * pz - 27 * py)) *
-          Math.cos(33 * py - 29 * pz + 0.9 * Math.sin(35 * px));
+          Math.sin(47 * mx + 17 * py + 1.7 * Math.sin(23 * pz - 27 * py)) *
+          Math.cos(33 * py - 29 * pz + 0.9 * Math.sin(35 * mx));
       const fine =
         0.5 +
         0.5 *
-          Math.sin(173 * px - 131 * py + 2.1 * Math.sin(97 * pz + 61 * px)) *
+          Math.sin(173 * mx - 131 * py + 2.1 * Math.sin(97 * pz + 61 * mx)) *
           Math.cos(149 * pz + 113 * py);
       const belly =
         front *
@@ -323,8 +333,11 @@ function marineBuild(
         (0.25 + 0.75 * dark) *
         (1 - 0.75 * belly) *
         (0.6 + 0.4 * fine);
+      if (spotted) {
+        spotFaces[spotted - 1][1] += ((0.12 + 0.88 * dark) * (1 - 0.85 * belly)) / 3;
+      }
       const shade = 0.95 - 0.16 * flanks + 0.1 * front - midline;
-      const warm = mix(mix(HIDE, HIDE_LIGHT, belly), HIDE_SPOT, 0.85 * spots).map(c => c * shade);
+      const warm = mix(mix(HIDE, HIDE_LIGHT, belly), HIDE_SPOT, 0.55 * spots).map(c => c * shade);
       const wristBlend = arm[k] * fade((1.015 - y) / 0.09);
       result.push(
         ...vertices[k],
@@ -503,6 +516,85 @@ function yoke(skin: number[], faces: number[]): number[] {
   return mesh;
 }
 
+// The hide's spots (the user, 2026-11-24, after a reference picture): small round dark green dots,
+// the same on his two sides, thick on the flanks, the back and the limbs and thinning out over the
+// chest. Each is a flat hexagon laid on a triangle of his right side's skin, a hair over it, and
+// its mirror on his left. `faces` gives each triangle's place in `skin` and how thickly it is
+// spotted (0 to 1).
+function spots(skin: number[], faces: [number, number][]): number[] {
+  const mesh: number[] = [];
+  // A fixed sequence (mulberry32): the same spots at every build.
+  let seed = 0x2f6e2b1;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  for (const [start, thick] of faces) {
+    const [a, b, c] = [0, 1, 2].map(
+      k => skin.slice(start + k * STRIDE, start + k * STRIDE + 6) as number[],
+    );
+    if (a[0] + b[0] + c[0] < 0.012) {
+      continue;
+    }
+    const ab = sub(b as never, a as never),
+      ac = sub(c as never, a as never);
+    const area =
+      Math.hypot(
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0],
+      ) / 2;
+    for (let n = Math.floor(SPOTS * thick * area + random()); n > 0; n--) {
+      let u = random(),
+        v = random();
+      if (u + v > 1) {
+        [u, v] = [1 - u, 1 - v];
+      }
+      const at = a.map((x, k) => x + u * (b[k] - x) + v * (c[k] - x));
+      const normal = unit([at[3], at[4], at[5]]);
+      const side = unit(
+        Math.abs(normal[1]) < 0.9 ? [normal[2], 0, -normal[0]] : [0, normal[2], -normal[1]],
+      );
+      const up: Vec3 = [
+        normal[1] * side[2] - normal[2] * side[1],
+        normal[2] * side[0] - normal[0] * side[2],
+        normal[0] * side[1] - normal[1] * side[0],
+      ];
+      const radius = 0.0035 + 0.0065 * random() ** 2;
+      const corner = (i: number): Vec3 => {
+        const turn = (Math.PI * i) / 3,
+          x = radius * Math.cos(turn),
+          y = radius * Math.sin(turn);
+        return [0, 1, 2].map(k => at[k] + 0.002 * normal[k] + x * side[k] + y * up[k]) as Vec3;
+      };
+      // Four triangles from one corner: a third fewer vertices than a fan round the middle.
+      for (let i = 1; i < 5; i++) {
+        const fan = [corner(0), corner(i), corner(i + 1)];
+        for (const mirror of [1, -1]) {
+          // The mirrored triangle is wound the other way round, to face out as well.
+          for (const p of mirror > 0 ? fan : [fan[0], fan[2], fan[1]]) {
+            mesh.push(
+              mirror * p[0],
+              p[1],
+              p[2],
+              mirror * normal[0],
+              normal[1],
+              normal[2],
+              HIDE_SPOT[0],
+              HIDE_SPOT[1],
+              -1,
+              HIDE_SPOT[2],
+            );
+          }
+        }
+      }
+    }
+  }
+  return mesh;
+}
+
 export function hunter(lod: 0 | 1 | 2) {
   if (built[lod]) {
     return built[lod]!;
@@ -630,7 +722,8 @@ export function hunter(lod: 0 | 1 | 2) {
   const chestFaces: number[] = [];
   const swordArm: number[] = [];
   const armFaces: number[] = [];
-  parts['Marine anatomy'] = marineBuild(lod, chestFaces, swordArm, armFaces);
+  const spotFaces: [number, number][] = [];
+  parts['Marine anatomy'] = marineBuild(lod, chestFaces, swordArm, armFaces, spotFaces);
   part('Mask lining');
   limb([0, 1.51, 0], [0, 1.68, 0], [0.085, 0.077, 0.097], [0.35, 0.25, 0.18], 0.97);
   const lining = out.length;
@@ -1670,6 +1763,7 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   if (lod) {
     parts['Yoke'] = yoke(skin, chestFaces.concat(armFaces));
+    parts['Spots'] = spots(skin, spotFaces);
     // A tribal necklace (the user, 2026-11-24): a cord from the neck down to the breastbone,
     // strung with small rodent skulls and fangs, a round jewel at its lowest. It lies on the
     // chest: `front` is where the skin's front is at a place across it.

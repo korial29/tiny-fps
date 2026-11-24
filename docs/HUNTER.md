@@ -144,6 +144,9 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
 - **Hide.** Olive (`HIDE`), lightened to a green beige over the pecs and the abs (`HIDE_LIGHT`), with
   dark green spots gathered on the flanks, the back and the limbs (`HIDE_SPOT`). Painted per vertex.
   The hands (`HUNTER_HAND`, `body.ts`) take the same olive in both views.
+- **Spots.** Small round dark green dots (`spots()`, `SPOTS` to a square metre), the same on his two
+  sides, thick on the flanks, the back and the limbs and thinning out over the chest. Each is a flat
+  hexagon laid on the skin, rigid on its nearest bone. The painted blotches are mirrored too.
 - **Net.** The chest's net and the new sleeves (`Arm net`, down to the bracers) follow the skin's
   bones and bends (`BENDY`), so they no longer sink into it as the trunk twists. That is for a
   Hunter within 4 m (`CLOSE`): the bands are blended on the CPU each frame and the nets are

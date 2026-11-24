@@ -79,14 +79,11 @@ describe('the character screen', () => {
   });
 
   it('opens again in a match on what the player wears, with no picture and no renderer', () => {
-    const [start, back] = [vi.fn(), vi.fn()];
+    const start = vi.fn();
     const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
     // The last visit's choice is not what he wears now.
     localStorage.setItem('tiny-fps-cast', JSON.stringify({ body: 0, role: ROLE.MARINE }));
-    createLobby(host, HIGHLINE, start, {
-      now: { body: 1, tone: 2, hair: undefined, role: ROLE.NINJA },
-      back,
-    });
+    createLobby(host, HIGHLINE, start, { body: 1, tone: 2, hair: undefined, role: ROLE.NINJA });
     expect(q('h1').textContent).toBe('Ninja');
     expect(group('Body').map(b => b.getAttribute('aria-checked'))).toEqual(['false', 'true']);
     expect(q('.go').textContent).toBe('Apply');
@@ -98,20 +95,18 @@ describe('the character screen', () => {
     group('Class')[0].click();
     q('.go').click();
     expect(start).toHaveBeenCalledWith({ body: 1, tone: 2, hair: 0, role: ROLE.MARINE });
-    expect(back).not.toHaveBeenCalled();
     expect(host.children).toHaveLength(0);
   });
 
   it('goes back from a match with Back or Escape, nothing chosen', () => {
-    const [start, back] = [vi.fn(), vi.fn()];
-    createLobby(host, HIGHLINE, start, { now: { body: 0 }, back });
+    const start = vi.fn();
+    createLobby(host, HIGHLINE, start, { body: 0 });
     group('Class')[1].click();
     q('.bk').click();
     expect(host.children).toHaveLength(0);
-    createLobby(host, HIGHLINE, start, { now: { body: 0 }, back });
+    createLobby(host, HIGHLINE, start, { body: 0 });
     document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
     expect(host.children).toHaveLength(0);
-    expect(back).toHaveBeenCalledTimes(2);
     expect(start).not.toHaveBeenCalled();
     // Before a match there is no way back.
     createLobby(host, HIGHLINE, start);

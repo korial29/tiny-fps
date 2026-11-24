@@ -301,15 +301,7 @@ const play = (
     cast
       ? () => {
           recast?.destroy();
-          recast = createLobby(
-            screen,
-            world.def,
-            c => {
-              picked = c;
-              ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
-            },
-            { now: worn, back() {} },
-          );
+          recast = createLobby(screen, world.def, pick, worn);
         }
       : undefined,
   );
@@ -425,19 +417,17 @@ const play = (
   const queuePreview = (draw: () => void) => {
     previewJobs.push(draw);
   };
-  const avatar = hud.cast(
-    c => {
-      picked = c;
-      ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
-    },
-    active => {
-      previewActive = active;
-      if (active) {
-        previewNext = 0;
-        hud.previewLoading(!!rd);
-      }
-    },
-  );
+  const pick = (c: Choice & { body: number }) => {
+    picked = c;
+    ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
+  };
+  const avatar = hud.cast(pick, active => {
+    previewActive = active;
+    if (active) {
+      previewNext = 0;
+      hud.previewLoading(!!rd);
+    }
+  });
   /** What the live picture shows: the own id, colour and choice. */
   let drawn = '';
   /** The own player's id and team, from the roster. */

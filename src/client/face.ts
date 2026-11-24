@@ -36,8 +36,10 @@ export const PALETTE = [
   0xff1c2f5e, 0xff2f4c8a, 0xff4a45cc,
   // The xenomorph's: its chitin, the chitin's sheen, its eyes' glow, its acid.
   0xff1c1412, 0xff604e46, 0xff3246ff, 0xff28e696,
-  // The Hunter's dark mask, bronze plates and targeting optics.
-  0xff171a20, 0xffb56b35, 0xffffb94d,
+  // The Hunter's: his hide, its shade and light, the spikes of his crown and their sheen, his
+  // dreadlocks, their shade and pale bands, his gums and throat.
+  0xffada19a, 0xff83726b, 0xffdacfc9, 0xff57473e, 0xff927c6f, 0xff222c6a, 0xff0a0c1e, 0xffd6c7c3,
+  0xff977fc0, 0xff50366b,
 ];
 const [
   ,
@@ -64,9 +66,16 @@ const [
   CHIT_HI,
   EYE,
   ACID,
-  HUNT_DARK,
-  HUNT_BRASS,
-  HUNT_GLOW,
+  H_SKIN,
+  H_SHADE,
+  H_LIGHT,
+  H_SPIKE,
+  H_SPIKE_HI,
+  H_DREAD,
+  H_DREAD_D,
+  H_BAND,
+  H_GUM,
+  H_THROAT,
 ] = PALETTE.map((_, i) => i);
 
 const sprites: Uint8Array[] = [];
@@ -266,7 +275,47 @@ export const sprite = (n: number, fem = 0): Uint8Array => {
   return (sprites[key] = p);
 };
 
-/** The Hunter's original pixel portrait: a plated mask, luminous targeting optics and cheek blades. */
+// The Hunter's pixel art, left halves mirrored: k outline, a and b a spike's shade and light, s and
+// l his hide and its light, w a tusk, g his gums, r his throat.
+const HUNTER_INK: Record<string, number> = {
+  k: LINE,
+  a: H_SPIKE,
+  b: H_SPIKE_HI,
+  w: WHITE,
+  g: H_GUM,
+  r: H_THROAT,
+};
+const CROWN = [
+  '...........b',
+  '...........b',
+  '..........kb',
+  '.......b..kb',
+  '......kb.kab',
+  '....b.kbakab',
+  '...kb.kaakab',
+  '..kbakkaksab',
+  '..kaakaasssa',
+  '.kbaaassslss',
+  '.kaasssslsss',
+];
+const SHUT = [
+  '.......',
+  '..kkkkk',
+  '.kwgggg',
+  '.kwgggr',
+  '.kswggr',
+  '.ksswgg',
+  '.ksssw.',
+  '..k....',
+  '...kk..',
+];
+/**
+ * The Hunter's head, unmasked (the user, 2026-11-24, after a reference sheet): grey hide under a
+ * crown of dark spikes, glowing blue eyes in black sockets, dreadlocks with pale bands hanging to
+ * the shoulders, and four mandibles with white tusks over a pink mouth. The mandibles close, part
+ * (a grin, effort) or flare wide (an ouch, a rage, the shout); it bleeds green. Turned toward a hit,
+ * the features move a pixel that way.
+ */
 const hunter = (n: number): Uint8Array => {
   const p = new Uint8Array(FW * FH);
   const dead = n == DEAD;
@@ -285,46 +334,181 @@ const hunter = (n: number): Uint8Array => {
       }
     }
   };
-  const shift = e == EXPR.TURN_L ? -1 : e == EXPR.TURN_R ? 1 : 0;
-  // Broad crown and tapered mask.
-  for (let y = 2; y < 27; y++) {
-    const half = y < 13 ? 8 + Math.floor((y - 2) / 5) : Math.max(4, 11 - Math.floor((y - 13) / 2));
+  // Both sides at once: x and its mirror.
+  const both = (x: number, y: number, c: number) => {
+    put(x, y, c);
+    put(FW - 1 - x, y, c);
+  };
+  const t = e == EXPR.TURN_L ? -1 : e == EXPR.TURN_R ? 1 : 0;
+  // Half a picture (rows of HUNTER_INK keys) from column x, mirrored about the middle, shifted by dx.
+  const art = (rows: string[], x: number, y: number, dx: number) =>
+    rows.forEach((r, j) =>
+      [...r].forEach((k, i) => {
+        if (k != '.') {
+          const c = k == 's' ? skin : k == 'l' ? light : HUNTER_INK[k];
+          put(x + i + dx, y + j, c);
+          put(FW - 1 - x - i + dx, y + j, c);
+        }
+      }),
+    );
+  const [skin, light] = dead ? [GREY, GREY] : [H_SKIN, H_LIGHT];
+  const open = dead || e == EXPR.OUCH || e == EXPR.RAGE || e == EXPR.SHOUT;
+  const half = !open && (e == EXPR.GRIN || e == EXPR.EFFORT);
+  // The dreadlocks behind the head, three a side, two pixels wide, banded, their tips capped pale.
+  const dreads: [number, number, number, number[]][] = [
+    [1, 8, 27, [14, 23]],
+    [3, 6, 28, [11, 20]],
+    [5, 8, 25, [16]],
+  ];
+  for (const [x, top, end, bands] of dreads) {
+    for (let y = top; y <= end; y++) {
+      const band = y >= end - 1 || bands.some(b => y == b || y == b + 1);
+      both(x, y, band ? H_BAND : H_DREAD_D);
+      both(x + 1, y, band ? H_BAND : H_DREAD);
+    }
+  }
+  // The head: a dome, cheeks, the mandibles (flared wide when open) and the chin.
+  const hw = (y: number) =>
+    y < 13
+      ? 6.5 * Math.sqrt(Math.max(0, 1 - ((y - 12) / 9) ** 2))
+      : y < 17
+        ? 6.5
+        : y < 24
+          ? open
+            ? 8.5
+            : 6.5
+          : 30 - y - 0.5 - (y - 24) * 0.5;
+  for (let y = 3; y < 27; y++) {
+    const w = hw(y);
     for (let x = 0; x < FW; x++) {
       const d = Math.abs(x - 11.5);
-      if (d <= half) {
-        put(x, y, d == half || y == 26 ? LINE : y < 8 ? HUNT_BRASS : HUNT_DARK);
+      if (d < w) {
+        put(x, y, d > w - 1 || y == 26 ? LINE : skin);
       }
     }
   }
-  // Segmented forehead plates.
-  box(5, 4, 5, 2, dead ? GREY : HUNT_BRASS);
-  box(14, 4, 5, 2, dead ? GREY : HUNT_BRASS);
-  box(10, 3, 4, 7, dead ? GREY : HUNT_BRASS);
-  box(11, 5, 2, 6, dead ? GREY : GOLD);
-  // Optics track the same eight expressions as the other faces.
+  // Light on the brow, tiger stripes across it, the far cheek in shade when turned.
+  box(8, 6, 2, 3, light);
+  for (const [x, y] of [
+    [8, 9],
+    [9, 10],
+    [10, 7],
+    [10, 8],
+  ]) {
+    both(x, y, H_SHADE);
+  }
+  if (t && !dead) {
+    box(t > 0 ? 6 : 17, 13, 1, 8, H_SHADE);
+  }
+  // The crown of spikes: the tallest in the middle, the others lower and leaning out down to the
+  // temples, lit from the left.
+  art(CROWN, 0, 0, 0);
+  // The brow ridge, down in a V when angry or straining, and the sockets under it.
+  const v =
+    e == EXPR.RAGE || e == EXPR.SHOUT || e == EXPR.EFFORT || e == EXPR.TURN_L || e == EXPR.TURN_R;
+  const narrow = e == EXPR.GRIN || e == EXPR.FOCUS || e == EXPR.EFFORT || e == EXPR.RAGE;
+  const wide = e == EXPR.OUCH;
   const look =
     e == EXPR.LEFT || e == EXPR.TURN_L ? -1 : e == EXPR.RIGHT || e == EXPR.TURN_R ? 1 : 0;
-  const eye = dead ? GREY : e == EXPR.RAGE || e == EXPR.SHOUT ? HUNT_GLOW : LED;
-  for (const side of [-1, 1]) {
-    const x = Math.round(11.5 + side * 4 + shift + look);
-    for (let k = 0; k < 3; k++) {
-      put(x + side * k, 13 - k, eye);
+  const glow = dead ? PUPIL : n == GLOW ? GOLD : LED;
+  for (const s of [-1, 1]) {
+    // The inner edge of this eye's socket.
+    const inner = (s < 0 ? 10 : 13) + t;
+    const step = (k: number) => inner + s * k;
+    for (let k = 0; k < 5; k++) {
+      put(step(k), 12, LINE);
+      put(step(k), 13, LINE);
+      put(step(k), 11 + (v && k < 2 ? 1 : 0) + (narrow && !v ? 1 : 0), H_SPIKE);
     }
-    // Mandibles and the lower respirator grille.
-    put(Math.round(11.5 + side * 5), 18, dead ? GREY : HUNT_BRASS);
-    for (let y = 20; y < 25; y++) {
-      put(Math.round(11.5 + side * (5 - Math.floor((y - 20) / 2))), y, dead ? GREY : HUNT_BRASS);
+    put(step(5), 11, H_SPIKE);
+    put(step(4), 14, LINE);
+    put(step(3), 14, LINE);
+    // The eye: three pixels, slanting up from the inner corner, a white spark where it looks.
+    for (let k = 1; k < 4; k++) {
+      const y = 13 - (k == 3 ? 1 : 0);
+      if (!(narrow || v) || y == 13) {
+        put(step(k), y, glow);
+      }
+      if (wide) {
+        put(step(k), y - 1, glow);
+      }
+    }
+    if (!dead && n != GLOW) {
+      put(step(2) + look, 13, WHITE);
     }
   }
-  box(9, 18, 6, 1, LINE);
-  box(9, 20, 6, 1, dead ? GREY : HUNT_BRASS);
-  for (let i = 0; i < Math.min(level, 4); i++) {
-    put(7 + i * 2, 10 + (i % 2) * 3, dead ? GREY : BLOOD);
+  // The nose: a short ridge, two slits.
+  box(11 + t, 14, 2, 1, H_SHADE);
+  box(11 + t, 15, 2, 1, light);
+  put(10 + t, 15, LINE);
+  put(13 + t, 15, LINE);
+  // The mandibles and the mouth between them.
+  const m = 11.5 + t;
+  const at = (dx: number, y: number, c: number) => {
+    put(Math.floor(m - dx), y, c);
+    put(Math.ceil(m + dx), y, c);
+  };
+  if (open) {
+    // Flared: the mouth wide open, the throat dark, teeth round it, the tusks at the mandibles' tips.
+    box(7 + t, 16, 10, 9, LINE);
+    box(8 + t, 17, 8, 7, H_GUM);
+    box(10 + t, 19, 4, 4, H_THROAT);
+    for (let k = 0; k < 8; k += 2) {
+      put(8 + t + k + 1, 17, WHITE);
+      put(8 + t + k, 23, WHITE);
+    }
+    for (const [dx, y] of [
+      [4.5, 17],
+      [4.5, 18],
+      [3.5, 19],
+      [4.5, 23],
+      [3.5, 22],
+    ]) {
+      at(dx, y, WHITE);
+    }
+  } else if (half) {
+    // Parted: the tusks apart, teeth between them.
+    box(8 + t, 17, 8, 5, LINE);
+    box(9 + t, 18, 6, 3, H_GUM);
+    box(11 + t, 19, 2, 2, H_THROAT);
+    for (let k = 0; k < 6; k += e == EXPR.GRIN ? 1 : 2) {
+      put(9 + t + k, 18, WHITE);
+    }
+    for (const [dx, y] of [
+      [3.5, 18],
+      [3.5, 19],
+      [2.5, 20],
+      [2.5, 21],
+    ]) {
+      at(dx, y, WHITE);
+    }
+    if (e == EXPR.EFFORT) {
+      put(9 + t, 22, ACID);
+    }
+  } else {
+    // Shut: the mandibles meet, the tusks curving down over the pink mouth to cross at the chin.
+    art(SHUT, 5, 16, t);
   }
-  if (e == EXPR.SHOUT || e == EXPR.OUCH) {
-    box(10, 22, 4, 2, LINE);
+  // The wounds bleed green: a scar on the brow, a gash on the cheek, from the mouth, the jaw.
+  if (level >= 1) {
+    put(14, 6, ACID);
+    put(13, 7, ACID);
+    put(13, 8, ACID);
   }
-  return (sprites[n + FRAMES * LOOK.HUNTER] = p);
+  if (level >= 2) {
+    put(16 + t, 15, ACID);
+    put(17 + t, 16, ACID);
+  }
+  if (level >= 3) {
+    put(open ? 7 + t : 8 + t, open ? 25 : 23, ACID);
+  }
+  if (level >= 4) {
+    put(14, 24, ACID);
+    put(15, 25, ACID);
+    put(7, 9, ACID);
+    put(6, 10, ACID);
+  }
+  return p;
 };
 
 /**

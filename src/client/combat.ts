@@ -446,7 +446,12 @@ export const createCombat = (
       );
     }
     const h = handOf(now);
-    if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
+    if (harpoon && h == 0) {
+      // The Hunter's harpoon unfolds as it comes to hand (HARPOON_DRAW): no button to boot.
+      if (handOf(was) != h) {
+        audio.play(SOUND.HARPOON_OPEN, at, -2);
+      }
+    } else if (h != 1 && h >= 0 && (handOf(was) != h || (a >= 0 && b < 0))) {
       boot(SOUND.BOOT, at, 0.5, r ? 1.4 : 1, first);
     }
     // The rail gun overheating hisses.

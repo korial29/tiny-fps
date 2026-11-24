@@ -193,3 +193,6 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   voice (a xenomorph, a Hunter) gets the next call instead.
 - **HUD.** His own glyphs over the counter, one for the weapon in hand (`dl.h0` to `dl.h3`):
   the blades in steel blue, the harpoon in bronze, the cannon in plasma red, the disc in silver.
+- **Blades out.** They slide out each time they are taken, not only the first: after the press
+  (`pressAt(1)`), once the arm is up, with `SOUND.HUNTER_BLADE_DRAW` in time (`body.ts`,
+  `shing()` in `combat.ts`).

@@ -1,0 +1,57 @@
+<!doctype html>
+<html>
+  <head>
+    <title>turntable</title>
+    <style>
+      body {
+        margin: 0;
+        background: #1b1d22;
+        color: #ddd;
+        font:
+          13px/1.4 ui-monospace,
+          monospace;
+      }
+      #gl {
+        position: fixed;
+        left: -9999px;
+      }
+      #out {
+        display: grid;
+        gap: 4px;
+        padding: 6px;
+      }
+      .row {
+        display: flex;
+        gap: 4px;
+        align-items: stretch;
+      }
+      .tag {
+        width: 150px;
+        flex: none;
+        padding: 4px 6px;
+        background: #262931;
+        white-space: pre;
+      }
+      figure {
+        margin: 0;
+        position: relative;
+      }
+      figcaption {
+        position: absolute;
+        left: 4px;
+        top: 2px;
+        color: #fff;
+        text-shadow: 0 0 3px #000;
+      }
+      canvas.shot {
+        display: block;
+        background: #000;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <div id="out"></div>
+    <script type="module" src="./turntable.ts"></script>
+  </body>
+</html>

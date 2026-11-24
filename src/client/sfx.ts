@@ -703,11 +703,15 @@ export const LAYERS: Voice[][] = [
   [],
   [],
   [],
-  // HARPOON: the launcher snaps open, its cable rings, and the point whistles away.
+  // HARPOON (the user, 2026-11-24: darker, more menacing): a dull pneumatic snap, a heavy thud
+  // of the launcher kicking, the cable's growl as two low saws a few hertz apart beat against
+  // each other while falling, and a dark rush of air after the bolt.
   [
-    [0, 1900, -3, 0.001, 0, 0.035, 0, 0.35, 0, 1, 0.45],
-    [3, 6800, -1.8, 0.001, 0, 0.08, 0.1, 0.16, 0, 1, 0.34, 0.012],
-    [2, 900, -1.4, 0.004, 0.02, 0.1, 0.2, 0.3, 0, 1, 0.28, 0.018],
+    [3, 1800, -2, 0.001, 0, 0.05, 0, 0.3, 0, 1, 0.4],
+    [2, 72, -2, 0.001, 0.02, 0.2, 0, 1, 0, 1, 0.8],
+    [1, 145, -0.7, 0.002, 0.03, 0.3, 0.08, 0.14, 0, 1, 0.32, 0.01],
+    [1, 149, -0.7, 0.002, 0.03, 0.3, 0.08, 0.14, 0, 1, 0.28, 0.01],
+    [3, 900, -1.2, 0.01, 0.03, 0.24, 0, 0.12, 0, 1, 0.38, 0.02],
   ],
   // HUNTER_PAIN: an original guttural chirr, metallic clicks over a low rasp.
   [
@@ -791,12 +795,16 @@ export const LAYERS: Voice[][] = [
     [0, 1320, 0.5, 0.001, 0, 0.04, 0, 0.3, 0, 1, 0.34, 0.19],
     [2, 1760, 0, 0.006, 0.035, 0.15, 0.08, 0.2, 0, 1, 0.2, 0.255],
   ],
-  // HUNTER_LASER: the shoulder cannon charges its crack, then drives out a broad bass pulse.
+  // HUNTER_LASER (the user, 2026-11-24: darker, more menacing): a muffled crack, a sub boom
+  // diving from 55 Hz, a low growl of two detuned saws beating as they fall, a square's grunt in
+  // the low mids, and a dark rumble of noise rolling away after it.
   [
-    [3, 8200, -1.8, 0.001, 0, 0.075, 0, 0.12, 0, 1, 0.42],
-    [1, 490, 2.6, 0.008, 0.028, 0.22, 0.18, 0.2, 0, 1, 0.35],
-    [2, 82, -2.2, 0.002, 0.025, 0.28, 0, 0.42, 0, 1, 0.88, 0.025],
-    [0, 1850, -1.4, 0.001, 0.01, 0.095, 0.1, 0.22, 0, 1, 0.32, 0.04],
+    [3, 2400, -1.5, 0.001, 0, 0.06, 0, 0.1, 0, 1, 0.35],
+    [2, 55, -1.5, 0.002, 0.06, 0.5, 0, 1, 0, 1, 0.95, 0.015],
+    [1, 110, -0.8, 0.004, 0.05, 0.42, 0.05, 0.12, 0, 1, 0.42, 0.01],
+    [1, 113, -0.8, 0.004, 0.05, 0.42, 0.05, 0.12, 0, 1, 0.36, 0.01],
+    [0, 220, -2, 0.001, 0.01, 0.18, 0.12, 0.15, 0, 1, 0.22, 0.01],
+    [3, 400, -1, 0.01, 0.1, 0.5, 0, 0.06, 0, 1, 0.45, 0.03],
   ],
   // HARPOON_RELOAD: the next bolt sliding home (the user, 2026-11-24: a metallic slide): a catch
   // let go, then the shaft's steel scraping along the steel of the tube for half a second, a gritty

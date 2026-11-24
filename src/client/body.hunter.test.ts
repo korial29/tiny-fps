@@ -41,10 +41,10 @@ it('draws the Hunter model equipment on the first-person rig', () => {
   hands(plainHands, pose, 0, [0, 0], [0, 0, 0], HUNTER_HAND);
   hands(clawedHands, pose, 0, [0, 0], HUNTER_HAND, HUNTER_HAND, { claws: 'short' });
   const clawed = clawedHands.length - plainHands.length;
-  // Its seven visible parts, the wrist blades' housing, the blades sheathed, and the wrist
+  // Its eight visible parts (the cannon's arm has a knuckle of its own), the wrist blades' housing, the blades sheathed, and the wrist
   // computer on the left bracer, once: handed over as pieces of the store, they leave the frame's
   // vertices only the clawed hands' difference.
-  expect(pieces).toHaveLength(9);
+  expect(pieces).toHaveLength(10);
   expect(kept.length - marine.length).toBe(clawed);
   const gear = pieces.reduce((sum, p) => sum + p.m.count * STRIDE, 0);
   // With no list to hand them to, the same parts are written into the frame's vertices.

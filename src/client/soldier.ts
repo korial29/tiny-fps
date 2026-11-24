@@ -1279,16 +1279,11 @@ const LIMBS_X = [
 
 /** The ninja's boots: black cloth, a shade lighter than his suit so they show on it. */
 const BOOT = [0.06, 0.06, 0.066];
-/** The Hunter's levels: far, near, and close (the near model, its nets bending with the skin). */
-type HunterLod = 0 | 1 | 2;
+type HunterLod = 0 | 1;
 const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]));
 /** The far level leaves out the dreadlocks and the visor grille. */
 const hunterPieces = (lod: HunterLod) =>
-  hunterRig(
-    lod ? 1 : 0,
-    name => lod === 0 && (name.startsWith('Dreads') || name === 'Visor grille'),
-    lod === 1,
-  );
+  hunterRig(lod, name => lod === 0 && (name.startsWith('Dreads') || name === 'Visor grille'));
 const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
   `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon} ${+piece.disc}`;
 /**
@@ -1317,7 +1312,7 @@ export const warmHunter = () => {
   if (hunterWarmed) {
     return;
   }
-  for (const lod of [0, 1, 2] as const) {
+  for (const lod of [0, 1] as const) {
     for (const piece of hunterPieces(lod).pieces) {
       mesh(hunterKey(lod, piece), o => placeHunterPart(o, piece.vertices, ORIGIN, ID));
     }
@@ -1551,7 +1546,7 @@ export const soldier = (
     if (isHunter) {
       // His own bones carried by the runner's animated skeleton (hunterPose()), one rigid piece
       // on each: the gait, the blade's cuts and the falls move him as they move the marine.
-      const detail = (lod > 1 ? 2 : lod) as HunterLod;
+      const detail = Math.min(lod, 1) as HunterLod;
       const joints = hunterPose(s.pos, s.rot, [p.x, p.y, p.z], yaw, hunterAt);
       const rig = hunterPieces(detail);
       for (const band of rig.bands) {

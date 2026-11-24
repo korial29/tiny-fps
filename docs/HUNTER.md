@@ -148,11 +148,11 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   sides, thick on the flanks, the back and the limbs and thinning out over the chest. Each is a flat
   hexagon laid on the skin, rigid on its nearest bone. The painted blotches are mirrored too.
 - **Net.** The chest's net and the new sleeves (`Arm net`, down to the bracers) follow the skin's
-  bones and bends (`BENDY`), so they no longer sink into it as the trunk twists. That is for a
-  Hunter within 4 m (`CLOSE`): the bands are blended on the CPU each frame and the nets are
-  11 700 vertices of them, so from 4 to 10 m each of the nets' triangles rides whole on its nearest
-  bone (`hunterRig()`'s `stiff`). Nine Hunters cost 2.16 ms a frame near (2.14 on master) and
-  4.16 ms if all nine are close (2.13).
+  bones and bends (`BENDY`), so they no longer sink into it as the trunk twists. They are 11 700
+  vertices a Hunter in the bands blended on the CPU each frame: nine Hunters within 10 m cost
+  4.3 ms a frame (2.1 on master). Riding whole on their nearest bones from 4 to 10 m cost nothing
+  but opened the net 23 cm at the elbows, shoulders and waist of a running Hunter (the user,
+  2026-11-24: nets that bend).
 - **Yoke.** Black leather as the belt's strips over the base of the neck and the collarbones, from
   one shoulder plate to the other (`yoke()`, above `yokeLine()`); the net ends under it.
 - **Necklace.** A cord from the neck to the breastbone with four rodent skulls, six fangs and a

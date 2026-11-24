@@ -432,6 +432,32 @@ describe('the katana in both hands', () => {
   }, 30_000);
 });
 
+describe('the fists chosen with a gun in the bag (the marine on 1)', () => {
+  const count = (body: Body, p: PlayerState) => draw(body, p).length;
+
+  it('draws no gun in his hands: the same picture as with no gun at all, from the start or after the gun', () => {
+    const bare = man({ ammo: -1, fists: true });
+    const none = count(watch(bare, 90), bare);
+    for (const carried of [
+      { ammo: 12 },
+      { ammo: 12, rail: 30 },
+      { ammo: 12, rifle: 30, clip: 20 },
+    ]) {
+      const gun = man(carried);
+      const fists = man({ ...carried, fists: true });
+      // The gun in hand is drawn: more than the bare hands.
+      expect(count(watch(gun, 90), gun)).toBeGreaterThan(none);
+      expect(count(watch(fists, 90), fists)).toBe(none);
+      // Put away from the hand: it sinks out of the view and is gone.
+      expect(count(watch(fists, 90, watch(gun, 90)), fists)).toBe(none);
+      // The hands are where the bare ones are, not round a grip.
+      const [a, b] = [hands(fists, watch(fists, 90)), hands(bare, watch(bare, 90))];
+      expect(away(a[0], b[0])).toBeLessThan(1e-6);
+      expect(away(a[1], b[1])).toBeLessThan(1e-6);
+    }
+  });
+});
+
 describe('the laser rifle in both hands', () => {
   const rifle = (o: Partial<PlayerState> = {}) =>
     man({ ammo: -1, rifle: 100, clip: 20, rifled: true, ...o });

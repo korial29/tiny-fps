@@ -2079,7 +2079,9 @@ export const createBody = (world?: World): Body => {
       // Weapons are put away on a wall unless the rail gun's bolt is going out: a hand on the
       // wall, the other swinging with the stride. This also keeps the rifle's left hand from
       // staying locked to its handguard while wall-running.
-      gun: +(!p.down && !p.wield && !stowed(p) && (p.ammo >= 0 || !!p.rifled || !!p.railed)),
+      // By the weapon in hand (handOf()), not the one carried: none with the fists chosen, though
+      // the pistol is still in the bag.
+      gun: +(!stowed(p) && (now === 0 || now === 2 || now === 3)),
       blade: +(!!p.wield && !p.down),
       // A glory kill's hold (room.ts feast()): the xenomorph's, with no blade in it.
       feast: +(xeno && !!p.lock && !p.down),

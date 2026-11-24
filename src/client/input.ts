@@ -27,7 +27,7 @@ const BITS: Record<string, number> = {
   KeyE: KEY.USE,
 };
 
-/** The keys that pick a weapon, in WEAPON's order, and the ones that act on a press: mute, and the rifle's grenade. */
+/** The keys that pick a weapon, in SLOTS' order, and the ones that act on a press: mute, and the rifle's grenade. */
 const DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'];
 const NUMPAD = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5'];
 const [MUTE, NADE] = ['KeyM', 'KeyG'];
@@ -61,23 +61,41 @@ export const DOUBLE_CLICK_MS = 300;
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
-/** The weapon chosen: 1 through 5 on the keyboard. */
+/** The weapon chosen. The values are the wire's and the HUD's, not the keys' order: SLOTS has that. */
 export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4 } as const;
-const NUMPAD_WEAPONS = [WEAPON.FISTS, WEAPON.GUN, WEAPON.BLADE, WEAPON.RAIL, WEAPON.RIFLE];
 
 /**
- * The weapon in a slot (1 to 5 less one), and the slot of a weapon: WEAPON's order, but for the
- * Hunter, whose wrist blades are slot 1 and harpoon slot 2 (the user, 2026-11-23). The swap is its
- * own inverse.
+ * The weapon on each key, 1 to 5. The marine, the ninja and the astronaut: fists, katana, pistol,
+ * assault (laser) rifle, Tesla (rail) gun (the user, 2026-11-24). The Hunter: wrist blades,
+ * harpoon, shoulder cannon, disc, and no fifth slot (the user, 2026-11-23).
  */
-export const slotted = (slot: number, hunter = false): number =>
-  hunter && slot < 2 ? 1 - slot : slot;
+export const SLOTS: readonly number[] = [
+  WEAPON.FISTS,
+  WEAPON.BLADE,
+  WEAPON.GUN,
+  WEAPON.RIFLE,
+  WEAPON.RAIL,
+];
+const HUNTER_SLOTS: readonly number[] = [
+  WEAPON.BLADE,
+  WEAPON.GUN,
+  WEAPON.RAIL,
+  WEAPON.RIFLE,
+  WEAPON.FISTS,
+];
+const slots = (hunter: boolean) => (hunter ? HUNTER_SLOTS : SLOTS);
 
-/** The choice after a key: 1 the gun, 2 the katana, 3 the rail gun, 4 the laser rifle (the Hunter's slots by slotted()), any other key keeps it. */
+/** The weapon in a slot (the key's number less one). */
+export const slotted = (slot: number, hunter = false): number => slots(hunter)[slot];
+
+/** The slot of a weapon: slotted()'s inverse. */
+export const slotOf = (weapon: number, hunter = false): number => slots(hunter).indexOf(weapon);
+
+/** The choice after a key: the weapon in its slot (SLOTS), the numpad's keys as the digits'; any other key keeps it. */
 export const picked = (weapon: number, code: string, hunter = false): number => {
   const digit = DIGITS.indexOf(code);
-  const numpad = NUMPAD.indexOf(code);
-  const slot = digit >= 0 ? digit : numpad >= 0 ? NUMPAD_WEAPONS[numpad] : -1;
+  // The Hunter's numpad is one key on (2 the blades to 5 the disc), as it was while 1 was the fists.
+  const slot = digit >= 0 ? digit : NUMPAD.indexOf(code) - +hunter;
   // The Hunter has four slots (the disc on 4), and no fists (the user, 2026-11-23).
   return slot >= 0 && !(hunter && slot > 3) ? slotted(slot, hunter) : weapon;
 };
@@ -118,7 +136,7 @@ export const withWeapon = (keys: number, weapon: number): number =>
 
 /** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has in slot order, including fists. */
 export const turned = (weapon: number, dir: number, have: boolean[], hunter = false): number => {
-  const from = slotted(weapon, hunter);
+  const from = slotOf(weapon, hunter);
   for (let k = 1; k <= DIGITS.length; k++) {
     const n = slotted((from + dir * k + DIGITS.length) % DIGITS.length, hunter);
     if (have[n]) {

@@ -388,12 +388,12 @@ export const CONTROLS: [group: string, rows: [keys: string, does: string, codes?
       ['R', 'swap the battery', 'KeyR'],
       [
         '1|2|3|4|5',
-        'gun, katana, rail gun, laser rifle, fists',
+        'fists, katana, gun, laser rifle, rail gun',
         'Digit1 Digit2 Digit3 Digit4 Digit5',
       ],
       [
         'Numpad 1|Numpad 2|Numpad 3|Numpad 4|Numpad 5',
-        'fists, gun, katana, rail gun, laser rifle',
+        'fists, katana, gun, laser rifle, rail gun',
         'Numpad1 Numpad2 Numpad3 Numpad4 Numpad5',
       ],
       ['Wheel', 'next weapon'],
@@ -1102,7 +1102,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       );
       const names = hunter
         ? ['1 blades', '2 harpoon', '3 cannon', '4 disc', '']
-        : ['1 gun', '2 katana', '3 rail', '4 rifle', '5 fists'];
+        : ['1 fists', '2 katana', '3 gun', '4 rifle', '5 rail'];
       // The keys in slot order; each shows the weapon in that slot (the Hunter's blades are first).
       const held = fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
       [...slots.children].forEach((kbd, i) => {

@@ -546,6 +546,29 @@ describe('createRenderer', () => {
       expect(placed?.[2]).toEqual([0, 0, 0, 1, 1, 2, 3, 0.5]);
     });
 
+    it('keeps the Hunter vision but glows as no enemy, even standing inside one', () => {
+      const rd = createRenderer(canvas, ROOM);
+      // A xenomorph half a metre ahead: the own arms are inside his alien scan cylinder.
+      const xeno = { ...STILL, ...spawn(10, ROOM, 0, 0), id: 10, x: 1, y: 0, z: 0.5 };
+      rd.wear(new Map(), new Map([[10, { role: ROLE.XENO }]]) as never);
+      rd.hunterVision(2, [xeno]);
+      rd.frame([1, 1.6, 1], 0, 0, [xeno], new Map([[10, '#3b6be2']]), createEffects(), [], body());
+      const vn = (end: number) =>
+        calls
+          .slice(0, end)
+          .filter(c => c[0] == 'uniform1i' && (c[1] as { u?: string }).u == 'Vn')
+          .pop()?.[2];
+      // The scene's first draw (the map), after the sun's pass, and the own body's 36 vertices.
+      const map = calls.findIndex(
+        (c, i) => c[0] == 'drawArrays' && vn(i) !== undefined && c[3] != 3,
+      );
+      const own = calls.findIndex(c => c[0] == 'drawArrays' && c[3] == 36);
+      // The world with the xenomorph listed, the own body with the filter alone, then back.
+      expect(vn(map)).toBe(2);
+      expect(vn(own)).toBe(1);
+      expect(vn(calls.length)).toBe(2);
+    });
+
     it('is not drawn, and costs no clear, when it has nothing to show', () => {
       const rd = createRenderer(canvas, ROOM);
       rd.frame([1, 1.6, 1], 0, 0, [], new Map(), createEffects(), [], body(vi.fn()));

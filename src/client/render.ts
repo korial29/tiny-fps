@@ -1762,6 +1762,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
       if (v.length > bodyAt || bodyPieces.length) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);
+        // The own body keeps the vision's filter but lists no enemy: standing inside an enemy's
+        // cylinder, its arms and weapon would glow as his (the user, 2026-11-24).
+        if (prey.length) {
+          uni('uniform1i', 'Vn', 1);
+        }
         moving();
         if (v.length > bodyAt) {
           gl.drawArrays(gl.TRIANGLES, first + bodyAt / STRIDE, (v.length - bodyAt) / STRIDE);
@@ -1778,6 +1783,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
           gl.bindVertexArray(main);
         }
         still();
+        if (prey.length) {
+          uni('uniform1i', 'Vn', prey.length + 1);
+        }
       }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, msaa);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, hdr.f);

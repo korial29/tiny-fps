@@ -22,7 +22,7 @@ export interface Draw {
   f?: Flesh;
   /** Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold parts. */
   w?: boolean;
-  /** Thin: too fine for a shadow, left out of the depth passes (the xenomorph's veins, teeth and eyes). */
+  /** Thin: too fine for a shadow, left out of the depth passes (the xenomorph's teeth and hoses). */
   s?: boolean;
   /** Close hair (hair.ts), coloured `rgb`, swung by `sw` in the head's frame at the time `t`: the shader sways it (swayOf()). */
   h?: { rgb: number[]; sw: Vec3; t: number };

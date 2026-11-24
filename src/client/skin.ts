@@ -999,21 +999,29 @@ const ARM_X = remake(ARM_0, r => {
  * ellipse, level where they meet, and falls along one arc to the tip; its underside rises faster,
  * clear of the neck.
  */
-const PROFILE = [0.42, 1.69, 0.21, 0.084, 0.1];
+// A lower skull (the user, 2026-11-24: no egg seen from the front; 4 cm off was too much, then 2):
+// the face's section 1 cm less high, its chin where it was, and squarer (CREST_E).
+const PROFILE = [0.42, 1.685, 0.21, 0.084, 0.095];
+/** The exponent of the dome's sections, 2 an ellipse: over it, a flatter top and fuller corners (the user, 2026-11-24: flatten the top a little, no egg). */
+export const CREST_E = 2.5;
 /**
  * How much larger its head is than it was drawn (the user, 2026-11-16: a bigger head), about the
  * head joint: the dome here (CREST), the face's pieces in xeno.ts (grow()).
  */
 export const HEAD_K = 1.12;
 /** And how much narrower (the user, 2026-11-16: less round, the sides in), across it alone. */
-export const HEAD_X = 0.86;
+// Narrower again (the user, 2026-11-24: a narrower head, as the reference seen from the front).
+export const HEAD_X = 0.78;
+/** The dome's length behind the face's edge, metres, before the head is grown. */
+export const CREST_LEN = PROFILE[0];
 /** The radius of the round end of the dome, and the banana's thickness and half width behind the face. */
 const TIP = 0.062;
-const BANANA = [0.17, 0.09];
+// Thinner with it: as thick, its underside came lower over the neck.
+const BANANA = [0.16, 0.09];
 
 /**
  * The dome's section `z` behind the face's edge (0 to PROFILE[0]), in the rest pose: its centre's
- * height, half width and half height (an ellipse). xeno.ts lays its veins on it.
+ * height, half width and half height (a superellipse of exponent CREST_E). xeno.ts lays its hoses on it.
  */
 export const domeAt = (z: number): [number, number, number] => {
   const k = Math.sqrt(Math.max(0, 1 - (z / PROFILE[0]) ** 2));
@@ -1039,7 +1047,7 @@ export const domeAt = (z: number): [number, number, number] => {
 const CREST: Loft = {
   chain: [J.HEAD, J.HEAD],
   n: [6, 16, 36],
-  e: 2,
+  e: CREST_E,
   z: true,
   far: [0, 4, 8, 12, 16],
   rings: Array.from({ length: 12 }, (_, i) => {
@@ -1047,12 +1055,28 @@ const CREST: Loft = {
     const z = PROFILE[0] * Math.cos(((i / 11) * Math.PI) / 2);
     const [c, w, h] = domeAt(z);
     // Grown about the head joint at rest (0, 1.62, 0), as xeno.ts grows the face.
-    return [z * HEAD_K, 0, 1.62 + (c - 1.62) * HEAD_K, w * HEAD_K * HEAD_X, h * HEAD_K, 0, TRIM];
+    // HAIR: its carapace (the user, 2026-11-24: the top of the head smooth, black and glossy); the
+    // chitin under it is xeno.ts's (belly()).
+    return [z * HEAD_K, 0, 1.62 + (c - 1.62) * HEAD_K, w * HEAD_K * HEAD_X, h * HEAD_K, 0, HAIR];
   }),
 };
 // A ring between each two: a smooth skull close up.
 CREST.rings = finer(CREST.rings, false);
 CREST.far = [0, 3, 6, 9, CREST.rings.length - 2, CREST.rings.length - 1];
+/**
+ * How the dome's section changes a metre behind the face's edge, over its first strip, before the
+ * head is grown: its centre's height, half width and half height. The face's rim takes its normal
+ * from it (skull() in xeno.ts).
+ */
+export const RIM = (() => {
+  const [b, a] = CREST.rings.slice(-2);
+  const d = (b[0] - a[0]) / HEAD_K;
+  return [
+    (b[2] - a[2]) / HEAD_K / d,
+    (b[3] - a[3]) / (HEAD_K * HEAD_X) / d,
+    (b[4] - a[4]) / HEAD_K / d,
+  ];
+})();
 
 /** How high the xenomorph's hip bones rise at their outer ends, metres. */
 const WING = 0.05;

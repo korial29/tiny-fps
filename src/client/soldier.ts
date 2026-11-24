@@ -147,7 +147,7 @@ import {
   tressOf,
 } from './skin';
 import type { Skin } from './skin';
-import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, eyes, lashOf, partsOf, tail } from './xeno';
+import { CHITIN_X, FOOT_TIP, HEAD, PART, PIPE, SHELL, lashOf, partsOf, tail } from './xeno';
 import type { Part } from './xeno';
 import { createFace, dashing, felled, strain } from './expression';
 import { footing } from './footing';
@@ -1429,7 +1429,9 @@ export const soldier = (
     !!build,
   );
   if (xeno) {
-    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP, STRIPE, BELT } = REGION;
+    const { PANTS, UPPER, GLOVE, JACKET, TRIM, SOLE, FLESH, CAP, STRIPE, BELT, HAIR } = REGION;
+    // HAIR: its carapace, the dome (CREST in skin.ts), glossy black.
+    colors[HAIR] = SHELL;
     // BELT: its spine up the back, the tail's smooth black (backOf() in xeno.ts).
     for (const k of [PANTS, UPPER, GLOVE, JACKET, SOLE, BELT]) {
       colors[k] = CHITIN_X;
@@ -1662,15 +1664,6 @@ export const soldier = (
       if (lod) {
         put(part[PART.FINE], s.pos[J.HEAD], s.rot[J.HEAD]);
       }
-      rigid(
-        `xeno eyes ${+!!lod} ${color}`,
-        s.pos[J.HEAD],
-        s.rot[J.HEAD],
-        (o, a, q) => eyes(o, a, q, color, lod),
-        1,
-        false,
-        true,
-      );
     } else if (!isHunter) {
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
     }

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { duo } from '../../test/teams';
 import {
   DISK_COOL,
-  HEAT_MAX,
+  HUNTER_CELLS,
+  HUNTER_CELL_TICKS,
   HUNTER_LASER_COOL,
   HUNTER_LASER_HP,
   HUNTER_LASER_LOCK,
@@ -64,22 +65,50 @@ const hunter = (over: Partial<PlayerState> = {}): PlayerState =>
   Object.assign(spawn(0, world, 0, 0, HUNTER), over);
 
 describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon, on key 3)', () => {
-  it('is on him from the spawn and comes on key 3 with nothing in it to spend', () => {
+  it('is on him from the spawn, its battery full, and comes on key 3', () => {
     const p = hunter();
-    expect(p).toMatchObject({ rail: 0, cap: 0, blade: true, wield: true });
+    expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS, blade: true, wield: true });
     go(p, RAIL);
     expect(p).toMatchObject({ railed: true, wield: false, reload: 0 });
   });
 
-  it('fires on the click, then once each HUNTER_LASER_COOL ticks held, and never spends, heats or swaps', () => {
+  it('fires on the click, then once each HUNTER_LASER_COOL ticks held, a shot of its battery each, and never heats or swaps', () => {
     const p = hunter();
     go(p, RAIL);
-    const n = 4 * HEAT_MAX;
+    // Its HUNTER_CELLS shots and a beat more, which the battery does not charge in.
+    const n = (HUNTER_CELLS + 1) * HUNTER_LASER_COOL;
     const strikes = Array.from({ length: n }, () => go(p, RAIL | FIRE));
     expect(strikes[0]).toBe(STRIKE.RAIL);
-    expect(strikes.filter(s => s === STRIKE.RAIL)).toHaveLength(Math.ceil(n / HUNTER_LASER_COOL));
-    expect(p.shots).toBe(Math.ceil(n / HUNTER_LASER_COOL));
-    expect(p).toMatchObject({ rail: 0, cap: 0, heat: 0, hot: false, reload: 0, railed: true });
+    // Held, it fires faster than the battery charges: it runs dry after its HUNTER_CELLS shots.
+    expect(HUNTER_LASER_COOL).toBeLessThan(HUNTER_CELL_TICKS);
+    expect(strikes.filter(s => s === STRIKE.RAIL)).toHaveLength(HUNTER_CELLS);
+    expect(p.shots).toBe(HUNTER_CELLS);
+    expect(p).toMatchObject({ cap: 0, heat: 0, hot: false, reload: 0, railed: true });
+  });
+
+  it('charges its battery a shot each HUNTER_CELL_TICKS without firing, back to full (the user, 2026-11-23)', () => {
+    const p = hunter();
+    go(p, RAIL);
+    go(p, RAIL | FIRE);
+    go(p, RAIL, HUNTER_LASER_COOL);
+    go(p, RAIL | FIRE);
+    expect(p.cap).toBe(HUNTER_CELLS - 2);
+    // Each shot starts the count over: the first one's charge is lost to the second.
+    go(p, RAIL, HUNTER_CELL_TICKS - 1);
+    expect(p.cap).toBe(HUNTER_CELLS - 2);
+    go(p, RAIL);
+    expect(p.cap).toBe(HUNTER_CELLS - 1);
+    go(p, 0, HUNTER_CELL_TICKS);
+    expect(p).toMatchObject({ cap: HUNTER_CELLS, rail: 0 });
+    go(p, 0, 3 * HUNTER_CELL_TICKS);
+    expect(p).toMatchObject({ cap: HUNTER_CELLS, rail: 0 });
+  });
+
+  it('does not fire with its battery empty', () => {
+    const p = hunter({ cap: 0, rail: HUNTER_CELL_TICKS });
+    go(p, RAIL);
+    expect(go(p, RAIL | FIRE)).not.toBe(STRIKE.RAIL);
+    expect(p.shots).toBe(0);
   });
 
   it('has no fists: KEY.FISTS leaves the weapon in hand', () => {
@@ -102,14 +131,14 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
     // Key 4 (KEY.RIFLE) is his disc: carried, nothing in it, and no rifle, clip or grenade from the rack.
     const p = hunter({ x: -20, z: 46 });
     go(p, RAIL);
-    expect(p).toMatchObject({ rail: 0, cap: 0, railed: true });
+    expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS, railed: true });
     Object.assign(p, STILL, { x: -20, z: 49, y: 1, inRifle: false });
     go(p, RIFLE);
     expect(p).toMatchObject({ rifle: 0, clip: 0, rifled: true, nades: 0 });
-    // An old marine's rail gun is not kept by a Hunter either.
+    // An old marine's rail gun is not kept by a Hunter either: no more than his battery's shots.
     Object.assign(p, { rail: RAIL_MAX, cap: RAIL_CAP });
     go(p, 0);
-    expect(p).toMatchObject({ rail: 0, cap: 0 });
+    expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS });
     Object.assign(p, STILL, { x: -20, z: 40, y: 1, ammo: 1, mag: 0, rack: false });
     go(p, 0);
     expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag });
@@ -146,6 +175,12 @@ describe('the shoulder cannon through the room', () => {
     return { room, hold, turn, hunter: state(hunterC), foe: state(foeC) };
   };
 
+  it('has a full battery once he joins as the Hunter, the class taken after his spawn', () => {
+    const m = match();
+    m.hold(1, RAIL);
+    expect(m.hunter).toMatchObject({ cap: HUNTER_CELLS, rail: 0 });
+  });
+
   it('hits on the click, down the look, for three health (the user, 2026-11-23)', () => {
     const m = match();
     const hp = m.foe.hp;
@@ -160,9 +195,12 @@ describe('the shoulder cannon through the room', () => {
     // 4° to the side at 12 m: in the lock's cone, out of the straight shot's line.
     Object.assign(m.foe, { z: 12 * Math.tan((4 * Math.PI) / 180) });
     const hp = m.foe.hp;
-    m.hold(HUNTER_LASER_LOCK - 2, RAIL | FIRE);
+    // A few shots on the way (not all: the battery would run dry before the lock).
+    const early = 2 * HUNTER_LASER_COOL + 2;
+    m.hold(early, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp);
     expect(m.hunter.shots).toBeGreaterThan(1);
+    m.hold(HUNTER_LASER_LOCK - 2 - early, RAIL);
     m.hold(HUNTER_LASER_COOL + 4, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp - HUNTER_LASER_HP);
   });

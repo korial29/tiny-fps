@@ -588,14 +588,23 @@ export const createCombat = (
           charging?.set(c < 0 ? 0 : 0.2 + 0.25 * c, 0.8 + 1.2 * Math.max(c, 0));
         }
         const rail = me.rail ?? -1;
+        // The Hunter's `rail` counts down to his cannon's next shot back and `cap` holds its shots
+        // (gun.ts): the shots left, nothing in reserve.
+        const own = hunter(me.id);
         hud.vitals(
           me.hp,
           me.ammo,
           !!me.blade,
           !!me.wield,
-          rail < 0 ? -1 : charge(rail),
+          rail < 0 ? -1 : own ? 0 : charge(rail),
           !!me.railed,
-          me.rifled ? (me.clip ?? 0) : me.railed ? charge(me.cap ?? 0) : (me.mag ?? 0),
+          me.rifled
+            ? (me.clip ?? 0)
+            : me.railed
+              ? own
+                ? (me.cap ?? 0)
+                : charge(me.cap ?? 0)
+              : (me.mag ?? 0),
           !!me.reload,
           me.rifle ?? -1,
           !!me.rifled,

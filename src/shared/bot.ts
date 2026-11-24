@@ -450,7 +450,8 @@ export class Bot {
       ? 0
       : s.kit?.katana && p.blade
         ? BLADE
-        : (p.rail ?? 0) > 0
+        : // A Hunter's `rail` counts down his cannon's charge: not a rail gun to take.
+          !s.kit?.hunter && (p.rail ?? 0) > 0
           ? KEY.RAIL
           : (p.rifle ?? 0) > 0
             ? KEY.RIFLE

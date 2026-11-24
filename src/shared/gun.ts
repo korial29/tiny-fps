@@ -11,6 +11,7 @@ import {
   CHARGE_TAP,
   CHARGE_TICKS,
   DISK_COOL,
+  HUNTER_CELL_TICKS,
   HUNTER_LASER_COOL,
   CUTS,
   DASH_COOLDOWN,
@@ -182,16 +183,28 @@ export const step = (
     [p.ammo, p.rail, p.rifle, p.blade, p.nades] = [-1, -1, -1, false, 0];
   }
   // The Hunter takes no other weapon (the user, 2026-11-23): his harpoon, his blades, his
-  // shoulder cannon and his disc, which are always on him and spend nothing (`rail` and `rifle` 0:
-  // carried, nothing in them; the disc takes the laser rifle's slot, `rifled`). The gun rack still
-  // refills the harpoon's bolts.
+  // shoulder cannon and his disc, which are always on him (`rifle` 0: carried, nothing in it; the
+  // disc takes the laser rifle's slot, `rifled`). The gun rack still refills the harpoon's bolts.
+  // The cannon's battery (`cap`, HUNTER_CELLS when full) gets a shot back each HUNTER_CELL_TICKS
+  // without firing, counted down in `rail` (the user, 2026-11-23).
   const own = kit.hunter;
   if (own) {
-    [p.rail, p.cap, p.rifle, p.clip, p.nades] = [0, 0, 0, 0, 0];
-    // His harpoon is his from the start too, also when he took the class after his spawn (a class
-    // changes at the next step, not at a respawn): none (-1) gives him a full one.
+    [p.rifle, p.clip, p.nades] = [0, 0, 0];
+    // His harpoon and a full battery are his from the start too, also when he took the class
+    // after his spawn (a class changes at the next step, not at a respawn): no harpoon (-1) gives
+    // him both, whatever was left of a marine's rail gun in `rail` and `cap`.
     if (p.ammo < 0 && !p.down) {
-      [p.ammo, p.mag] = [kit.ammo, kit.mag];
+      [p.ammo, p.mag, p.cap, p.rail] = [kit.ammo, kit.mag, kit.cap, 0];
+    }
+    p.cap = Math.min(p.cap ?? kit.cap, kit.cap);
+    p.rail = Math.min(Math.max(p.rail ?? 0, 0), HUNTER_CELL_TICKS);
+    if (p.cap >= kit.cap) {
+      p.rail = 0;
+    } else if (p.rail > 1) {
+      p.rail--;
+    } else {
+      p.cap++;
+      p.rail = p.cap < kit.cap ? HUNTER_CELL_TICKS : 0;
     }
   }
   if (armed && gear && inside && !p.rack) {
@@ -306,7 +319,15 @@ export const step = (
     if (!--p.reload) {
       p[key] = full;
     }
-  } else if (hand >= 0 && hand != 1 && !busy && load < full && (!load || i.keys & KEY.RELOAD)) {
+  } else if (
+    hand >= 0 &&
+    hand != 1 &&
+    !(own && hand == 2) &&
+    !busy &&
+    load < full &&
+    (!load || i.keys & KEY.RELOAD)
+  ) {
+    // The Hunter's cannon is never swapped: its battery comes back on its own (above).
     [p.reload, p.charge] = [ticks2, 0];
   }
   // With no weapon at all the swing is a punch (PUNCHES, by its blow), not a cut.
@@ -423,8 +444,10 @@ export const step = (
     } else if (p.railed && own) {
       // The Hunter's shoulder cannon fires on the click, one shot each HUNTER_LASER_COOL ticks while
       // held (the user, 2026-11-23): down the look, or at the foe it has locked on (Room.shoulder()).
-      if (!p.cool) {
+      if (!p.cool && p.cap) {
         p.cool = HUNTER_LASER_COOL;
+        p.cap--;
+        p.rail = HUNTER_CELL_TICKS;
         p.shots = (p.shots + 1) & 255;
         return STRIKE.RAIL;
       }

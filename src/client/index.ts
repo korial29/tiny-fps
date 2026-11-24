@@ -65,9 +65,6 @@ import type { createTargeting } from './targeting';
 import { targetingPhysics } from './targeting-physics';
 import type { Renderer } from './render';
 
-/** When in the shoulder cannon's 3 s lock its tracking clicks come: closer and closer together. */
-const TRACK_CLICKS = [0.1, 0.3, 0.47, 0.61, 0.73, 0.83, 0.9, 0.95];
-
 export type { PlayerInfo, SocketLike } from '../shared/types';
 
 export interface TinyFpsOptions {
@@ -434,8 +431,8 @@ const play = (
   /** Where the locked foe's chest is, while the shoulder cannon is locked on: it points there. */
   let lockedAt: [number, number, number] | undefined;
   let hunterLockTone = -1;
-  /** The tracking clicks played for the lock under way (TRACK_CLICKS). */
-  let hunterClicks = 0;
+  /** The shoulder cannon tracks a foe, not locked yet, this frame: its hum (HUNTER_SEEK) sounds. */
+  let tracking = false;
   let rendered: number | undefined;
   /** The harpoon scope's zoom, 0 out to 1 in. */
   let scope = 0;
@@ -445,6 +442,8 @@ const play = (
    */
   let viewed = 0;
   const [heart, hiss] = [audio.loop(SOUND.HEARTBEAT), audio.loop(SOUND.STATIC)];
+  /** The shoulder cannon's hum while it tracks a foe, before the lock. */
+  const seek = audio.loop(SOUND.HUNTER_SEEK);
   let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
@@ -981,6 +980,7 @@ const play = (
     viewed = hunterMode;
     const special = hunterMode > 0 && alive && !third;
     heart.set(special ? 1 : 0, 1);
+    seek.set(tracking ? 0.6 : 0, 1);
     hiss.set(special ? 0.32 : 0, 1);
     // The music gives way to the visions' bed, the heartbeat and the static (the user, 2026-11-23).
     audio.hush(special);
@@ -1157,6 +1157,7 @@ const play = (
           team,
         ),
       );
+      tracking = false;
       const laserSelected =
         ctl.hunter && ctl.weapon === WEAPON.RAIL && !third && !me.down && !driving;
       const chest = (p: PlayerState): [number, number, number] => [
@@ -1204,7 +1205,7 @@ const play = (
         }
         if (target) {
           hunterLock = { id: target.id, since: now };
-          hunterClicks = 0;
+          audio.play(SOUND.HUNTER_TRACK, undefined, -2, 1);
         }
       }
       const targetPoint = target ? rd.project(...chest(target)) : undefined;
@@ -1213,11 +1214,9 @@ const play = (
         hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0, now);
       } else {
         const progress = Math.min(1, (now - hunterLock.since) / 3000);
-        // Tracking, clicks closer and closer and higher as the triangles close in; locked, its tone
+        // Tracking, the cannon hums (HUNTER_SEEK, below) as the triangles close in; locked, its tone
         // (the user, 2026-11-23).
-        if (hunterClicks < TRACK_CLICKS.length && progress >= TRACK_CLICKS[hunterClicks]) {
-          audio.play(SOUND.CLICK, undefined, -5, 1.5 + 0.2 * hunterClicks++);
-        }
+        tracking = progress < 1;
         if (progress >= 1 && hunterLockTone !== target.id) {
           audio.play(SOUND.HUNTER_LOCK, undefined, 1, 1);
           hunterLockTone = target.id;

@@ -134,8 +134,10 @@ export const HUD_CSS =
   `i.hv kbd{display:inline-block;font:inherit;margin-right:7px;padding:2px 5px;border:1px solid #a4ffcf;border-radius:3px;color:#00130d;background:#a4ffcf}i.hv.idle{animation:blink .5s steps(2) infinite alternate}` +
   // The Hunter's shoulder cannon: Predator-like red brackets close around one target, then lock.
   `i.hl{z-index:2;width:0;height:0;color:#ff3029;filter:drop-shadow(0 0 4px #f21);transition:filter .12s}` +
-  // Three triangles round the foe, each pointing at him (hunterAim() turns and spreads them).
-  `i.hl b{position:absolute;left:-5px;top:-9px;width:10px;height:18px;background:currentColor;clip-path:polygon(50% 100%,0 0,100% 0);opacity:.75}` +
+  // The three sides of a triangle round the foe (the user, 2026-11-23), each a bar 14 px from his
+  // centre, 3 px thick and mitred at 60 degrees so the three meet in clean corners: 2 × 17 × tan 60
+  // = 58.9 px outside, 5.2 px shorter at each end inside. hunterAim() turns and spreads them.
+  `i.hl b{position:absolute;left:-29.45px;top:-17px;width:58.9px;height:3px;transform-origin:50% 17px;background:currentColor;clip-path:polygon(0 0,100% 0,calc(100% - 5.2px) 100%,5.2px 100%);opacity:.75}` +
   `i.hl small{position:absolute;top:44px;left:0;transform:translateX(-50%);padding:3px 6px;background:#200d;color:currentColor;font:900 9px/1 system-ui,sans-serif;letter-spacing:.16em;white-space:nowrap}` +
   `i.hl.locked{filter:drop-shadow(0 0 8px #f22);animation:hl-pulse .7s steps(2,end) infinite}i.hl.locked b{opacity:1}@keyframes hl-pulse{50%{opacity:.7}}` +
   // The banner of an event (the user, 2026-11-09: no underline, a nicer design): heavy italic in the
@@ -1240,15 +1242,17 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       if (at) {
         hunterSight.style.left = `${at[0] * 100}%`;
         hunterSight.style.top = `${at[1] * 100}%`;
-        // Tracking, the three triangles stand far out round the foe, each drifting on its own
-        // beat; they close in over the lock's 3 s and meet on him when it is locked (the user,
+        // Tracking, the three sides of the triangle stand far out round the foe, each drifting
+        // and tilting on its own beat; they close in over the lock's 3 s and join into the
+        // triangle when it is locked, which then turns, 180 degrees a second (the user,
         // 2026-11-23).
         const off = 1 - Math.max(0, Math.min(1, progress));
         const t = now / 1000;
-        hunterSight.querySelectorAll('b').forEach((tri, i) => {
-          const r = 13 + 48 * off * (0.75 + 0.25 * Math.sin(t * AIM_BEAT[i] + 2.1 * i));
-          const a = 120 * i + 30 * off * Math.sin(t * AIM_BEAT[2 - i] * 0.8 + 1.3 + i);
-          (tri as HTMLElement).style.transform = `rotate(${a}deg) translateY(${-r}px)`;
+        const spin = progress >= 1 ? (t * 180) % 360 : 0;
+        hunterSight.querySelectorAll('b').forEach((side, i) => {
+          const r = 44 * off * (0.75 + 0.25 * Math.sin(t * AIM_BEAT[i] + 2.1 * i));
+          const a = spin + 120 * i + 35 * off * Math.sin(t * AIM_BEAT[2 - i] * 0.8 + 1.3 + i);
+          (side as HTMLElement).style.transform = `rotate(${a}deg) translateY(${-r}px)`;
         });
         hunterSight.classList.toggle('locked', progress >= 1);
         hunterSight.querySelector('small')!.textContent = progress >= 1 ? 'LOCK' : 'TRACKING';

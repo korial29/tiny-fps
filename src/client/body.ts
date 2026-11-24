@@ -18,6 +18,7 @@ import {
   STEP_H,
   HEAT_MAX,
   PUNCHES,
+  HUNTER_CELLS,
 } from '../shared/constants';
 import { powerOf, sabering } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
@@ -26,6 +27,7 @@ import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
+import { FIRE_KEY, wristComputer } from './computer';
 import { fetched, pouch, pouchAt } from './pouch';
 import { buckle, tails } from './buckle';
 import { createFours } from './fours';
@@ -991,6 +993,16 @@ const [RAKE_UP, RAKE_DOWN]: Vec3[] = [
 
 /** The Hunter's left hand in its guard while the blades are out (view space, mirrored): low left, ahead. */
 export const GUARD: Vec3 = [0.3, -0.24, 0.44];
+/**
+ * The Hunter's left wrist with the shoulder cannon out (view space, mirrored): low on the left,
+ * close, the arm bent toward the eye, the computer on the forearm facing up, the view above it
+ * clear (the user, 2026-11-24, after a reference shot).
+ */
+export const COMPUTER: Vec3 = [0.1, -0.2, 0.42];
+/** The right forearm and hand's line to the key (view space): in from the right, nearly level, a little ahead. */
+const POKE: Vec3 = [-0.95, 0.15, 0.25];
+/** Where its elbow goes then (view space, mirrored): out to the left, down and back. */
+const COMPUTER_POLE: Vec3 = [1, -0.5, -0.6];
 /** How closed that guard hand is: open, the fingers a little bent. */
 const GUARD_CURL = 0.15;
 /** The guard hand thrown out ahead through a cut's wind-up, and pulled in to the belly on its strike. */
@@ -1786,6 +1798,8 @@ export interface Grip {
   spread?: number;
   /** The right hand's fingers' last bones bent further, radians: gripping an edge. */
   hook?: number;
+  /** The right index straightened out of the fist as `point` the left (the Hunter's wrist computer). */
+  poke?: number;
 }
 
 /**
@@ -1810,6 +1824,7 @@ export const hands = (
     claws = false,
     spread = 1,
     hook = 0,
+    poke = 0,
   }: Grip = {},
   lite = false,
   skip = -1,
@@ -1827,7 +1842,7 @@ export const hands = (
       spin(q, [0, 0, -1]),
       curls[i],
       glove,
-      i ? 0 : point,
+      i ? poke : point,
       i * push,
       to,
       bare,
@@ -1942,6 +1957,8 @@ export const createBody = (world?: World): Body => {
   /** How closed each hand is, left then right, as of the last pose(); how far the left index is out, pressing a button. */
   const curls = [0, 0];
   let pointing = 0;
+  /** How far the right index is out, on the wrist computer's fire key, as of the last pose(). */
+  let poking = 0;
   /** How much the left hand cups the rifle's handguard, 0 to 1, as of the last pose(). */
   let cupping = 0;
   /** The new battery in the left hand as it brings it from the pouch, in the world; undefined when it is not carrying one. */
@@ -2266,6 +2283,8 @@ export const createBody = (world?: World): Body => {
     }
     /** The left hand's slap of the gun's battery: its weight and how far off the battery it is. */
     let [slapW, slapTap] = [0, 0];
+    /** The wrist computer's fire key in the world and how far up it is read, once the left arm is posed. */
+    let [key, keyW]: [Vec3, number] = [eye, 0];
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
@@ -2345,6 +2364,10 @@ export const createBody = (world?: World): Body => {
       const [reached, tucked] = guard > 0 && me ? counter(me, prog) : [0, 0];
       h = mix(h, mix(mix(GUARD, LUNGE_L, reached), TUCK, tucked), guard);
       h[1] += 0.012 * k * guard * (1 - reached - tucked);
+      // With the shoulder cannon out, the left forearm comes up across the view, the computer on
+      // the bracer turned to the eye, as the cannon unfolds (handsFree() took `railed` off `me`).
+      const reading = hunter && sd < 0 && railed ? ease(cannon) * free : 0;
+      h = mix(h, COMPUTER, reading);
       let taken = onSword;
       if (sd > 0) {
         hold = w.gun * free;
@@ -2374,17 +2397,73 @@ export const createBody = (world?: World): Body => {
         curl +
         ((hunter && onSword ? 1 : hunter && me?.rifled && sd > 0 ? DISC_CURL : 0.9) - curl) *
           taken +
-        (GUARD_CURL + 0.5 * tucked - curl) * guard;
-      const to = add(eye, turn([h[0] * sd, h[1], h[2]]));
+        (GUARD_CURL + 0.5 * tucked - curl) * guard +
+        (0.55 - curl) * reading;
+      let to = add(eye, turn([h[0] * sd, h[1], h[2]]));
+      // The right hand over the wrist computer, its fingers on the fire key: pressed in the first
+      // 4 ticks of the cannon's 15 between shots (`cool`), let go over the next 6, else hovering
+      // 3 cm off it.
+      const typing = sd > 0 ? keyW * free : 0;
+      if (sd > 0) {
+        poking = typing;
+        // The other fingers loosely bent under the index.
+        curls[1] += (0.45 - curls[1]) * typing;
+      }
+      if (typing > 0.002) {
+        const press = ease(clamp(((me?.cool ?? 0) - 5) / 6));
+        const off = add(key, along([0, 0, 0], unit(sub(eye, key)), 0.03 * (1 - press) + 0.004));
+        // The forearm comes into the view from its lower right corner, running ahead, the hand on
+        // its line (the user's reference, 2026-11-23): the wrist the index's length back from its
+        // tip on the key, along POKE.
+        to = mix(to, along(off, unit(turn(POKE)), -0.165), typing);
+      }
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
-      reach(q, s, arm, to, turn([POLE[0] * sd, POLE[1], POLE[2]]));
+      const pole = mix(POLE, COMPUTER_POLE, reading);
+      let bend = turn([pole[0] * sd, pole[1], pole[2]]);
+      if (typing > 0.002) {
+        // The elbow where the forearm runs along POKE into the wrist: the arm bends toward it.
+        const fore = dist(s.pos[J.FOREARM_R], s.pos[J.HAND_R]);
+        const elbow = along(to, unit(turn(POKE)), -fore);
+        bend = mix(bend, unit(sub(elbow, mix(s.pos[J.ARM_R], to, 0.5))), typing);
+      }
+      reach(q, s, arm, to, bend);
       // The palm turns down, the back of the hand to the view, flat on a ledge or the floor;
       // raking, it turns to face the way of the slash.
       q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide) + 0.9 * clutch));
+      if (typing > 0.002) {
+        // The back of the right wrist up (its forearm's local +x, as with the blades), the hand
+        // straight on the forearm's line (the user, 2026-11-24).
+        const held = { ...q, rot: q.rot.slice() };
+        const solved = solve(held);
+        const forearm = unit(sub(solved.pos[J.HAND_R], solved.pos[J.FOREARM_R]));
+        held.rot[J.FOREARM_R] = mul(inv(solved.rot[arm]), frame(unit(across(Y, forearm)), forearm));
+        held.rot[J.HAND_R] = ID;
+        for (const k of [arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], typing);
+        }
+      }
       if (sd > 0 && hold > 0.002) {
         // The back of the hand along the gun's right, the fingers around the grip.
         const rot = frame(turn(ga[0]), turn(fh));
         q.rot[arm + 2] = slerp(q.rot[arm + 2], mul(inv(solve(q).rot[J.FOREARM_R]), rot), hold);
+      }
+      if (reading > 0.002) {
+        // The forearm rolled so that the bracer's back, its local -x, faces up and toward the eye,
+        // halfway (the user, 2026-11-23: less turned to the view); the hand straight on it.
+        const held = { ...q, rot: q.rot.slice() };
+        const solved = solve(held);
+        const forearm = unit(sub(solved.pos[J.HAND_L], solved.pos[J.FOREARM_L]));
+        const look = unit(sub(solved.pos[J.HAND_L], eye));
+        const x = unit(across(add(look, [0, -2, 0]), forearm));
+        held.rot[J.FOREARM_L] = mul(inv(solved.rot[J.ARM_L]), frame(x, forearm));
+        held.rot[J.HAND_L] = ID;
+        for (const k of [arm + 1, arm + 2]) {
+          q.rot[k] = slerp(q.rot[k], held.rot[k], reading);
+        }
+        const posed = solve(q);
+        // The right hand's finger presses its fire key at each shot (the user, 2026-11-23).
+        key = add(posed.pos[J.HAND_L], spin(posed.rot[J.FOREARM_L], FIRE_KEY));
+        keyW = reading;
       }
       if (hunter && sw && onSword > 0.002) {
         // Lead with the wrist. The elbow stays wide so the two blades cross into view.
@@ -2425,7 +2504,9 @@ export const createBody = (world?: World): Body => {
       // The rail gun takes the left hand too, on its front grip, the elbow down and out; the
       // rifle's handguard lies in its palm, a cup (RIFLE_HOLD).
       const two =
-        sd < 0 && (me?.railed || (me?.rifled && !hunter) || harpoonDraw) ? w.gun * free : 0;
+        sd < 0 && ((me?.railed && !hunter) || (me?.rifled && !hunter) || harpoonDraw)
+          ? w.gun * free
+          : 0;
       if (two > 0.002) {
         const held = { ...q, rot: q.rot.slice() };
         if (fu) {
@@ -2732,6 +2813,16 @@ export const createBody = (world?: World): Body => {
               drawHunterPart(out, part, s, pieces);
             }
           }
+          // The wrist computer on the left bracer, its glyphs the cannon's shots left.
+          const shots = me?.cap ?? HUNTER_CELLS;
+          placeRigid(
+            out,
+            `wrist computer ${shots}`,
+            wristComputer(shots),
+            s.rot[J.FOREARM_L],
+            s.pos[J.HAND_L],
+            pieces,
+          );
           // The shoulder cannon, from the camera: stowed, it is out of sight and not drawn.
           if (cannon > 0) {
             const [hinge, q] = cannonInView(cannon, target);
@@ -2787,6 +2878,7 @@ export const createBody = (world?: World): Body => {
           hunter ? HUNTER_HAND : suit ? colors[7] : colors[3],
           {
             point: pointing,
+            poke: poking,
             push,
             to: thumbTo(Math.max(tk, 0)),
             cup: cupping,

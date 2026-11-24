@@ -21,6 +21,8 @@ import {
   XENO_DASH,
   XENO_HP,
   XENO_PACE,
+  HUNTER_CELLS,
+  HUNTER_CELL_TICKS,
 } from './constants';
 import type { WorldDef } from './world';
 
@@ -159,7 +161,16 @@ const XENO: Kit = {
 };
 
 /** The Hunter starts with the wrist blades and carries the harpoon and shoulder laser loadout. */
-const HUNTER: Kit = { ...MARINE, katana: true, hunter: true, ammo: 12, mag: 1 };
+const HUNTER: Kit = {
+  ...MARINE,
+  katana: true,
+  hunter: true,
+  ammo: 12,
+  mag: 1,
+  // The shoulder cannon's battery and its recharge count (gun.ts), in the rail gun's fields.
+  cap: HUNTER_CELLS,
+  rail: HUNTER_CELL_TICKS,
+};
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */
 export const KITS: readonly Kit[] = [MARINE, NINJA, MARINE, XENO, HUNTER];

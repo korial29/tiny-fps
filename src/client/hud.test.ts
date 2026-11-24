@@ -77,7 +77,7 @@ describe('createHud', () => {
     expect(HUD_CSS).toContain('i.hv{pointer-events:none;top:48px;width:auto;height:auto;');
   });
 
-  it('closes the Hunter laser’s three triangles over its target and marks the lock', () => {
+  it('closes the three sides of the Hunter laser’s triangle over its target, then turns it locked', () => {
     const sight = q<HTMLElement>('i.hl');
     hud.hunterAim([0.3, 0.4], 0.5);
     expect([
@@ -86,7 +86,7 @@ describe('createHud', () => {
       sight.style.top,
       sight.classList.contains('locked'),
     ]).toEqual([false, '30%', '40%', false]);
-    // Tracking: three triangles, far out and each on its own beat (the user, 2026-11-23).
+    // Tracking: three sides, far out and each on its own beat (the user, 2026-11-23).
     const out = (now: number) => {
       hud.hunterAim([0.3, 0.4], 0, now);
       return [...sight.querySelectorAll('b')].map(b =>
@@ -95,16 +95,24 @@ describe('createHud', () => {
     };
     const [a, b] = [out(1000), out(1500)];
     expect(a).toHaveLength(3);
-    expect(Math.min(...a.map(t => -t[1]))).toBeGreaterThan(40);
+    expect(Math.min(...a.map(t => -t[1]))).toBeGreaterThan(20);
     const moved = a.map((t, i) => Math.abs(t[1] - b[i][1]));
     expect(new Set(moved.map(m => m.toFixed(2))).size).toBe(3);
-    // Locked, they meet on him, a third of a turn apart.
-    hud.hunterAim([0.3, 0.4], 1, 2000);
-    expect([...sight.querySelectorAll('b')].map(b => b.style.transform)).toEqual([
-      'rotate(0deg) translateY(-13px)',
-      'rotate(120deg) translateY(-13px)',
-      'rotate(240deg) translateY(-13px)',
+    // Locked, they join into the triangle round him, a third of a turn apart, which turns at
+    // 180 degrees a second.
+    const at = (now: number) => {
+      hud.hunterAim([0.3, 0.4], 1, now);
+      return [...sight.querySelectorAll('b')].map(b =>
+        b.style.transform.match(/-?[\d.]+/g)!.map(Number),
+      );
+    };
+    expect(at(2000)).toEqual([
+      [0, 0],
+      [120, 0],
+      [240, 0],
     ]);
+    expect(at(2250).map(t => t[0])).toEqual([45, 165, 285]);
+    expect(HUD_CSS).toContain('clip-path:polygon(0 0,100% 0,calc(100% - 5.2px) 100%,5.2px 100%)');
     expect(sight.classList.contains('locked')).toBe(true);
     expect(sight.querySelector('small')!.textContent).toBe('LOCK');
     hud.hunterAim();

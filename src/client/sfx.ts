@@ -219,6 +219,14 @@ export const SOUND = {
   HUNTER_FLASH: 88,
   HEARTBEAT: 89,
   STATIC: 90,
+  /**
+   * The shoulder cannon taking a foe in its sight, after the Predator's (the user, 2026-11-23; the
+   * first 5 s of "Predator Target lock and Plasma weapon sound FX", analysed): three dry clicks round
+   * 700 Hz 75 ms apart and a breath of noise, then HUNTER_SEEK, looped until the lock: a steady
+   * electronic hum at 1.5 kHz over a fainter 1.2 kHz, each buzzing at 65 Hz.
+   */
+  HUNTER_TRACK: 91,
+  HUNTER_SEEK: 92,
 } as const;
 
 /**
@@ -809,6 +817,26 @@ export const LAYERS: Voice[][] = [
   ],
   // STATIC: a voice of its own, radio(); render() never reads this.
   [],
+  // HUNTER_TRACK: each click a 700 Hz square burst of 27 ms, low-passed, over a tick of noise;
+  // the breath of noise 0.28 s in.
+  [
+    ...[0, 0.075, 0.15].flatMap((late): Voice[] => [
+      [0, 700, 0, 0.001, 0.012, 0.014, 0, 0.35, 0, 1, 0.45, late],
+      [3, 7000, 0, 0.001, 0, 0.012, 0, 0.5, 0, 1, 0.22, late],
+    ]),
+    [3, 5000, 0, 0.05, 0.06, 0.08, 0, 0.25, 0, 1, 0.2, 0.28],
+  ],
+  // HUNTER_SEEK: 2 s, looped (seam()) like the others. Each tone flanked by two 65 Hz off, the hum's buzz (their
+  // beat); the 1500 Hz one beats with 1507 Hz at 7 Hz, the hum's slow sway.
+  [
+    [2, 1507, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.3],
+    [2, 1442, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.13],
+    [2, 1572, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.13],
+    [2, 1500, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.08],
+    [2, 1217, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.15],
+    [2, 1152, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.07],
+    [2, 1282, 0, 0.001, 2.1, 0.001, 0, 1, 0, 1, 0.07],
+  ],
 ];
 
 /** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */
@@ -826,6 +854,7 @@ export const LOOPED: number[] = [
   SOUND.SKID,
   SOUND.JET,
   SOUND.STATIC,
+  SOUND.HUNTER_SEEK,
 ];
 
 /**

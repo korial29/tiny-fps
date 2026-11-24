@@ -78,6 +78,69 @@ describe('the character screen', () => {
     expect(q('h1').textContent).toBe('Ninja');
   });
 
+  it('opens again in a match on what the player wears, with no renderer of its own', () => {
+    const start = vi.fn();
+    const draw = vi.fn((..._: unknown[]) => true);
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
+    // The last visit's choice is not what he wears now.
+    localStorage.setItem('tiny-fps-cast', JSON.stringify({ body: 0, role: ROLE.MARINE }));
+    const lobby = createLobby(host, HIGHLINE, start, {
+      body: 1,
+      tone: 2,
+      hair: undefined,
+      role: ROLE.NINJA,
+    });
+    expect(q('h1').textContent).toBe('Ninja');
+    expect(group('Body').map(b => b.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+    expect(q('.go').textContent).toBe('Apply');
+    expect(q('.lb').classList.contains('ag')).toBe(true);
+    vi.advanceTimersByTime(1000);
+    // It draws nothing itself: no frame asked, no context made.
+    expect(raf).not.toHaveBeenCalled();
+    expect(HTMLCanvasElement.prototype.getContext).not.toHaveBeenCalled();
+    // The game's frames offer its renderer: the big picture of the choice shown, 30 times a second at most.
+    const picture = q<HTMLCanvasElement>('figure canvas');
+    picture.height = 90;
+    expect(q('figure span').hidden).toBe(false);
+    // The first one was due at once: the second frame draws too, then every other one.
+    lobby.paint(1000, draw);
+    lobby.paint(1016, draw);
+    lobby.paint(1020, draw);
+    expect(draw).toHaveBeenCalledTimes(2);
+    expect(draw.mock.calls[0].slice(0, 2)).toEqual([
+      picture,
+      { body: 1, tone: 2, hair: 0, role: ROLE.NINJA },
+    ]);
+    expect(q('figure span').hidden).toBe(true);
+    // A class picked and not applied yet is the one drawn.
+    group('Class')[0].click();
+    lobby.paint(1040, draw);
+    expect(draw.mock.calls[2][1]).toMatchObject({ role: ROLE.MARINE });
+    q('.go').click();
+    // Gone, it asks for nothing more.
+    lobby.paint(2000, draw);
+    expect(draw).toHaveBeenCalledTimes(3);
+    expect(start).toHaveBeenCalledWith({ body: 1, tone: 2, hair: 0, role: ROLE.MARINE });
+    expect(host.children).toHaveLength(0);
+  });
+
+  it('goes back from a match with Back or Escape, nothing chosen', () => {
+    const start = vi.fn();
+    createLobby(host, HIGHLINE, start, { body: 0 });
+    group('Class')[1].click();
+    q('.bk').click();
+    expect(host.children).toHaveLength(0);
+    createLobby(host, HIGHLINE, start, { body: 0 });
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    expect(host.children).toHaveLength(0);
+    expect(start).not.toHaveBeenCalled();
+    // Before a match there is no way back.
+    createLobby(host, HIGHLINE, start);
+    expect(shadow().querySelector('.bk')).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    expect(host.children).toHaveLength(1);
+  });
+
   it('joins the room only on Start, with the whole choice', () => {
     const sent: string[] = [];
     const sock: SocketLike = {

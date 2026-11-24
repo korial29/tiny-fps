@@ -61,6 +61,7 @@ import { packsOf } from './props';
 import { FACE, HEAD, PORTRAIT, createRenderer } from './render';
 import { STEPS, createLoader } from './loading';
 import { createLobby } from './lobby';
+import type { Lobby } from './lobby';
 import { createWrecks } from './wreck';
 import type { createTargeting } from './targeting';
 import { targetingPhysics } from './targeting-physics';
@@ -295,7 +296,17 @@ const play = (
       document.exitPointerLock?.();
       quit();
     },
+    // After the character screen, the pause menu's Character opens that screen again (the user,
+    // 2026-11-25), over the paused game, on what the player wears.
+    cast
+      ? () => {
+          recast?.destroy();
+          recast = createLobby(screen, world.def, pick, worn);
+        }
+      : undefined,
   );
+  /** The character screen while it is open in the match. */
+  let recast: Lobby | undefined;
   /**
    * The player has been in the game: Escape then opens the pause menu. Coming from the character
    * screen he has picked already: the title screen is the pause menu, its first button Play.
@@ -390,6 +401,8 @@ const play = (
   let roster: PlayerInfo[] = [];
   /** What the own player picked, as last told or answered: drawn at once, and sent to the host, whose roster dresses everyone. */
   let picked: Choice & { body: number } = { body: 0 };
+  /** What he wears, the parts he never picked as his id gives them: what the character screen opens on. */
+  let worn: Choice & { body: number } = picked;
   /** The own class's health at most (Kit.hp), for the face. */
   let hpMax = HP_MAX;
   let previewActive = false;
@@ -404,19 +417,17 @@ const play = (
   const queuePreview = (draw: () => void) => {
     previewJobs.push(draw);
   };
-  const avatar = hud.cast(
-    c => {
-      picked = c;
-      ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
-    },
-    active => {
-      previewActive = active;
-      if (active) {
-        previewNext = 0;
-        hud.previewLoading(!!rd);
-      }
-    },
-  );
+  const pick = (c: Choice & { body: number }) => {
+    picked = c;
+    ws.send(JSON.stringify({ t: 'body', ...c } satisfies ClientText));
+  };
+  const avatar = hud.cast(pick, active => {
+    previewActive = active;
+    if (active) {
+      previewNext = 0;
+      hud.previewLoading(!!rd);
+    }
+  });
   /** What the live picture shows: the own id, colour and choice. */
   let drawn = '';
   /** The own player's id and team, from the roster. */
@@ -626,15 +637,13 @@ const play = (
         roleOf(own?.role, world.def) == ROLE.HUNTER,
       );
       // The title screen shows what his id gives where he has picked nothing: his skin and cut as drawn.
-      hud.wear(
-        build,
-        {
-          tone: own?.tone ?? TONES.indexOf(toneOf(m.you)),
-          hair: own?.hair ?? (build ? styleOf(m.you) : shaved(m.you) ? 0 : undefined),
-          role: roleOf(own?.role, world.def),
-        },
-        rolesOf(world.def),
-      );
+      worn = {
+        body: build,
+        tone: own?.tone ?? TONES.indexOf(toneOf(m.you)),
+        hair: own?.hair ?? (build ? styleOf(m.you) : shaved(m.you) ? 0 : undefined),
+        role: roleOf(own?.role, world.def),
+      };
+      hud.wear(build, worn, rolesOf(world.def));
       predictor.you(you.id, you.team, own?.role);
       const kit = kitOf(own?.role, world.def);
       const weapon = kit.katana ? WEAPON.BLADE : WEAPON.GUN;
@@ -1144,6 +1153,10 @@ const play = (
       if (previewActive && !posed) {
         previewJobs.shift()?.();
       }
+      // The character screen open in the match: its picture by this renderer, before the view too.
+      recast?.paint(now, (into, c, shot) =>
+        rd!.portrait(into, me, buildOf(c, world.def), colors.get(you.id) ?? '', c, shot),
+      );
       if (step == 2) {
         progress((step = 3));
         return;
@@ -1362,6 +1375,7 @@ const play = (
       previewJobs = [];
       document.removeEventListener('keydown', onKey);
       botcam.destroy();
+      recast?.destroy();
       ctl.destroy();
       audio.destroy();
       rd?.destroy();

@@ -132,6 +132,12 @@ const CSS =
   `li::before{position:absolute;left:0;font-weight:900}.p li::before{content:"+";color:#5ad17a}.c li::before{content:"−";color:#ff5a4f}` +
   `.go{grid-area:go;justify-self:center;min-width:min(320px,80vw);padding:clamp(12px,2vh,18px) 48px;border:0;background:linear-gradient(#ff9a4a,#e8590c);box-shadow:0 10px 30px -8px #e8590ccc;` +
   `font:900 clamp(18px,3vh,24px)/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#fff}.go:hover{filter:brightness(1.1)}` +
+  // In a match (`now`): no second renderer beside the game's (the user, 2026-11-25), which draws
+  // the big picture alone (paint()): the tiles are words without a head shot, and the way back is
+  // left of Apply.
+  // The logo's place stays, empty: the page may show something of its own there (the demo's bar).
+  `.ag h6{visibility:hidden}.ag .tl canvas{display:none}.ag .tl button{grid-template:1fr/auto 1fr;padding-left:16px;max-height:64px}.ag .tl b,.ag .tl small{align-self:center}` +
+  `.bk{grid-area:go;justify-self:start;align-self:center;padding:10px 14px;font-size:15px;font-weight:700;color:#8d9aa7}.bk:hover{color:#fff}` +
   // The renderer's own canvas: the size of the picture, under it, never seen (portrait() copies from it).
   `.gl{position:absolute;left:0;top:0;visibility:hidden;pointer-events:none}`;
 
@@ -145,19 +151,30 @@ const load = (): Partial<Cast> => {
 
 export interface Lobby {
   destroy(): void;
+  /**
+   * In a match: the game's frame at `now` (ms) offers its renderer. `draw` is asked for the picture
+   * of the choice shown, HZ times a second at most, and says whether it drew it.
+   */
+  paint(now: number, draw: (into: HTMLCanvasElement, c: Cast, shot: Shot) => boolean): void;
 }
 
 /**
  * Shows the character screen in `container` for the map `def` (the classes it offers, its sky);
- * `start` hears the whole choice on Start, after the screen is gone.
+ * `start` hears the whole choice on Start, after the screen is gone. `now`: opened again in a
+ * match from the pause menu (the user, 2026-11-25), over the game, on what the player wears: no
+ * renderer of its own (the game's draws the big picture, paint()), no head shots on the tiles, Apply
+ * for Start and a way back (Escape too) that changes nothing.
  */
 export const createLobby = (
   container: HTMLElement,
   def: WorldDef,
   start: (c: Cast) => void,
+  now?: Partial<Cast>,
 ): Lobby => {
   const roles = rolesOf(def);
-  const was = load();
+  const again = !!now;
+  // A part the player never picked is undefined in a match (JSON drops it): the default stays.
+  const was = JSON.parse(JSON.stringify(now ?? load())) as Partial<Cast>;
   let c: Cast = { body: 0, tone: 0, hair: 0, role: roles[0], ...was };
   c.body = +!!c.body;
   if (!roles.includes(c.role ?? -1)) {
@@ -167,11 +184,14 @@ export const createLobby = (
     c.hair = 0;
   }
   const host = document.createElement('div');
-  host.style.cssText = 'width:100%;height:100%';
+  // In a match the host is a child of the game's screen, over its menu and its death screen.
+  host.style.cssText = again
+    ? 'position:absolute;inset:0;z-index:4;background:none;text-shadow:none'
+    : 'width:100%;height:100%';
   const root = host.attachShadow({ mode: 'open' });
   const radio = (label: string, extra = '') => `<button role="radio" ${extra}>${label}</button>`;
   root.innerHTML =
-    `<style>${CSS}</style><div class="lb"><h6>TINY FPS</h6>` +
+    `<style>${CSS}</style><div class="lb${again ? ' ag' : ''}"><h6>TINY FPS</h6>` +
     `<div class="side"><div role="radiogroup" aria-label="Class" class="tl">${roles
       .map(r =>
         radio(
@@ -186,7 +206,8 @@ export const createLobby = (
     `<div><h4>Hair</h4><div role="radiogroup" aria-label="Hair"></div></div></div></div>` +
     `<main><h1></h1><figure><canvas></canvas><span>Loading</span></figure>` +
     `<div class="tr"><div><h4>Strengths</h4><ul class="p"></ul></div><div><h4>Weaknesses</h4><ul class="c"></ul></div></div></main>` +
-    `<button class="go">Start</button><canvas class="gl"></canvas></div>`;
+    (again ? `<button class="bk">← Back</button>` : '') +
+    `<button class="go">${again ? 'Apply' : 'Start'}</button><canvas class="gl"></canvas></div>`;
   container.append(host);
   const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
   const [tiles, bodies, skins, hairs] = [
@@ -362,15 +383,20 @@ export const createLobby = (
       }
     }
   };
-  const timer = setTimeout(() => {
-    fit();
-    try {
-      rd = createRenderer(gl, studio);
-    } catch {
-      loader.textContent = 'WebGL2 is not available';
-    }
-  }, 50);
-  raf = requestAnimationFrame(tick);
+  // In a match the screen has no renderer: the game's stays the only one (paint()).
+  const timer =
+    again ||
+    setTimeout(() => {
+      fit();
+      try {
+        rd = createRenderer(gl, studio);
+      } catch {
+        loader.textContent = 'WebGL2 is not available';
+      }
+    }, 50);
+  if (!again) {
+    raf = requestAnimationFrame(tick);
+  }
 
   let gone = false;
   const destroy = () => {
@@ -378,7 +404,7 @@ export const createLobby = (
       return;
     }
     gone = true;
-    clearTimeout(timer);
+    clearTimeout(+timer);
     cancelAnimationFrame(raf);
     seen.disconnect();
     document.removeEventListener('keydown', onKey);
@@ -398,9 +424,24 @@ export const createLobby = (
   const onKey = (e: KeyboardEvent) => {
     if (e.code == 'Enter' && !(e.composedPath()[0] instanceof HTMLButtonElement)) {
       go();
+    } else if (e.code == 'Escape' && again) {
+      destroy();
     }
   };
   document.addEventListener('keydown', onKey);
+  if (again) {
+    $<HTMLElement>('.bk').onclick = destroy;
+  }
   $<HTMLElement>('.go').onclick = go;
-  return { destroy };
+  return {
+    destroy,
+    paint(at, draw) {
+      if (!gone && picture.height && at >= next) {
+        next = Math.max(next, at - 1000 / HZ) + 1000 / HZ;
+        if (draw(picture, c, { ...FULL, ...ARMED[c.role!] })) {
+          loader.hidden = true;
+        }
+      }
+    },
+  };
 };

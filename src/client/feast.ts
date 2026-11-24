@@ -109,8 +109,9 @@ const limb = (q: Pose, j: number, to: Vec3, pole: Vec3, m: number) => {
 /**
  * The xenomorph's `pose` on its prey, whose feet are at `prey`, by the share `m` (mounted()): turned
  * to him and up on him, its feet on his thighs, its claws over his shoulders, leaning over his head.
+ * `size` is his body's to a man's (Kit size): its holds and its climb go with it.
  */
-export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0, hop = 0): Pose => {
+export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0, hop = 0, size = 1): Pose => {
   if (m <= 0) {
     return pose;
   }
@@ -120,14 +121,16 @@ export const seize = (pose: Pose, prey: Vec3, m: number, sway = 0, hop = 0): Pos
   const q: Pose = { ...pose, yaw: pose.yaw + wrap(yaw - pose.yaw) * m, rot };
   // The whole of it from where it is up to him, and up on him.
   const pelvis = solve(q).pos[J.PELVIS];
-  const want = off(prey, r, f, 0, -FEAST.CLING, 0);
-  q.at = [0, 1, 2].map(i => q.at[i] + (i == 1 ? FEAST.LIFT : want[i] - pelvis[i]) * m) as Vec3;
+  const want = off(prey, r, f, 0, -FEAST.CLING * size, 0);
+  const lift = FEAST.LIFT + FEAST.CLAWS[2] * (size - 1);
+  q.at = [0, 1, 2].map(i => q.at[i] + (i == 1 ? lift : want[i] - pelvis[i]) * m) as Vec3;
   // Rocked to its right and back (swaying()): aside and leaning. Off him after the kill, a hop
   // back on an arc (`hop`, 0 to 1 and back), the back leaning away.
   q.at = off(q.at, r, f, FEAST.SWAY[0] * sway, 0, FEAST.HOP * hop);
   rot[J.PELVIS] = mul(rot[J.PELVIS], axis(X, 0.3 * hop));
   rot[J.PELVIS] = mul(axis([0, 0, 1], -FEAST.SWAY[1] * sway), rot[J.PELVIS]);
-  const [feet, claws] = [FEAST.FEET, FEAST.CLAWS];
+  // On a bigger prey (Kit size: the Hunter), its holds on him to his scale.
+  const [feet, claws] = [FEAST.FEET, FEAST.CLAWS].map(v => v.map(c => c * size));
   for (const [side, thigh, arm] of [
     [-1, J.THIGH_L, J.ARM_L],
     [1, J.THIGH_R, J.ARM_R],
@@ -497,7 +500,8 @@ export const PUMMEL = {
   PAST: [0.1, 0.5, 0.72],
   BELLY: 0.19,
   FACE: [0.12, 0.06],
-  NAPE: [0.02, 0.12],
+  // Over the crown on his side, where the arm reaches at EXEC.FIST (the user, 2026-11-24).
+  NAPE: [-0.1, 0.12],
   /** Drops of blood as the head bursts, and how fast they fly; a spurt from the belly and the mouth on the gut punch. */
   BURST: [140, 4.5],
   SPURT: [14, 8],

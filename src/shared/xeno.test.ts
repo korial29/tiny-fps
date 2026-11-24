@@ -934,6 +934,29 @@ describe('the xenomorph in a room', () => {
     expect(frag).toMatchObject({ by: k.info.id, who: m.info.id, how: FRAG.GLORY });
   });
 
+  it('spaces an execution by the bodies’ girth, stepping back when E is pressed closer (the user, 2026-11-24)', () => {
+    const { inner, ps } = room(ROLE.MARINE, ROLE.HUNTER);
+    const [k, m] = ps;
+    face(k.state, m.state);
+    // Point-blank: the two would stand in each other.
+    k.state.z = 50.4;
+    m.state.hp = GLORY_HP;
+    k.bank = m.bank = 999;
+    let seq = 0;
+    const step = (p: typeof k, keys: number) =>
+      inner.apply(p, { seq: ++seq, keys, yaw: p.state.yaw, pitch: 0 });
+    step(k, KEY.USE);
+    expect(k.state.exec).toBe(EXEC.KILLER);
+    for (let t = 1; t <= GLORY_DASH; t++) {
+      step(m, 0);
+      step(k, 0);
+    }
+    // The Hunter's bulk on top of a fist's reach, and further than before.
+    const d = Math.hypot(k.state.x - m.state.x, k.state.z - m.state.z);
+    expect(d).toBeCloseTo(EXEC.FIST + KITS[ROLE.HUNTER].girth!, 1);
+    expect(d).toBeGreaterThan(0.4);
+  });
+
   it('ends an execution with neither hurt when the swordsman goes down in it', () => {
     const { inner, ps } = room(ROLE.MARINE, ROLE.MARINE);
     const [k, m] = ps;

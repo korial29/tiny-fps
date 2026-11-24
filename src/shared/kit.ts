@@ -73,6 +73,13 @@ export interface Kit {
   xeno: boolean;
   /** The Hunter's class identity, used for its weapons and alternate vision modes. */
   hunter?: boolean;
+  /**
+   * A glory kill's spacing (room.ts feast()): metres this body stands further from the other one
+   * than a man's would, front to back, so the two do not go into each other (the user, 2026-11-24).
+   */
+  girth?: number;
+  /** His body's size to a man's (the Hunter's model is 1.2 times as tall): the xenomorph climbs him to scale. */
+  size?: number;
 }
 
 const MARINE: Kit = {
@@ -158,6 +165,8 @@ const XENO: Kit = {
   hp: XENO_HP,
   gear: false,
   xeno: true,
+  // Its head, hunched forward, comes out ahead of its feet.
+  girth: 0.1,
 };
 
 /** The Hunter starts with the wrist blades and carries the harpoon and shoulder laser loadout. */
@@ -170,6 +179,9 @@ const HUNTER: Kit = {
   // The shoulder cannon's battery and its recharge count (gun.ts), in the rail gun's fields.
   cap: HUNTER_CELLS,
   rail: HUNTER_CELL_TICKS,
+  // Taller and broader, and armoured (hunter.ts `stature`).
+  girth: 0.25,
+  size: 1.2,
 };
 
 /** By ROLE. The astronaut moves and fights as the marine: the moon's gravity is the map's. */

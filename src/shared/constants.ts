@@ -332,7 +332,8 @@ export const XENO_FEED = 1;
 export const EXEC = {
   TICKS: 88,
   REACH: 1.3,
-  FIST: 0.7,
+  // 0.7 before: the kneeling victim's head went into the killer's belly (the user, 2026-11-24).
+  FIST: 0.85,
   CUTS: [26, 71],
   KILLER: 1,
   VICTIM: 2,

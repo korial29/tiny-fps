@@ -1441,7 +1441,11 @@ export class Room {
     const [dx, dz] = [seen.x - me.x, seen.z - me.z];
     const d = Math.hypot(dx, dz) || 1;
     this.drop(foe.info.id);
-    const [lock, near] = xeno ? [GLORY_TICKS, 1] : [EXEC.TICKS, me.wield ? EXEC.REACH : EXEC.FIST];
+    // The two stand apart by their bodies' girth (Kit), so neither goes into the other.
+    const girth = (this.kit(p).girth ?? 0) + (this.kit(foe).girth ?? 0);
+    const [lock, near] = xeno
+      ? [GLORY_TICKS, 1]
+      : [EXEC.TICKS, (me.wield ? EXEC.REACH : EXEC.FIST) + girth];
     for (const [a, b, exec] of [
       [p, foe, EXEC.KILLER],
       [foe, p, EXEC.VICTIM],
@@ -1450,8 +1454,9 @@ export class Room {
       Object.assign(a.state, { swing: 0, charge: 0, stun: 0, zap: false, vx: 0, vz: 0 });
       a.state.exec = xeno ? 0 : exec;
     }
-    // It dashes in front of him over the lock's first GLORY_DASH ticks (step() in gun.ts).
-    const v = (Math.max(d - near, 0) * TICK_HZ) / GLORY_DASH / d;
+    // It dashes in front of him over the lock's first GLORY_DASH ticks (step() in gun.ts), or
+    // steps back from him when closer: E pressed on him would leave the two in each other.
+    const v = ((d - near) * TICK_HZ) / GLORY_DASH / d;
     [me.vx, me.vz] = [Math.fround(dx * v), Math.fround(dz * v)];
     return true;
   }

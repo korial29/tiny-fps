@@ -7,7 +7,6 @@
 // white, with a wall down to the skin round the plate's edge as its thickness. So a plate has the
 // body's own shape and bends with it.
 import { LIMB } from '../shared/types';
-import { BUCKLE, BUCKLE_Y } from './buckle';
 import { KANJI } from './mask';
 import { GLOSS, STRIDE, WEAVE } from './mesh';
 import { BUST, BUST_Y, body } from './skin';
@@ -54,7 +53,7 @@ interface Region {
   legs?: boolean;
   /** No plate: the suit's dark ribbed cloth, a hair off the skin, with no wall (the gusset). */
   thin?: boolean;
-  /** No plate: the ninja's sash, cloth in its own grey (SASH) a hair off the skin, with no wall. */
+  /** No plate: the ninja's sash, cloth in its own grey (SASH) off the skin (beltOff()), with no wall. */
   belt?: boolean;
 }
 
@@ -227,22 +226,40 @@ const plates = (_a: number, c: Corner) => {
  */
 const GUSSET = { under: 0.025, off: 0.003, tuck: 0.006 };
 /**
- * The ninja's belt, a sash (the user, 2026-11-17: the thin strip in a V of 2026-11-13 did not
- * please): wide, nearly level, woven cloth knotted in front (buckle.ts). Its bottom at the front's
- * middle, rising `rise` to the hips, then down round the back to `back` over the front's; its
- * height, and how far it stands off the skin. Cut as the gusset is, so drawn on every map, armour
- * or none (armor()'s `bare`).
+ * The ninja's belt, a wide sash (the user, 2026-11-24, on a picture: a big cloth belt with folds; it
+ * was a narrow band, knotted in front, since 2026-11-17): woven cloth in his shoulder pads' grey
+ * (SASH; the user, 2026-11-24: grey as the pads, it was his team's colour for a day) wound
+ * round the waist, from the hips up over the bottom of his vest, pleated by the shader (render.ts).
+ * Its bottom at the front's middle, rising `rise` to the hips, then down round the back to `back`
+ * over the front's; its height, and how far it stands off the skin: over the vest's plates. Its top
+ * rolls in to `thin` off the skin over `lip`; the tabard and the skirt (sash.ts) hang from under its
+ * bottom. Cut as the gusset is, so drawn on every map, armour or none (armor()'s `bare`).
  */
-export const BELT = { y: 0.982, rise: 0.016, back: 0.004, h: 0.048, off: 0.007 };
+export const BELT = {
+  y: 0.962,
+  rise: 0.012,
+  back: 0.004,
+  h: 0.112,
+  off: 0.02,
+  lip: 0.022,
+  thin: 0.003,
+};
 const beltLow = (a: number) =>
   BELT.y +
   BELT.rise * smooth(0, 90, Math.abs(a)) -
   (BELT.rise - BELT.back) * smooth(90, 180, Math.abs(a));
+/** The sash's bands up from its bottom, as shares of its height: its body, then its top's roll in two. */
+const BANDS = [0, 1 - BELT.lip / BELT.h, 1 - (0.35 * BELT.lip) / BELT.h, 1];
+/** How far the sash stands off the skin at the height y, at the angle a: its top rolled in, a quarter round. */
+const beltOff = (a: number, y: number) => {
+  const t = Math.min(Math.max((beltLow(a) + BELT.h - y) / BELT.lip, 0), 1);
+  return BELT.thin + (BELT.off - BELT.thin) * Math.sqrt(t * (2 - t));
+};
 const gusset = (a: number, c: Corner) => {
   const p = plates(a, c);
   return p + (THIGH.front - p) * inside(a) - GUSSET.under;
 };
-/** The sash's dark grey (the user, 2026-11-17: thinner, and black; then less black), and the face guard's (mask.ts: the same). */
+/** The dark grey of the ninja's sash, and of his face guard and shoulder pads (mask.ts, pads.ts). */
 export const SASH = [0.24, 0.235, 0.25];
 /** The cloth: plain black, as the suit's legs (the user, 2026-11-14: it was ribbed in two shades). */
 const CLOTH = [0.07, 0.07, 0.08];
@@ -323,16 +340,6 @@ export const VEST = {
 };
 /** How far a piece of the vest dips at the angle a: a chevron, its point down the middle. */
 const chevron = (a: number) => VEST.dip * Math.max(0, 1 - Math.abs(a) / 40);
-/**
- * The last lame's point cut round over the belt's buckle (buckle.ts; the user, 2026-11-13: they met,
- * fix the armour, not the buckle): an arch `clear` over its rim, the angle turned into a place
- * across on the waist's front, `waist` out from the axis.
- */
-export const ARCH = { clear: 0.016, waist: 0.13 };
-const arch = (a: number) => {
-  const [x, r] = [ARCH.waist * Math.sin((a * Math.PI) / 180), BUCKLE[0] + ARCH.clear];
-  return Math.abs(x) < r ? BUCKLE_Y + Math.sqrt(r * r - x * x) : 0;
-};
 /**
  * The vest's armholes (the user, 2026-11-13: a crack in the chest piece by the armpit): over the
  * trunk's split (1.41 m) the skin is the shoulder's and goes with the arm, away from the piece under
@@ -504,17 +511,17 @@ export const REGIONS: Region[] = [
     thin: true,
   },
   { part: PART.LEG, cx: 0.1, y: [0.74, 0.94], a: [-181, 181], low: gusset, thin: true },
-  // The ninja's sash (BELT).
-  {
+  // The ninja's sash (BELT), in bands (BANDS).
+  ...[0, 1, 2].map((k): Region => ({
     part: PART.TRUNK,
     cx: 0,
     y: [BELT.y + BELT.back, BELT.y + BELT.rise + BELT.h],
     a: [-181, 181],
-    low: beltLow,
-    high: a => beltLow(a) + BELT.h,
+    low: a => beltLow(a) + BELT.h * BANDS[k],
+    high: a => beltLow(a) + BELT.h * BANDS[k + 1],
     belt: true,
     alone: true,
-  },
+  })),
   // The ninja's vest (the user, 2026-11-13, on his picture of a ninja's armour): a chest piece up to
   // the neck in one block, its bottom a chevron; three lames down the belly nested under it, round
   // to the flanks; the same on his back (below); and a bracer on each forearm. His shoulder pads and
@@ -545,7 +552,7 @@ export const REGIONS: Region[] = [
       // stopped 46 degrees round, the back's too, with two plates of other heights between them.
       a: [-FLANK, FLANK],
       high: a => top - chevron(a),
-      low: a => Math.max(top - VEST.lame - chevron(a), k == 2 ? arch(a) : 0),
+      low: a => top - VEST.lame - chevron(a),
       alone: true,
     };
   }),
@@ -1290,11 +1297,12 @@ const cook = (s: Skin, fine: boolean): Recipe => {
           continue;
         }
         if (region.belt) {
-          // The sash: woven cloth in its own grey, no wall.
+          // The sash: woven cloth in the pads' grey, no wall.
+          const off = (c: Corner) => beltOff(angle({ ...region, face: 0 }, c[0], c[2]), c[1]);
           for (let i = 1; i + 1 < poly.length; i++) {
             add(
               [poly[0], poly[i], poly[i + 1]],
-              [BELT.off, BELT.off, BELT.off],
+              [off(poly[0]), off(poly[i]), off(poly[i + 1])],
               undefined,
               SASH,
               WEAVE,

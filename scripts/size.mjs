@@ -82,7 +82,9 @@ const BUDGETS = [
   // foot moulded to the shoulder plate (the user, 2026-11-24: raise it).
   // 275,456 B: 1,024 B more for the Hunter's wrist computer and wrist blades after the user's
   // references (the user, 2026-11-24: a small raise, the least seen details taken out first).
-  { file: 'dist/index.js', max: 275_456 },
+  // 279,552 B: 4,096 B more for the full-page character screen before a match, its own preview
+  // renderer and the classes' strengths and weaknesses (the user, 2026-11-24: raise it).
+  { file: 'dist/index.js', max: 279_552 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

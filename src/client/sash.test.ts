@@ -84,6 +84,20 @@ describe("what hangs from the ninja's sash (the user, 2026-11-24: a wide pleated
       expect(s.pos[J.PELVIS][1] + HIPS.y - low).toBeGreaterThan(SKIRT.len * 0.85);
     });
 
+    it(`keeps the skirt narrow at the sides, inside the hands that hang there, ${who}`, () => {
+      // The user, 2026-11-24: the hands went through it. A hand at rest hangs with its palm
+      // 22.5 cm from the body's middle, on him and on her; the skirt was 25 cm wide there.
+      for (const lod of [0, 1, 3]) {
+        for (let t = 0; t < 3; t += 0.25) {
+          const cloth = draw(lod, t).filter(p => !red(p) && p[6] > 0.08);
+          expect(Math.max(...cloth.map(p => Math.abs(p[0])))).toBeLessThan(0.223);
+        }
+      }
+      // And still outside the hips.
+      const wide = Math.max(...draw(3).map(p => Math.abs(p[0])));
+      expect(wide).toBeGreaterThan(HIPS.hips[build][0]);
+    });
+
     it(`keeps the cloth out of a thigh that comes up, ${who}`, () => {
       // The left thigh raised forward, as in a stride.
       const up = rest([0, 0, 0], 0, build);

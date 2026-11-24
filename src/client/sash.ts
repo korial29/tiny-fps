@@ -116,8 +116,12 @@ export const TABARD = {
 };
 /**
  * The skirt: its panels' two ends round the waist from the front (degrees: one over each hip, one
- * round the back, split at the sides), its length, how far it flares, how far off the body it is
- * hung and is kept (more: a piece is straight, the body under it round); its columns a panel and its pieces down (close, near, far).
+ * round the back, split at the sides), its length, how far it flares in front and behind (not at
+ * the sides: the hands hang there, their palms 23 cm from the middle), how far off the body it is
+ * hung and is kept (more: a piece is straight, the body under it round), and how much less at the
+ * very sides, where the thigh's capsule is wider than the thigh (the user, 2026-11-24: narrower,
+ * clear of the hands); its columns a panel and its pieces down
+ * (close, near, far).
  */
 export const SKIRT = {
   panels: [
@@ -129,6 +133,7 @@ export const SKIRT = {
   flare: 0.05,
   off: 0.006,
   clear: 0.016,
+  side: 0.028,
   cols: [
     [6, 9],
     [4, 6],
@@ -485,9 +490,9 @@ export const drape = (
         uz,
         nr,
         SKIRT.len,
-        SKIRT.flare,
+        SKIRT.flare * uz * uz,
         SKIRT.off,
-        SKIRT.clear,
+        SKIRT.clear - SKIRT.side * ux ** 6,
         0,
         c * 1.7 + pi,
       );

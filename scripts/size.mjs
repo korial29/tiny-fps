@@ -78,7 +78,9 @@ const BUDGETS = [
   // 270,336 B for the polished harpoon (#376, 2026-11-24).
   // 272,896 B: 2,560 B more for the Hunter's dreadlocks, netted sleeves, yoke, necklace, spots,
   // side armour and olive hide (the user, 2026-11-24: raise it, 268,800 to 271,360 before #376).
-  { file: 'dist/index.js', max: 272_896 },
+  // 274,432 B: 1,536 B more for the Hunter's drum-fed shoulder cannon, its jointed arm and its
+  // foot moulded to the shoulder plate (the user, 2026-11-24: raise it).
+  { file: 'dist/index.js', max: 274_432 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

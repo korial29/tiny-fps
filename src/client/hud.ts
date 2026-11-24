@@ -693,8 +693,14 @@ export const clock = (s: number): string => `${Math.floor(s / 60)}:${`${s % 60}`
 /**
  * Appends the HUD to `screen`, whose stylesheet has HUD_CSS. `play` is the title screen's button:
  * the click that starts the game (the panel takes its other clicks, the view round it plays too).
+ * `recast`: what the pause menu's Character opens instead of the panel's part (the whole-page screen).
  */
-export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {}): Hud => {
+export const createHud = (
+  screen: HTMLElement,
+  play = () => {},
+  quit = () => {},
+  recast?: () => void,
+): Hud => {
   screen.insertAdjacentHTML(
     'beforeend',
     `<aside hidden><span class="pm"><strong>PAUSED</strong>${PAUSE.map(t => `<button>${t}</button>`).join('')}</span>` +
@@ -801,7 +807,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
   ];
   resume.onclick = play;
   controls.onclick = () => view('controls');
-  character.onclick = () => view('character');
+  character.onclick = recast ?? (() => view('character'));
   sound.onclick = () => view('audio');
   leave.onclick = quit;
   // The Audio panel: each slider sets its bus live; Reset gives back the mix as made.

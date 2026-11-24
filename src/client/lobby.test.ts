@@ -78,6 +78,48 @@ describe('the character screen', () => {
     expect(q('h1').textContent).toBe('Ninja');
   });
 
+  it('opens again in a match on what the player wears, with no picture and no renderer', () => {
+    const [start, back] = [vi.fn(), vi.fn()];
+    const raf = vi.spyOn(globalThis, 'requestAnimationFrame');
+    // The last visit's choice is not what he wears now.
+    localStorage.setItem('tiny-fps-cast', JSON.stringify({ body: 0, role: ROLE.MARINE }));
+    createLobby(host, HIGHLINE, start, {
+      now: { body: 1, tone: 2, hair: undefined, role: ROLE.NINJA },
+      back,
+    });
+    expect(q('h1').textContent).toBe('Ninja');
+    expect(group('Body').map(b => b.getAttribute('aria-checked'))).toEqual(['false', 'true']);
+    expect(q('.go').textContent).toBe('Apply');
+    expect(q('.lb').classList.contains('ag')).toBe(true);
+    vi.advanceTimersByTime(1000);
+    // Nothing is drawn: no frame asked, no context made.
+    expect(raf).not.toHaveBeenCalled();
+    expect(HTMLCanvasElement.prototype.getContext).not.toHaveBeenCalled();
+    group('Class')[0].click();
+    q('.go').click();
+    expect(start).toHaveBeenCalledWith({ body: 1, tone: 2, hair: 0, role: ROLE.MARINE });
+    expect(back).not.toHaveBeenCalled();
+    expect(host.children).toHaveLength(0);
+  });
+
+  it('goes back from a match with Back or Escape, nothing chosen', () => {
+    const [start, back] = [vi.fn(), vi.fn()];
+    createLobby(host, HIGHLINE, start, { now: { body: 0 }, back });
+    group('Class')[1].click();
+    q('.bk').click();
+    expect(host.children).toHaveLength(0);
+    createLobby(host, HIGHLINE, start, { now: { body: 0 }, back });
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    expect(host.children).toHaveLength(0);
+    expect(back).toHaveBeenCalledTimes(2);
+    expect(start).not.toHaveBeenCalled();
+    // Before a match there is no way back.
+    createLobby(host, HIGHLINE, start);
+    expect(shadow().querySelector('.bk')).toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape' }));
+    expect(host.children).toHaveLength(1);
+  });
+
   it('joins the room only on Start, with the whole choice', () => {
     const sent: string[] = [];
     const sock: SocketLike = {

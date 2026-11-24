@@ -343,6 +343,19 @@ describe('createHud', () => {
       expect(v()).toBe('pause');
     });
 
+    it("hands the pause menu's Character to the whole-page screen when the game has one", () => {
+      const recast = vi.fn();
+      screen = document.createElement('div');
+      hud = createHud(screen, undefined, undefined, recast);
+      hud.title('', HIGHLINE.name!);
+      hud.paused(true);
+      show();
+      screen.querySelectorAll<HTMLElement>('.pm button')[2].click();
+      expect(recast).toHaveBeenCalledOnce();
+      // The panel's own part stays shut.
+      expect(menu().dataset.v).toBe('pause');
+    });
+
     it('sums the mode up in a few lines: the goal, the flag at home, the score and the time of a match', () => {
       show();
       const mode = q('aside blockquote');

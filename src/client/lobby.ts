@@ -133,6 +133,11 @@ const CSS =
   `.go{grid-area:go;justify-self:center;min-width:min(320px,80vw);padding:clamp(12px,2vh,18px) 48px;border:0;background:linear-gradient(#ff9a4a,#e8590c);box-shadow:0 10px 30px -8px #e8590ccc;` +
   `font:900 clamp(18px,3vh,24px)/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#fff}.go:hover{filter:brightness(1.1)}` +
   // The renderer's own canvas: the size of the picture, under it, never seen (portrait() copies from it).
+  // In a match (Again): no pictures (no second renderer beside the game's, the user, 2026-11-25),
+  // the class's name and its lists in the middle, and the way back, left of Apply.
+  // The logo's place stays, empty: the page may show something of its own there (the demo's bar).
+  `.ag h6{visibility:hidden}.ag figure,.ag .tl canvas{display:none}.ag .tl button{grid-template:1fr/auto 1fr;padding-left:16px;max-height:64px}.ag .tl b,.ag .tl small{align-self:center}.ag main{grid-template-rows:auto auto;align-content:center;gap:clamp(18px,5vh,44px)}` +
+  `.bk{grid-area:go;justify-self:start;align-self:center;padding:10px 14px;font-size:15px;font-weight:700;color:#8d9aa7}.bk:hover{color:#fff}` +
   `.gl{position:absolute;left:0;top:0;visibility:hidden;pointer-events:none}`;
 
 const load = (): Partial<Cast> => {
@@ -148,17 +153,32 @@ export interface Lobby {
 }
 
 /**
+ * The screen opened again in a match, from the pause menu (the user, 2026-11-25): over the game,
+ * on what the player wears `now`, without the pictures, Apply for Start and a way `back` (Escape too) that
+ * changes nothing.
+ */
+export interface Again {
+  now: Partial<Cast>;
+  back(): void;
+}
+
+/**
  * Shows the character screen in `container` for the map `def` (the classes it offers, its sky);
- * `start` hears the whole choice on Start, after the screen is gone.
+ * `start` hears the whole choice on Start, after the screen is gone. `again`: opened in a match.
  */
 export const createLobby = (
   container: HTMLElement,
   def: WorldDef,
   start: (c: Cast) => void,
+  again?: Again,
 ): Lobby => {
   const roles = rolesOf(def);
-  const was = load();
-  let c: Cast = { body: 0, tone: 0, hair: 0, role: roles[0], ...was };
+  const was = again?.now ?? load();
+  let c: Cast = { body: 0, tone: 0, hair: 0, role: roles[0] };
+  // A part the player never picked is undefined in a match: the default stays.
+  for (const k of ['body', 'tone', 'hair', 'role'] as const) {
+    c[k] = was[k] ?? c[k]!;
+  }
   c.body = +!!c.body;
   if (!roles.includes(c.role ?? -1)) {
     c.role = roles[0];
@@ -167,11 +187,14 @@ export const createLobby = (
     c.hair = 0;
   }
   const host = document.createElement('div');
-  host.style.cssText = 'width:100%;height:100%';
+  // In a match the host is a child of the game's screen, over its menu and its death screen.
+  host.style.cssText = again
+    ? 'position:absolute;inset:0;z-index:4;width:100%;height:100%;background:none;text-shadow:none'
+    : 'width:100%;height:100%';
   const root = host.attachShadow({ mode: 'open' });
   const radio = (label: string, extra = '') => `<button role="radio" ${extra}>${label}</button>`;
   root.innerHTML =
-    `<style>${CSS}</style><div class="lb"><h6>TINY FPS</h6>` +
+    `<style>${CSS}</style><div class="lb${again ? ' ag' : ''}"><h6>TINY FPS</h6>` +
     `<div class="side"><div role="radiogroup" aria-label="Class" class="tl">${roles
       .map(r =>
         radio(
@@ -186,7 +209,8 @@ export const createLobby = (
     `<div><h4>Hair</h4><div role="radiogroup" aria-label="Hair"></div></div></div></div>` +
     `<main><h1></h1><figure><canvas></canvas><span>Loading</span></figure>` +
     `<div class="tr"><div><h4>Strengths</h4><ul class="p"></ul></div><div><h4>Weaknesses</h4><ul class="c"></ul></div></div></main>` +
-    `<button class="go">Start</button><canvas class="gl"></canvas></div>`;
+    (again ? `<button class="bk">← Back</button>` : '') +
+    `<button class="go">${again ? 'Apply' : 'Start'}</button><canvas class="gl"></canvas></div>`;
   container.append(host);
   const $ = <T extends Element>(sel: string) => root.querySelector<T>(sel)!;
   const [tiles, bodies, skins, hairs] = [
@@ -301,7 +325,9 @@ export const createLobby = (
     }
   };
   const seen = new ResizeObserver(fit);
-  seen.observe(figure);
+  if (!again) {
+    seen.observe(figure);
+  }
   const color = TEAM_COLOR[0];
   const lookOf = (role: number): Choice => ({ ...c, role });
   const tick = (now: number) => {
@@ -362,7 +388,11 @@ export const createLobby = (
       }
     }
   };
+  // In a match the screen draws nothing: the game's renderer stays the only one.
   const timer = setTimeout(() => {
+    if (again) {
+      return;
+    }
     fit();
     try {
       rd = createRenderer(gl, studio);
@@ -370,7 +400,9 @@ export const createLobby = (
       loader.textContent = 'WebGL2 is not available';
     }
   }, 50);
-  raf = requestAnimationFrame(tick);
+  if (!again) {
+    raf = requestAnimationFrame(tick);
+  }
 
   let gone = false;
   const destroy = () => {
@@ -394,13 +426,22 @@ export const createLobby = (
     destroy();
     start(c);
   };
+  const back = () => {
+    destroy();
+    again?.back();
+  };
   // Enter starts from anywhere but a button, which Enter presses.
   const onKey = (e: KeyboardEvent) => {
     if (e.code == 'Enter' && !(e.composedPath()[0] instanceof HTMLButtonElement)) {
       go();
+    } else if (e.code == 'Escape' && again) {
+      back();
     }
   };
   document.addEventListener('keydown', onKey);
+  if (again) {
+    $<HTMLElement>('.bk').onclick = back;
+  }
   $<HTMLElement>('.go').onclick = go;
   return { destroy };
 };

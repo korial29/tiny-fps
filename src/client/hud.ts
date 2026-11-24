@@ -346,7 +346,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
 ];
 
 /** A skin tone (TONES, linear) as a CSS colour. */
-const swatch = (t: number[]) =>
+export const swatch = (t: number[]) =>
   `rgb(${t.map(v => Math.round(255 * Math.min(1, v) ** (1 / 2.2))).join()})`;
 
 /** Capture the flag in a few lines, with the room's default rules. */
@@ -518,9 +518,10 @@ export interface Hud {
   title(status: string, name: string, tag?: string, lore?: string): void;
   /**
    * Whether the player has been in the game: then the title screen opens on the pause menu (PAUSE)
-   * rather than the whole panel, until he plays again.
+   * rather than the whole panel, until he plays again. `fresh`: he has not played yet (he comes from
+   * the character screen), its first button reads Play.
    */
-  paused(on: boolean): void;
+  paused(on: boolean, fresh?: boolean): void;
   /**
    * The character on the title screen: `pick` is told the whole choice (the body, the skin, the
    * haircut, the class) each time the player changes a part of it. Returns the canvas of his live
@@ -788,6 +789,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
     menu.dataset.v = v;
     tabs[Math.max(0, ['character', 'controls', 'audio'].indexOf(v))].click();
   };
+  const paused = one('.pm strong');
   const [resume, controls, character, sound, leave] = [
     ...menu.querySelectorAll<HTMLElement>('.pm button'),
   ];
@@ -956,11 +958,13 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       set(lore, story);
       set(status, text);
     },
-    paused(on) {
+    paused(on, fresh = false) {
       if (on != started && !on) {
         view('');
       }
       started = on;
+      set(resume, fresh ? 'Play' : PAUSE[0]);
+      set(paused, fresh ? 'READY' : 'PAUSED');
     },
     heads: () => [...groups[2].querySelectorAll('canvas')],
     cast(pick, preview) {

@@ -60,6 +60,7 @@ import { lamps } from './satellite';
 import { packsOf } from './props';
 import { FACE, HEAD, PORTRAIT, createRenderer } from './render';
 import { STEPS, createLoader } from './loading';
+import { createLobby } from './lobby';
 import { createWrecks } from './wreck';
 import type { createTargeting } from './targeting';
 import { targetingPhysics } from './targeting-physics';
@@ -80,10 +81,18 @@ export interface TinyFpsOptions {
   map?: string;
   /** The character to play (BODY): the man (0, the default) or the woman (1). The look only. */
   body?: number;
+  /**
+   * Opens on the character screen (lobby.ts): the room is joined and the map loads only once its
+   * Start is pressed, with the character picked there. Without it, the room is joined at once.
+   */
+  cast?: boolean;
 }
 
-/** quit: the player left from the pause menu (Escape, then Quit); the page decides where he goes. */
-export type TinyFpsEvent = 'roster' | 'open' | 'close' | 'quit';
+/**
+ * quit: the player left from the pause menu (Escape, then Quit); the page decides where he goes.
+ * start: the character screen's Start (TinyFpsOptions.cast), the map loading from then on.
+ */
+export type TinyFpsEvent = 'roster' | 'open' | 'close' | 'quit' | 'start';
 
 export interface TinyFps {
   on(ev: TinyFpsEvent, cb: () => void): void;
@@ -122,6 +131,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     open: [],
     close: [],
     quit: [],
+    start: [],
   };
   const emit = (ev: TinyFpsEvent) => listeners[ev].forEach(cb => cb());
   const ws = opts.socket ?? (new WebSocket(opts.url!) as unknown as SocketLike);
@@ -131,9 +141,21 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   /** The connection is open, and the last roster as it came: a new scene gets both. */
   let up = false;
   let told: string | undefined;
-  let port: SocketLike;
-  let scene: { destroy(): void };
+  let port: SocketLike | undefined;
+  let scene: { destroy(): void } | undefined;
   let dead = false;
+  /** What the player plays, told in the join: none yet while the character screen shows. */
+  let picked: (Choice & { body: number }) | undefined = opts.cast
+    ? undefined
+    : { body: opts.body ?? 0 };
+  const join = () =>
+    ws.send(
+      JSON.stringify({
+        t: 'join',
+        name: opts.name,
+        ...(picked!.body || Object.keys(picked!).length > 1 ? picked : {}),
+      } satisfies ClientText),
+    );
   const mount = () => {
     const p: SocketLike = {
       binaryType: 'arraybuffer',
@@ -157,7 +179,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (live) {
         return;
       }
-      live = play(container, key, p, () => emit('quit'), loader.step, period);
+      live = play(container, key, p, () => emit('quit'), loader.step, period, !!opts.cast);
       // The game first in its container, the loading screen over it.
       container.append(loader.el);
       if (up) {
@@ -182,19 +204,15 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   };
   ws.onopen = () => {
     up = true;
-    ws.send(
-      JSON.stringify({
-        t: 'join',
-        name: opts.name,
-        ...(opts.body ? { body: opts.body } : {}),
-      } satisfies ClientText),
-    );
-    port.onopen?.();
+    if (picked) {
+      join();
+    }
+    port?.onopen?.();
     emit('open');
   };
   ws.onclose = () => {
     up = false;
-    port.onclose?.();
+    port?.onclose?.();
     emit('close');
   };
   ws.onmessage = ev => {
@@ -203,18 +221,27 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       [told, roster] = [ev.data as string, m.players];
       if (mapKey(m.map) != map) {
         map = mapKey(m.map);
-        scene.destroy();
+        scene?.destroy();
         mount();
         emit('roster');
         return;
       }
     }
-    port.onmessage?.(ev);
+    port?.onmessage?.(ev);
     if (m?.t == 'roster') {
       emit('roster');
     }
   };
-  mount();
+  const lobby = opts.cast
+    ? createLobby(container, mapOf(map), c => {
+        picked = c;
+        if (up) {
+          join();
+        }
+        mount();
+        emit('start');
+      })
+    : (mount(), undefined);
   return {
     on: (ev, cb) => void listeners[ev].push(cb),
     players: () => roster,
@@ -223,7 +250,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         return;
       }
       dead = true;
-      scene.destroy();
+      lobby?.destroy();
+      scene?.destroy();
       ws.onopen = ws.onclose = ws.onmessage = null;
       ws.close();
     },
@@ -241,6 +269,7 @@ const play = (
   quit = () => {},
   progress: (step: number) => void = () => {},
   period?: number,
+  cast = false,
 ): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
@@ -267,8 +296,12 @@ const play = (
       quit();
     },
   );
-  /** The player has been in the game: Escape then opens the pause menu. */
-  let started = false;
+  /**
+   * The player has been in the game: Escape then opens the pause menu. Coming from the character
+   * screen he has picked already: the title screen is the pause menu, its first button Play.
+   */
+  let started = cast;
+  let played = false;
 
   const world = build(mapOf(key));
   let targeting: ReturnType<typeof createTargeting> | undefined;
@@ -1293,8 +1326,9 @@ const play = (
       }
     }
 
-    started ||= ctl.locked();
-    hud.paused(started);
+    played ||= ctl.locked();
+    started ||= played;
+    hud.paused(started, !played);
     hud.title(
       msg ||
         (!open

@@ -127,6 +127,8 @@ const join = () => {
     name,
     map,
     body: q.get('body') == '1' ? 1 : 0,
+    // The character screen first, the map loading after its Start (the user, 2026-11-24); ?cast=0 skips it.
+    cast: q.get('cast') != '0',
     ...(server
       ? { url }
       : {
@@ -138,6 +140,9 @@ const join = () => {
         }),
   });
   status.textContent = server ? `Playing on ${url}` : 'Playing locally';
+  const bar = $('bar');
+  bar.classList.toggle('cast', q.get('cast') != '0');
+  game.on('start', () => bar.classList.remove('cast'));
   game.on('close', () => (status.textContent = 'Disconnected'));
   // Quit, from the game's pause menu: back to this page's menu.
   game.on('quit', leave);

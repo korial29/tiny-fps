@@ -1,7 +1,7 @@
 // Web Audio: the sounds of sfx.ts placed in 3D around the listener (HRTF, fainter with distance by
 // the inverse law), their levels in dB, and the music loop.
 import type { Vec3 } from './mesh';
-import { LAYERS, LOOPED, MUSIC_RATE, RATE, music, render, seam } from './sfx';
+import { LAYERS, LOOPED, MUSIC_RATE, RATE, anthem, music, render, seam } from './sfx';
 import type { Voice } from './sfx';
 import { CAST } from './voice/cast';
 import { CLIPS } from './voice/clips';
@@ -15,7 +15,7 @@ export interface Loop {
 export interface Audio {
   /**
    * Starts the AudioContext on a user gesture (browsers keep it suspended until one); the first
-   * call also renders the sound buffers and starts the music. Later calls do nothing.
+   * call also renders the sound buffers and starts the menus' theme. Later calls do nothing.
    */
   unlock(): void;
   /** Where the listener is and looks, each frame (yaw as a player's: 0 looks toward -z). */
@@ -50,6 +50,11 @@ export interface Audio {
   loop(id: number): Loop;
   /** Fades the music out (true) or back in (false), the other sounds untouched: the Hunter's visions. */
   hush(on: boolean): void;
+  /**
+   * The menus' theme (true, as at first) or the map's music (false), crossfaded; the map's is
+   * rendered on the first false, so the first click renders one song only.
+   */
+  menu(on: boolean): void;
   /** Mutes or unmutes everything, music included. */
   mute(on: boolean): void;
   readonly muted: boolean;
@@ -84,7 +89,7 @@ export const GROUP =
   '2442222' +
   '00';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
-let mixed = () => {};
+let mixed: (fade?: number) => void = () => {};
 /** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */
 export const mix = (i?: number, db = 0) => {
   if (i === undefined) {
@@ -154,6 +159,7 @@ const silent = (): Audio => {
     say: () => {},
     speak: () => false,
     hush: () => {},
+    menu: () => {},
     mute: on => {
       muted = on;
     },
@@ -169,6 +175,7 @@ export const createAudio = (
   sprites = SPRITES,
   song = music,
   voiced = VOICED,
+  theme = anthem,
 ): Audio => {
   let ctx: AudioContext;
   try {
@@ -184,6 +191,8 @@ export const createAudio = (
   };
   const master = out(ctx.destination);
   const bed = out(master, MUSIC);
+  /** The menus' theme's bus, beside the map's music on `bed`. */
+  const title = out(master, 0);
   /** Indexed by sound id; empty until unlock. */
   const bufs: AudioBuffer[] = [];
   let started = false;
@@ -197,6 +206,9 @@ export const createAudio = (
   let talking = false;
   /** The music faded out under a Hunter's vision (hush()). */
   let hushed = false;
+  /** The menus' theme plays rather than the map's music (menu()); whether that has started. */
+  let menu = true;
+  let song0 = false;
   /** The players' voices once decoded, and the radio's noise, made on its first line. */
   let cast: AudioBuffer | undefined;
   let noise: AudioBuffer | undefined;
@@ -212,12 +224,12 @@ export const createAudio = (
       }
     }
   };
-  mixed = () =>
-    bed.gain.setTargetAtTime(
-      hushed ? 0 : (talking ? MUSIC * DUCK : MUSIC) * gain(LEVELS[6]),
-      ctx.currentTime,
-      hushed ? 0.3 : 0.15,
-    );
+  /** `fade` the time constant: 0.4 s for the crossfade between the theme and the map's music. */
+  mixed = (fade = 0.15) => {
+    const v = (talking ? MUSIC * DUCK : MUSIC) * gain(LEVELS[6]);
+    bed.gain.setTargetAtTime(hushed || menu ? 0 : v, ctx.currentTime, hushed ? 0.3 : fade);
+    title.gain.setTargetAtTime(menu ? v : 0, ctx.currentTime, fade);
+  };
   mixed();
   const next = () => {
     const id = lines.shift();
@@ -235,6 +247,19 @@ export const createAudio = (
     const b = ctx.createBuffer(1, samples.length, rate);
     b.getChannelData(0).set(samples);
     return b;
+  };
+  /** Renders `s` and loops it into `bus`; the map's music once only. */
+  const sing = (s: () => Float32Array, bus: GainNode) => {
+    if (s == song) {
+      if (song0) {
+        return;
+      }
+      song0 = true;
+    }
+    const m = source(buffer(s(), MUSIC_RATE));
+    m.loop = true;
+    m.connect(bus);
+    m.start();
   };
   const source = (b: AudioBuffer) => {
     const src = ctx.createBufferSource();
@@ -369,10 +394,10 @@ export const createAudio = (
           const s = render(id, layers);
           bufs[id] = buffer(LOOPED.includes(id) ? seam(s) : s);
         });
-        const m = source(buffer(song(), MUSIC_RATE));
-        m.loop = true;
-        m.connect(bed);
-        m.start();
+        sing(theme, title);
+        if (!menu) {
+          sing(song, bed);
+        }
         void decode(sprites)
           .then(b => (speech = b))
           .then(() => decode(voiced))
@@ -416,6 +441,15 @@ export const createAudio = (
           }
         },
       };
+    },
+    menu(on) {
+      if (on != menu) {
+        menu = on;
+        mixed(0.4);
+        if (!on && started) {
+          sing(song, bed);
+        }
+      }
     },
     hush(on) {
       if (on != hushed) {

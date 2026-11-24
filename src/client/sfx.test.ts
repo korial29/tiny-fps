@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { LAYERS, LOOPED, MUSIC_RATE, RATE, SONGS, SOUND, moon, music, render, seam } from './sfx';
+import {
+  LAYERS,
+  LOOPED,
+  MUSIC_RATE,
+  RATE,
+  SONGS,
+  SOUND,
+  anthem,
+  moon,
+  music,
+  render,
+  seam,
+} from './sfx';
 import type { Voice } from './sfx';
 
 const peak = (s: Float32Array) => s.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
@@ -487,6 +499,55 @@ describe('the moon\u2019s music', () => {
   it('is the moon\u2019s alone: every other map plays music()', () => {
     expect(SONGS.tranquility).toBe(moon);
     expect(SONGS.highline).toBeUndefined();
+  });
+});
+
+describe('the menus\u2019 theme (the user, 2026-11-24: 8-bit, rhythmic, a chord a bar or less)', () => {
+  // Best of three, as the moon's: about 50 ms alone, more on a loaded runner.
+  const times: number[] = [];
+  const m = Array.from({ length: 3 }, () => {
+    const t0 = performance.now();
+    const out = anthem();
+    times.push(performance.now() - t0);
+    return out;
+  })[0];
+
+  it('is deterministic', () => {
+    expect(Buffer.from(anthem().buffer).equals(Buffer.from(m.buffer))).toBe(true);
+  });
+
+  it('is thirty-two bars at 105 bpm, a whole number of samples a sixteenth', () => {
+    expect((m.length * 105 * 4) / (MUSIC_RATE * 60)).toBe(32 * 16);
+    expect((MUSIC_RATE * 15) % 105).toBe(0);
+    expect(m.length / MUSIC_RATE).toBeCloseTo(73, 0);
+  });
+
+  it('peaks as the moon\u2019s and sits a little under the other music', () => {
+    expect(peak(m)).toBeCloseTo(0.26, 5);
+    const ratio = rms(m) / rms(music());
+    expect(ratio).toBeGreaterThan(0.6);
+    expect(ratio).toBeLessThan(1);
+  });
+
+  it('loops without a jump: the step from the end to the start is no bigger than any other', () => {
+    let most = 0;
+    for (let i = 1; i < m.length; i++) {
+      most = Math.max(most, Math.abs(m[i] - m[i - 1]));
+    }
+    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThanOrEqual(most);
+  });
+
+  it('has no half like the other: each section its own lead and beat', () => {
+    const half = m.length / 2;
+    let diff = 0;
+    for (let i = 0; i < half; i++) {
+      diff += Math.abs(m[i] - m[i + half]);
+    }
+    expect(diff / half).toBeGreaterThan(0.01);
+  });
+
+  it('renders fast', () => {
+    expect(Math.min(...times)).toBeLessThan(1000);
   });
 });
 

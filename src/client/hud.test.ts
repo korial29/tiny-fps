@@ -976,8 +976,8 @@ describe('the gun on the HUD', () => {
     const lit = () =>
       [...slots().children].filter(k => k.classList.contains('a')).map(k => k.textContent);
 
-    it('has a gun glyph and a katana glyph, in the same place', () => {
-      expect(glyphs()).toHaveLength(2);
+    it('has a gun glyph, a katana glyph and the Hunter’s, in the same place', () => {
+      expect(glyphs()).toHaveLength(3);
       expect(ammo().querySelector('data')).not.toBeNull();
     });
 
@@ -1041,6 +1041,24 @@ describe('the gun on the HUD', () => {
       expect(lit()).toEqual(['2 harpoon']);
       hud.vitals(5, 30, true, true, 7, false, 6, false, 30);
       expect(lit()).toEqual(['1 blades']);
+    });
+
+    it('shows the Hunter’s own glyph of the weapon in hand, and none of his on a marine', () => {
+      const glyph = () => [0, 1, 2, 3].filter(i => ammo().classList.contains(`h${i}`));
+      hud.vitals(5, 30, true, true, 7, false, 6);
+      expect([ammo().classList.contains('h'), glyph()]).toEqual([false, []]);
+      hud.wear(BODY.MALE, { role: ROLE.HUNTER });
+      // The blades, the harpoon, the cannon and the disc, in his slots' order (the user, 2026-11-24).
+      for (const [args, i] of [
+        [[5, 30, true, true, 0, false, 6], 0],
+        [[5, 30, true, false, 0, false, 6], 1],
+        [[5, 30, true, false, 0, true, 6], 2],
+        [[5, 30, true, false, 0, false, 6, false, 0, true], 3],
+      ] as const) {
+        hud.vitals(...(args as unknown as Parameters<typeof hud.vitals>));
+        expect([ammo().classList.contains('h'), glyph()]).toEqual([true, [i]]);
+      }
+      expect(ammo().querySelectorAll('svg.h path')).toHaveLength(4);
     });
 
     it('counts nothing for the Hunter’s shoulder cannon, which spends nothing and is never empty', () => {

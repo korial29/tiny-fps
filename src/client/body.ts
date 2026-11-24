@@ -3038,11 +3038,12 @@ export const createBody = (world?: World): Body => {
           }
         }
         if (hunter) {
-          // The housing stays on the bracer; the blades slide out of it as they are taken, in
-          // time with their sound (combat.ts: after the press, on a first taking), and back in.
+          // The housing stays on the bracer; the blades slide out of it each time they are taken
+          // (the user, 2026-11-24: not only the first), once the arm is up, in time with their
+          // sound (combat.ts, shing()), and back in.
           wristHousing(out, s.pos[J.HAND_R], s.rot[J.FOREARM_R], 1, pieces);
           const extended = me?.wield
-            ? ease(clamp((since - Math.max(pressOf(1), 0)) / BLADE_EXTEND))
+            ? ease(clamp((since - pressAt(1)) / BLADE_EXTEND))
             : clamp(grasp * 1.5 - 0.5);
           if (extended > 0.01) {
             wristBlades(out, s.pos[J.HAND_R], s.rot[J.FOREARM_R], 1, extended, pieces);

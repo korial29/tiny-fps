@@ -237,6 +237,12 @@ export const HUD_CSS =
   `ul li.a{background:#fc3}li.a.e{display:none}li:not(.a)+li.a{margin-left:6px}` +
   `dl{right:12px;bottom:10px;display:flex;align-items:center;gap:10px}dl svg{width:38px;fill:#fff;filter:drop-shadow(0 1px 1px #000)}` +
   `dl.k svg:first-child,dl:not(.k) svg+svg,dl.k data,dl.k span,dl.b>:not(small){display:none}dl.w data{opacity:.35}dl.k svg{width:64px;fill:#8ef}dl.r svg{fill:#c9f}dl.r data{color:#dcf}dl.f svg{fill:#f86}dl.f data{color:#fdb}dl span::first-line{font-size:22px}` +
+  // The Hunter's own glyphs (the user, 2026-11-24): the one of the weapon in hand (h0 to h3, in his
+  // slots' order) in its colour: the blades' steel, the harpoon's bronze, the cannon's plasma red,
+  // the disc's silver. svg.h is the last svg, which `dl:not(.k) svg+svg` would hide.
+  `dl svg.h,dl.h svg{display:none}dl.h svg.h{display:block;width:52px;fill-rule:evenodd}dl.h svg.h path{display:none}` +
+  `dl.h0 .h :nth-child(1),dl.h1 .h :nth-child(2),dl.h2 .h :nth-child(3),dl.h3 .h :nth-child(4){display:inline}` +
+  `dl.h0 svg.h{fill:#8ef}dl.h1 svg.h{fill:#dcb27a}dl.h2 svg.h{fill:#f65}dl.h3 svg.h{fill:#cde}` +
   `dl small{position:absolute;bottom:100%;right:0;display:flex;gap:10px;font-size:11px;white-space:nowrap}dl kbd{font:inherit;opacity:.5}dl kbd.a{opacity:1}` +
   `dl data{font:900 clamp(30px,5vw,46px)/1 system-ui,sans-serif;font-variant-numeric:tabular-nums}dl.e data{color:#f66}` +
   `s{left:50%;top:50%;width:28px;height:28px;margin:-14px 0 0 -14px;` +
@@ -729,7 +735,7 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       `<ul>${'<li></li>'.repeat(HP_MAX)}${'<li class=a></li>'.repeat(ARMOR_MAX)}</ul><figure hidden><canvas width="${FW}" height="${FH}"></canvas></figure>` +
       `<dl hidden><svg viewBox="0 0 38 22"><path d="M1 7c3-5 13-7 22-4l7 3 3 1v4l-6 1-4 2-1 1-3 6h-5l2-7-5-1c-6-1-12-3-10-6z"/></svg>` +
       `<svg viewBox="0 0 38 22"><path d="M12 14.4C19 11.6 29 6.4 37 1c-3.6 7-14.4 13.4-24.4 16zM1 20.2l7-6.6 1.6 1.8-7 6.6zM7.6 12.4l3.2-1.4 2 4.6-3.2 1.4z"/></svg>` +
-      `<data></data><span></span><small><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd><kbd>5 fists</kbd></small></dl>` +
+      `<svg class=h viewBox="0 0 38 22"><path d="M1 8h9v7H1zM10 9.4 36 2l-4.6 4.3 2.6-.2L12 12zM10 13.6 36 17l-4.8 1.6 2.4.9L12 15.4z"/><path d="M1 8l7-1v7l-5 2-2-2zM8 7h19v6H8zM12 13h4l-1 6h-4zM27 9h6v2h-6zM33 6.5l5 3.5-5 3.5 1-3.5z"/><path d="M2 21v-4h9l3-5h5v-2h12l3 1.2v3.6L31 16H20l-2 3-4 2zM29 2.6a1.4 1.4 0 1 0 .01 0zM25.2 7.8a1.4 1.4 0 1 0 .01 0zM32.8 7.8a1.4 1.4 0 1 0 .01 0z"/><path d="M19 .5l3.5 4.2 3.9-1.1-.5 5.5 3.6 1.9-4.2 3.5 1.1 3.9-5.5-.5L19 21.5l-3.5-4.2-3.9 1.1.5-5.5L8.5 11l4.2-3.5-1.1-3.9 5.5.5zM19 8a3 3 0 1 0 .01 0z"/></svg><data></data><span></span><small><kbd>1 gun</kbd><kbd>2 katana</kbd><kbd>3 rail</kbd><kbd>4 rifle</kbd><kbd>5 fists</kbd></small></dl>` +
       `<s hidden></s><mark hidden></mark><sup></sup><ins hidden><i></i></ins>` +
       `<nav hidden><span></span><time></time><span></span><small></small><small></small></nav><var hidden></var><i class="hv" hidden><kbd>V</kbd><span></span></i>` +
       `<h1 hidden>FRAGS<span>0</span></h1><label hidden><canvas width="${COMM}" height="${COMM}"></canvas><span></span><i>${'<b></b>'.repeat(5)}</i></label><ol></ol><h2 hidden><span></span><small></small></h2>` +
@@ -1089,6 +1095,12 @@ export const createHud = (screen: HTMLElement, play = () => {}, quit = () => {})
       const cannon = hunter && (railed || rifled);
       ammo.classList.toggle('e', !k && !m && !cannon);
       ammo.classList.toggle('w', swapping);
+      // The Hunter's glyph, by his slot: the blades, the harpoon, the cannon, the disc.
+      const glyph = k ? 0 : railed ? 2 : rifled ? 3 : 1;
+      ammo.classList.toggle('h', hunter);
+      for (let i = 0; i < 4; i++) {
+        ammo.classList.toggle(`h${i}`, hunter && glyph == i);
+      }
       set(count, cannon ? '∞' : `${m}`);
       // The rest as the magazines it makes, full ones and an open one for a part, over its count.
       const rest = cannon ? 0 : Math.max(n - m, 0);

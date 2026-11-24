@@ -33,7 +33,7 @@ import { TRAIL, createBalls } from './balls';
 import { createTracer } from './beams';
 import type { Orb } from './beams';
 import { createCombat, dreadful, fired, sight, struck, swung, voiceOf } from './combat';
-import { aimed, focus, tip } from './gun';
+import { aimed, focus, pressAt, tip } from './gun';
 import type { Vec3 } from './mesh';
 import type { View } from './combat';
 import { SOUND } from './sfx';
@@ -1148,6 +1148,41 @@ describe('drawing and sheathing the katana', () => {
     expect(t.ids().filter(id => id === SOUND.HARPOON_RELOAD)).toHaveLength(1);
     expect(t.ids()).not.toContain(SOUND.EJECT);
     expect(t.ids()).not.toContain(SOUND.CLICK);
+  });
+
+  it('play the Hunter’s blades sliding out each time he takes them, after the press', () => {
+    const t = setup();
+    const combat = createCombat(
+      WORLD,
+      t.audio,
+      t.hud,
+      t.fx,
+      t.tracer,
+      t.ctl,
+      t.balls,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => true,
+    );
+    let now = 1000;
+    const frame = (p: PlayerState) => combat.frame(VIEW, p, [], 0, 1 / 60, (now += 1000 / 60));
+    const draws = () => t.ids().filter(id => id === SOUND.HUNTER_BLADE_DRAW).length;
+    // The harpoon in hand, then the blades, then the harpoon and the blades again (the user,
+    // 2026-11-24: not only the first time).
+    for (let take = 1; take <= 2; take++) {
+      for (let i = 0; i < 30; i++) {
+        frame(player({ ammo: 12, mag: 1, blade: true }));
+      }
+      frame(player({ ammo: 12, mag: 1, blade: true, wield: true }));
+      // Not at once: after the press, with the blades (body.ts).
+      expect(draws()).toBe(take - 1);
+      for (let i = 0; i < 60 * pressAt(1) + 2; i++) {
+        frame(player({ ammo: 12, mag: 1, blade: true, wield: true }));
+      }
+      expect(draws()).toBe(take);
+    }
   });
 
   it('play the draw for a katana picked up with no gun, which is in hand at once', () => {

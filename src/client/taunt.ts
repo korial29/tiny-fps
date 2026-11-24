@@ -4,7 +4,7 @@
 // his body's, by his id (a ninja's in Japanese), the same on every screen, and so are the lines he
 // picks.
 import { FRAG } from '../shared/protocol';
-import type { Audio } from './audio';
+import { type Audio, MIMIC } from './audio';
 import type { Vec3 } from './mesh';
 import { SOUND, secondsOf } from './sfx';
 import { CAST, KIND, LINES, NINJA, VOICES } from './voice/cast';
@@ -38,6 +38,17 @@ export const tauntOf = (speaker: number, how: number, n: number): number =>
     how == FRAG.FIST ? KIND.FISTS : how == FRAG.BLADE ? KIND.BLADE : KIND.TAUNT,
     speaker * 3 + n * 7,
   );
+
+/**
+ * What a Hunter says after his `n`th frag, in turn (the user, 2026-11-24: sounds and radio voices
+ * of his own): -1 the victim's own voice mimicked (a taunt of his, as the Predator says back what
+ * he heard), else a sound of his. A victim with no voice (a xenomorph, a Hunter) gets the next.
+ */
+export const HUNTER_CALLS = [-1, SOUND.HUNTER_CLICKS, SOUND.HUNTER_TAUNT, -1, SOUND.HUNTER_GROWL];
+
+/** The seconds a Hunter's mimicry of clip `clip` lasts at `pace` (audio.ts, speak()). */
+export const mimicSeconds = (clip: number, pace: number): number =>
+  (CAST[clip][1] + MIMIC.times * MIMIC.stutter) / (pace * MIMIC.rate);
 
 /** A line over the radio that began: who says it, and its seconds. */
 export interface Said {
@@ -80,7 +91,17 @@ export const createTaunts = (
    * The taunts waiting: when, who says it, the clip, and whether the own player hears it close
    * (his own) or over the radio (an ally's, or aimed at him).
    */
-  const due: { t: number; by: number; clip: number; close: boolean; radio: boolean }[] = [];
+  const due: {
+    t: number;
+    by: number;
+    clip: number;
+    /** The sound in place of a clip (clip -1): a xenomorph's roar, a Hunter's call. */
+    sound: number;
+    /** The clip is a Hunter's mimicry of his victim's voice. */
+    mimic: boolean;
+    close: boolean;
+    radio: boolean;
+  }[] = [];
   /** When each player last taunted. */
   const last = new Map<number, number>();
   return {
@@ -89,11 +110,21 @@ export const createTaunts = (
         return;
       }
       last.set(m.by, now);
-      const clip = beast(m.by) || hunter(m.by) ? -1 : tauntOf(speaker(m.by), m.how, m.n);
+      let clip = beast(m.by) || hunter(m.by) ? -1 : tauntOf(speaker(m.by), m.how, m.n);
+      let sound: number = SOUND.ROAR;
+      let mimic = false;
+      if (hunter(m.by)) {
+        const voiced = !beast(m.who) && !hunter(m.who);
+        const n = m.n % HUNTER_CALLS.length;
+        const call = HUNTER_CALLS[n] < 0 && !voiced ? HUNTER_CALLS[n + 1] : HUNTER_CALLS[n];
+        mimic = call < 0;
+        clip = mimic ? tauntOf(speaker(m.who), FRAG.GUN, m.n) : -1;
+        sound = call;
+      }
       const close = m.by == me;
       const radio =
         !close && (m.who == me || (team(m.by) !== undefined && team(m.by) === team(me)));
-      due.push({ t: now + wait, by: m.by, clip, close, radio });
+      due.push({ t: now + wait, by: m.by, clip, sound, mimic, close, radio });
     },
     frame(now, where) {
       const said: Said[] = [];
@@ -104,13 +135,22 @@ export const createTaunts = (
         }
         due.splice(i, 1);
         const p = d.close || d.radio ? undefined : where(d.by);
+        const pace = paceOf(d.by);
         if (d.clip < 0) {
-          const sound = hunter(d.by) ? SOUND.HUNTER_TAUNT : SOUND.ROAR;
+          const sound = d.sound;
           if (d.radio && audio.play) {
             audio.play(sound, undefined, -3.1, paceOf(d.by), true);
             said.push({ by: d.by, s: secondsOf(sound) / paceOf(d.by) });
           } else if (d.close || p) {
             audio.play?.(sound, p, p ? 0 : -3.1, paceOf(d.by));
+          }
+        } else if (d.mimic) {
+          if (d.radio) {
+            if (audio.speak(d.clip, undefined, -3.1, pace, true, true)) {
+              said.push({ by: d.by, s: mimicSeconds(d.clip, pace) });
+            }
+          } else if (d.close || p) {
+            audio.speak(d.clip, p && [p[0], p[1] + MOUTH, p[2]], p ? 0 : -2.5, pace, false, true);
           }
         } else if (d.close) {
           audio.speak(d.clip, undefined, -2.5, paceOf(d.by));

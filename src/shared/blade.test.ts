@@ -483,26 +483,24 @@ describe('the katana racks of the maps', () => {
   it.each([
     ['HIGHLINE', HIGHLINE],
     ['ROOFTOPS', ROOFTOPS],
-  ])(
-    'on %s a player standing at his team’s takes the katana, and only his own team’s',
-    (_, def) => {
-      const w = build(def);
-      for (const team of [0, 1]) {
-        const [x, y, z] = def.teams[team].blade!;
-        for (const [who, took] of [
-          [team, true],
-          [1 - team, false],
-        ] as const) {
-          const p = Object.assign(spawn(0, w, 0, who), { x, y, z });
-          step(p, onWire({ keys: 0, yaw: 0, pitch: 0, seq: 0 }), w, who);
-          // The floor is under his feet: he stands on the rack's top, not falling.
-          expect(p.ground, `team ${who} at ${team}'s rack`).toBe(true);
-          expect(p.y).toBe(Math.fround(y));
-          expect(!!p.blade, `team ${who} at ${team}'s rack`).toBe(took);
-        }
+  ])('on %s a player of either team standing at a katana rack takes the katana', (_, def) => {
+    const w = build(def);
+    for (const team of [0, 1]) {
+      const [x, y, z] = def.teams[team].blade!;
+      for (const [who, took] of [
+        [team, true],
+        // Every rack serves both teams (the user, 2026-11-24).
+        [1 - team, true],
+      ] as const) {
+        const p = Object.assign(spawn(0, w, 0, who), { x, y, z });
+        step(p, onWire({ keys: 0, yaw: 0, pitch: 0, seq: 0 }), w, who);
+        // The floor is under his feet: he stands on the rack's top, not falling.
+        expect(p.ground, `team ${who} at ${team}'s rack`).toBe(true);
+        expect(p.y).toBe(Math.fround(y));
+        expect(!!p.blade, `team ${who} at ${team}'s rack`).toBe(took);
       }
-    },
-  );
+    }
+  });
 });
 
 describe('the special cuts', () => {

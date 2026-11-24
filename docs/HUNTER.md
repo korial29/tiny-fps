@@ -61,6 +61,15 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   meets (`body.ts`), on its post, which stands on the left shoulder and comes into the view from
   its bottom left corner (`SHOULDER`, `postVertices()`). Its shots are seen to leave from its muzzle in both views. With it, his hands
   hold nothing (`handsFree()`).
+- **Shape.** After a reference picture (the user, 2026-11-24), in the size of the cannon it
+  replaces and with the same hinge and muzzle: a chamfered receiver (`hull()`) with a stepped
+  housing, a finned barrel to a collar round a dark bore, and a drum on its side at the back with
+  treads and bolts (`drum()`). It stands on a jointed arm (`CANNON_ELBOW`, part `Laser knuckle`)
+  whose foot turns in a turret on a boss raised out of the left shoulder plate: the boss's skirt
+  follows the plate's own surface (`plateTop()`). The far level leaves out the knuckle, the turret,
+  the housing, the fore-end and the small parts; the gasket, the studs and the turret's teeth show
+  only from close. In the own view the knuckle keeps its shape at its place along the stretched
+  arm (`postVertices()`).
 - **Tracking sound.** After the first 5 s of a Predator target-lock clip: on a new target three dry
   clicks round 700 Hz 75 ms apart and a breath of noise (`SOUND.HUNTER_TRACK`), then a looped
   electronic hum at 1.5 kHz over 1.2 kHz, each buzzing at 65 Hz, until the lock

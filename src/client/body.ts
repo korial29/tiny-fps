@@ -92,6 +92,7 @@ import { JOINT as J, PARENT, REST, axis, mul, rest, slerp, solve, turn as spin }
 import type { Pose, Quat } from './rig';
 import { armor } from './armor';
 import {
+  CANNON_ELBOW,
   CANNON_FOLD,
   CANNON_HINGE,
   CANNON_MUZZLE,
@@ -400,6 +401,7 @@ const hunterView = (build: number): HunterViewPart[] => {
     'Left bracer',
     'Laser saddle',
     'Laser mount',
+    'Laser knuckle',
     // Not the shoulder plates: beside the eye, they showed grey in the view's top corners.
     'Belt',
     'Flying disc',
@@ -492,7 +494,8 @@ const hingeAt = (f: number): Vec3 => {
 };
 /**
  * The post's vertices for the own view, made once: the model's 'Laser mount' stretched to ARM
- * along +y, its top at the origin, on its 'Laser saddle', both a little stouter.
+ * along +y, its top at the origin, on its 'Laser saddle', both a little stouter; its 'Laser
+ * knuckle' keeps its shape at its place along the arm.
  */
 let postBuilt: number[] | undefined;
 const postVertices = (): number[] => {
@@ -507,18 +510,22 @@ const postVertices = (): number[] => {
       e1[0] * u[1] - e1[1] * u[0],
     ];
     postBuilt = [];
-    for (const [name, from, stretch, drop] of [
-      ['Laser mount', CANNON_HINGE, ARM / long, 0],
-      ['Laser saddle', POST_BASE, 1, -ARM],
+    for (const [name, from, stretch] of [
+      ['Laser mount', CANNON_HINGE, ARM / long],
+      ['Laser knuckle', CANNON_ELBOW, 1],
+      ['Laser saddle', POST_BASE, 1],
     ] as const) {
+      // Where `from` goes: the arm's length stretched, so each part keeps its place along it.
+      const c = sub(from, CANNON_HINGE);
+      const at = (dot(c, u) * ARM) / long;
       const v = parts[name];
       for (let i = 0; i < v.length; i += STRIDE) {
         const d = sub([v[i], v[i + 1], v[i + 2]], from);
         const n: Vec3 = [v[i + 3], v[i + 4], v[i + 5]];
         postBuilt.push(
-          dot(d, e1) * POST_THICK,
-          dot(d, u) * stretch + drop,
-          dot(d, e2) * POST_THICK,
+          (dot(c, e1) + dot(d, e1)) * POST_THICK,
+          dot(d, u) * stretch + at,
+          (dot(c, e2) + dot(d, e2)) * POST_THICK,
           dot(n, e1),
           dot(n, u),
           dot(n, e2),

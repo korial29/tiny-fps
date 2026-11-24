@@ -64,6 +64,8 @@ const sized = ([x, y, z]: Vec3): Vec3 => [x * stature * 0.9, y * stature, z * st
 const HINGE: Vec3 = [-0.221, 1.637, 0.06];
 /** The foot of the cannon's post, sculpted (CANNON_POST in the finished model). */
 const POST: Vec3 = [-0.233, 1.54, 0.082];
+/** The joint of the cannon's arm, sculpted (CANNON_ELBOW in the finished model). */
+const ELBOW: Vec3 = [-0.227, 1.586, 0.099];
 const bell = (x: number) => Math.exp(-x * x);
 const built: Partial<Record<0 | 1 | 2, Record<string, number[]>>> = {};
 
@@ -903,8 +905,6 @@ export function hunter(lod: 0 | 1 | 2) {
       }
     }
   }
-  part('Laser saddle');
-  limb([-0.228, 1.48, 0.079], [-0.233, 1.552, 0.082], [0.045, 0.049, 0.029], graphite, 1.05, TWILL);
   const alloy: Vec3 = [0.42, 0.425, 0.405];
   const rim: Vec3 = [0.36, 0.365, 0.35];
   // Angles run from the wearer's left to right across the face. Each panel
@@ -1647,30 +1647,430 @@ export function hunter(lod: 0 | 1 | 2) {
       ...twin.slice(i + 6, i + STRIDE),
     );
   }
+  // The shoulder cannon, after the user's reference (2026-11-24) and no bigger than the one it
+  // replaces: a slab-sided receiver with a short fat barrel and a drum on its side at the back,
+  // on a jointed arm over a wedge of a saddle.
+  /** `surface` as a panel whose faces look away from `core`. */
+  function facing(surface: Surface, cols: number, rows: number, tint: Vec3, core: Vec3) {
+    const du = sub(surface(0.501, 0.5), surface(0.499, 0.5));
+    const dv = sub(surface(0.5, 0.501), surface(0.5, 0.499));
+    const d = sub(surface(0.5, 0.5), core);
+    const side =
+      (dv[1] * du[2] - dv[2] * du[1]) * d[0] +
+      (dv[2] * du[0] - dv[0] * du[2]) * d[1] +
+      (dv[0] * du[1] - dv[1] * du[0]) * d[2];
+    panel(surface, cols, rows, tint, side < 0, TWILL);
+  }
+  const blend = (p: Vec3, q: Vec3, t: number): Vec3 => p.map((x, k) => x + (q[k] - x) * t) as Vec3;
+  /** A flat-sided block through two rectangles, each four corners in the same order around. */
+  function block(a: Vec3[], b: Vec3[], tint: Vec3) {
+    const core = [0, 1, 2].map(k => [...a, ...b].reduce((sum, p) => sum + p[k], 0) / 8) as Vec3;
+    const face = (p: Vec3, q: Vec3, r: Vec3, s: Vec3) =>
+      facing((u, v) => blend(blend(p, q, u), blend(r, s, u), v), 1, 1, tint, core);
+    face(a[0], a[1], a[3], a[2]);
+    face(b[0], b[1], b[3], b[2]);
+    for (let i = 0; i < 4; i++) {
+      face(a[i], a[(i + 1) % 4], b[i], b[(i + 1) % 4]);
+    }
+  }
+  type Frame = (t: number, side: number, rise: number) => Vec3;
+  const cross = (p: Vec3, q: Vec3): Vec3 => [
+    p[1] * q[2] - p[2] * q[1],
+    p[2] * q[0] - p[0] * q[2],
+    p[0] * q[1] - p[1] * q[0],
+  ];
+  /** Points from `a` (t = 0) to `b` (t = 1), offset to the side (along × `ref`) and up from it. */
+  const frame = (a: Vec3, b: Vec3, ref: Vec3): Frame => {
+    const along = unit(sub(b, a));
+    const right = unit(cross(along, ref));
+    const above = cross(right, along);
+    return (t, side, rise) =>
+      blend(a, b, t).map((x, k) => x + side * right[k] + rise * above[k]) as Vec3;
+  };
+  /**
+   * A shell lofted through chamfered sections of `at`, each [t, half width, low, high, chamfer]:
+   * flat facets, so every chamfer catches its own light.
+   */
+  function hull(at: Frame, stations: number[][], tint: Vec3) {
+    const rings = stations.map(([t, w, lo, hi, c]): Vec3[] => [
+      at(t, c - w, lo),
+      at(t, w - c, lo),
+      at(t, w, lo + c),
+      at(t, w, hi - c),
+      at(t, w - c, hi),
+      at(t, c - w, hi),
+      at(t, -w, hi - c),
+      at(t, -w, lo + c),
+    ]);
+    const middle = (points: Vec3[]) =>
+      [0, 1, 2].map(k => points.reduce((sum, p) => sum + p[k], 0) / points.length) as Vec3;
+    const face = (p: Vec3, q: Vec3, r: Vec3, s: Vec3, core: Vec3) =>
+      facing((u, v) => blend(blend(p, q, u), blend(r, s, u), v), 1, 1, tint, core);
+    const all = middle(rings.flat());
+    for (const r of [rings[0], rings[rings.length - 1]]) {
+      face(r[0], r[1], r[3], r[2], all);
+      face(r[0], r[3], r[7], r[4], all);
+      face(r[7], r[4], r[6], r[5], all);
+    }
+    for (let j = 1; j < rings.length; j++) {
+      const [a, b] = [rings[j - 1], rings[j]];
+      const core = middle([...a, ...b]);
+      for (let i = 0; i < 8; i++) {
+        face(a[i], a[(i + 1) % 8], b[i], b[(i + 1) % 8], core);
+      }
+    }
+  }
+  /**
+   * A drum about the axis `across` through `centre`: its wall, stepped rings on both faces,
+   * `treads` raised bars across the wall and `bolts` round each face at `ring` from the axis.
+   */
+  function drum(
+    centre: Vec3,
+    across: Vec3,
+    fore: Vec3,
+    up: Vec3,
+    radius: number,
+    half: number,
+    faces: [number, number, number, number, Vec3][],
+    treads = 0,
+    bolts = 0,
+    ring = 0,
+  ) {
+    const sides = [8, 16, 24][lod];
+    const at = (r: number, angle: number, s: number): Vec3 =>
+      centre.map(
+        (x, k) => x + s * across[k] + r * (Math.cos(angle) * fore[k] + Math.sin(angle) * up[k]),
+      ) as Vec3;
+    facing((u, v) => at(radius, 2 * Math.PI * u, half * (2 * v - 1)), sides, 1, alloy, centre);
+    for (const s of [-1, 1]) {
+      const behind = centre.map((x, k) => x - s * across[k]) as Vec3;
+      for (const [r0, r1, s0, s1, tint] of faces) {
+        facing(
+          (u, v) => at(r0 + (r1 - r0) * v, 2 * Math.PI * u, s * (s0 + (s1 - s0) * v)),
+          sides,
+          1,
+          tint,
+          behind,
+        );
+      }
+      for (let i = 0; i < bolts; i++) {
+        const a = (2 * Math.PI * (i + 0.5)) / bolts;
+        const z = radius * 0.075;
+        const flat = faces[1][2];
+        const square = (grow: number, out: number): Vec3[] =>
+          [
+            [-1, -1],
+            [1, -1],
+            [1, 1],
+            [-1, 1],
+          ].map(([i, j]) => at(ring + i * z * grow, a + (j * z * grow) / ring, s * (flat + out)));
+        block(square(1, -z), square(0.6, z), silver);
+      }
+    }
+    for (let i = 0; i < treads; i++) {
+      const a = (2 * Math.PI * i) / treads;
+      const bar = (r: number, wide: number, reach: number): Vec3[] => [
+        at(r, a - wide, -reach),
+        at(r, a + wide, -reach),
+        at(r, a + wide, reach),
+        at(r, a - wide, reach),
+      ];
+      const wide = (0.42 * Math.PI) / treads;
+      block(bar(radius * 0.9, wide, half * 0.82), bar(radius * 1.07, wide * 0.7, half * 0.7), rim);
+    }
+  }
+  const X: Vec3 = [1, 0, 0];
+  // The saddle is a boss raised out of the left shoulder plate: its skirt follows the plate's
+  // own surface and swells to a round turret the arm stands in (the user, 2026-11-24: no square
+  // base on the plate).
+  const pauldron: Vec3[] = [];
+  const shell = parts['Shoulder plates'];
+  for (let i = 0; i < shell.length; i += STRIDE) {
+    if (shell[i] < -0.1 && shell[i + 1] > 1.4 && shell[i + 4] > 0.2) {
+      pauldron.push([shell[i], shell[i + 1], shell[i + 2]]);
+    }
+  }
+  /** The height of the shoulder plate's top under (x, z): its nearest vertices, blended. */
+  const plateTop = (x: number, z: number) => {
+    let sum = 0,
+      weight = 0;
+    for (const [px, py, pz] of pauldron) {
+      const w = 1 / ((px - x) ** 2 + (pz - z) ** 2 + 0.0001) ** 2;
+      sum += w * py;
+      weight += w;
+    }
+    return weight ? sum / weight : POST[1] - 0.03;
+  };
+  part('Laser saddle');
+  const ease = (t: number) => {
+    const c = Math.min(1, Math.max(0, t));
+    return c * c * (3 - 2 * c);
+  };
+  /** The boss at `r` (0 its middle, 1 its rim) round `angle`, `lift` above the plate at its skirt. */
+  const boss = (r: number, angle: number, lift: number, top = POST[1] - 0.004): Vec3 => {
+    const x = POST[0] + 0.052 * r * Math.cos(angle);
+    const z = POST[2] + 0.068 * r * Math.sin(angle);
+    const lip = lift - 0.014 * Math.max(0, (r - 0.84) / 0.16) ** 2;
+    const skirt = plateTop(x, z) + lip;
+    return [x, skirt + (Math.max(top, skirt) - skirt) * ease((0.84 - r) / 0.5), z];
+  };
+  const under: Vec3 = [POST[0], 1.3, POST[2]];
+  facing(
+    (u, v) => boss(Math.max(0.01, v), 2 * Math.PI * u, 0.007),
+    [8, 16, 28][lod],
+    [2, 4, 8][lod],
+    alloy,
+    under,
+  );
+  if (lod > 1) {
+    // A dark gasket round the swell, and six studs on the skirt.
+    facing(
+      (u, v) => boss(0.6 + 0.1 * v, 2 * Math.PI * u, 0.007 + 0.004 * Math.sin(Math.PI * v)),
+      28,
+      2,
+      graphite,
+      under,
+    );
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI * (i + 0.5)) / 3;
+      const stud = (grow: number, lift: number): Vec3[] =>
+        [
+          [-1, -1],
+          [1, -1],
+          [1, 1],
+          [-1, 1],
+        ].map(([p, q]) => boss(0.8 + 0.045 * grow * p, a + 0.07 * grow * q, lift));
+      block(stud(1, 0.002), stud(0.6, 0.012), silver);
+    }
+  }
+  // The turret the arm's foot turns in, toothed from close.
+  if (lod) {
+    drum(
+      [POST[0], POST[1] - 0.001, POST[2]],
+      [0, 1, 0],
+      [0, 0, -1],
+      X,
+      0.027,
+      0.007,
+      [
+        [0.027, 0.023, 0.007, 0.01, rim],
+        [0.023, 0.001, 0.01, 0.01, graphite],
+      ],
+      lod > 1 ? 10 : 0,
+    );
+  }
   part('Laser mount');
-  limb(POST, HINGE, [0.027, 0.021, 0.031], alloy, 0.88, TWILL);
-  // The cannon itself, drawn deployed: it turns about the top of its post (CANNON_HINGE).
+  // The arm, jointed at ELBOW behind the line from its foot to its top: two chamfered struts,
+  // the upper one collared.
+  const lower = frame(POST, ELBOW, [0, 0, 1]);
+  const upper = frame(ELBOW, HINGE, [0, 0, 1]);
+  hull(
+    lower,
+    [
+      [0, 0.019, -0.015, 0.015, 0.006],
+      [1, 0.016, -0.013, 0.013, 0.005],
+    ],
+    alloy,
+  );
+  hull(
+    upper,
+    [
+      [0, 0.015, -0.012, 0.012, 0.005],
+      [1, 0.013, -0.01, 0.01, 0.004],
+    ],
+    alloy,
+  );
+  if (lod) {
+    hull(
+      upper,
+      [
+        [0.5, 0.017, -0.014, 0.014, 0.005],
+        [0.68, 0.017, -0.014, 0.014, 0.005],
+      ],
+      graphite,
+    );
+  }
+  part('Laser knuckle');
+  if (lod) {
+    drum(
+      ELBOW,
+      X,
+      [0, 0, -1],
+      [0, 1, 0],
+      0.021,
+      0.017,
+      [
+        [0.021, 0.017, 0.017, 0.02, rim],
+        [0.017, 0.011, 0.02, 0.02, graphite],
+        [0.011, 0.001, 0.02, 0.023, alloy],
+      ],
+      lod > 1 ? 10 : 6,
+    );
+  }
+  // The cannon itself, drawn deployed: it turns about the top of its arm (CANNON_HINGE).
   part('Shoulder laser');
-  limb(HINGE, [-0.219, 1.66, 0.1], [0.024, 0.022], alloy, 0.9, TWILL);
-  // The short shroud rides above the pivot; the stepped muzzle shows a dark bore.
   const breech: Vec3 = [-0.219, 1.673, 0.118];
   const muzzle: Vec3 = [-0.242, 1.644, -0.14];
-  const barrel = (t: number): Vec3 => breech.map((x, k) => x + (muzzle[k] - x) * t) as Vec3;
-  limb(breech, barrel(0.68), [0.028, 0.045, 0.047, 0.034], alloy, 0.9, TWILL);
-  for (const side of [-1, 1]) {
-    const rail = (t: number, offset: number): Vec3 => {
-      const [x, y, z] = barrel(t);
-      return [x + side * offset, y + 0.016, z];
+  const barrel = (t: number): Vec3 => blend(breech, muzzle, t);
+  // The barrel's frame: along it, to the wearer's right of it, and up from it.
+  const gun = frame(breech, muzzle, [0, 1, 0]);
+  const along = unit(sub(muzzle, breech));
+  const right = sub(gun(0, 1, 0), breech);
+  const above = sub(gun(0, 0, 1), breech);
+  // The pivot under the receiver.
+  limb(
+    [HINGE[0] - 0.02, HINGE[1], HINGE[2]],
+    [HINGE[0] + 0.02, HINGE[1], HINGE[2]],
+    [0.013, 0.013],
+    graphite,
+    1,
+    TWILL,
+  );
+  // The receiver: chamfered, its tail rising under the drum and its nose closing round the barrel.
+  hull(
+    gun,
+    [
+      [0.05, 0.022, -0.014, 0.012, 0.007],
+      [0.16, 0.029, -0.028, 0.02, 0.008],
+      [0.48, 0.03, -0.03, 0.022, 0.008],
+      [0.58, 0.028, -0.026, 0.024, 0.009],
+      [0.69, 0.024, -0.016, 0.0255, 0.01],
+    ],
+    alloy,
+  );
+  if (lod) {
+    // The housing stepped up along its top, and the fore-end under the barrel.
+    hull(
+      gun,
+      [
+        [0.27, 0.012, 0.018, 0.025, 0.003],
+        [0.33, 0.016, 0.018, 0.035, 0.006],
+        [0.6, 0.015, 0.018, 0.034, 0.006],
+        [0.73, 0.011, 0.018, 0.027, 0.004],
+      ],
+      rim,
+    );
+    hull(
+      gun,
+      [
+        [0.58, 0.02, -0.035, -0.006, 0.007],
+        [0.8, 0.018, -0.031, -0.006, 0.007],
+        [0.93, 0.013, -0.022, -0.008, 0.005],
+      ],
+      rim,
+    );
+  }
+  // The barrel to a collar round a dark bore.
+  limb(barrel(0.6), barrel(0.97), [0.024, 0.024], graphite, 1, TWILL);
+  limb(barrel(0.92), barrel(1.015), [0.03, 0.03], silver, 1, TWILL);
+  limb(barrel(1.015), barrel(1.019), [0.023, 0.023], [0.049, 0.055, 0.053], 1);
+  if (lod) {
+    // Cooling fins along the barrel, where the fore-end leaves it bare.
+    for (let i = 0; i < 6; i++) {
+      const a = -0.35 + (i * (Math.PI + 0.7)) / 5;
+      const fin = (t: number, r: number, h: number): Vec3 =>
+        barrel(t).map(
+          (x, k) =>
+            x +
+            (r * Math.cos(a) - h * Math.sin(a)) * right[k] +
+            (r * Math.sin(a) + h * Math.cos(a)) * above[k],
+        ) as Vec3;
+      const cut = (t: number, grow: number): Vec3[] => [
+        fin(t, 0.022, -0.004),
+        fin(t, 0.022, 0.004),
+        fin(t, 0.022 + 0.0075 * grow, 0.0025),
+        fin(t, 0.022 + 0.0075 * grow, -0.0025),
+      ];
+      block(cut(0.7, 1), cut(0.91, 0.75), rim);
+    }
+    // Three rivets and a knob through the receiver, from flank to flank: square pegs, a
+    // rounded one costing six times the vertices for a few millimetres.
+    const peg = (t: number, reach: number, rise: number, half: number, tint: Vec3) => {
+      const end = (side: number): Vec3[] =>
+        [
+          [-1, -1],
+          [1, -1],
+          [1, 1],
+          [-1, 1],
+        ].map(([i, j]) => gun(t + (i * half) / 0.26, side, rise + j * half));
+      block(end(-reach), end(reach), tint);
     };
-    limb(rail(0.1, 0.027), rail(0.64, 0.035), [0.007, 0.013, 0.006], graphite, 0.76, TWILL);
+    for (const t of [0.2, 0.26, 0.32]) {
+      peg(t, 0.0325, 0.007, 0.003, silver);
+    }
+    peg(0.345, 0.034, -0.014, 0.005, graphite);
+    for (const s of [-1, 1]) {
+      const mark = (corners: [number, number][], tint: Vec3) => {
+        const [p, q, r, e] = corners.map(([t, rise]) => gun(t, s * 0.0306, rise));
+        facing(
+          (u, v) => blend(blend(p, q, u), blend(r, e, u), v),
+          1,
+          1,
+          tint,
+          barrel(corners[0][0]),
+        );
+      };
+      // A dark grille low on the flank at the back, and four raked vents ahead of the knob.
+      mark(
+        [
+          [0.17, -0.019],
+          [0.31, -0.019],
+          [0.17, -0.008],
+          [0.31, -0.008],
+        ],
+        [0.07, 0.08, 0.08],
+      );
+      for (let i = 0; i < 4; i++) {
+        const t = 0.375 + i * 0.026;
+        mark(
+          [
+            [t, -0.019],
+            [t + 0.013, -0.019],
+            [t + 0.009, -0.003],
+            [t + 0.022, -0.003],
+          ],
+          [0.07, 0.08, 0.08],
+        );
+      }
+      // A bolt housing on the flank, a rod from it forward along the nose.
+      const flank = (side: number, t0: number, t1: number, low: number, high: number): Vec3[] => [
+        gun(t0, s * side, low),
+        gun(t1, s * side, low),
+        gun(t1, s * side, high),
+        gun(t0, s * side, high),
+      ];
+      block(flank(0.027, 0.49, 0.63, -0.006, 0.016), flank(0.037, 0.52, 0.6, 0, 0.011), graphite);
+      const rod = (t: number, side: number): Vec3[] =>
+        [
+          [-1, -1],
+          [1, -1],
+          [1, 1],
+          [-1, 1],
+        ].map(([i, j]) => gun(t, s * (side + i * 0.004), 0.005 + j * 0.004));
+      block(rod(0.58, 0.033), rod(0.74, 0.028), silver);
+    }
   }
-  limb(barrel(0.62), muzzle, [0.032, 0.034, 0.026], graphite, 1, TWILL);
-  for (const t of lod ? [0.28, 0.53, 0.86] : [0.86]) {
-    const r = t < 0.6 ? 0.047 : 0.031;
-    limb(barrel(t), barrel(t + 0.046), [r, r], rim, 0.95, TWILL);
-  }
-  limb(barrel(0.98), barrel(1.015), [0.028, 0.026], silver, 1, TWILL);
-  limb(barrel(1.015), barrel(1.019), [0.021, 0.021], [0.049, 0.055, 0.053], 1);
+  // The drum on its side over the back of the receiver: treads round it, bolts round its faces.
+  drum(
+    gun(0.13, 0, 0.033),
+    right,
+    along,
+    above,
+    0.042,
+    0.025,
+    lod
+      ? [
+          [0.042, 0.037, 0.025, 0.029, alloy],
+          [0.037, 0.028, 0.029, 0.029, rim],
+          [0.028, 0.024, 0.029, 0.024, graphite],
+          [0.024, 0.012, 0.024, 0.026, alloy],
+          [0.012, 0.001, 0.026, 0.03, graphite],
+        ]
+      : [[0.042, 0.001, 0.025, 0.03, rim]],
+    [0, 8, 12][lod],
+    [0, 6, 8][lod],
+    0.0325,
+  );
   part('Harpoon');
   drawHarpoon(out, lod, [-0.066, 1.17, 0.224], aim(unit([0.58, 0.81, 0]), [0, 0, 1]), 0.93, 0);
   part('Flying disc');
@@ -2761,6 +3161,8 @@ export const hunterHarpoon = (lod: 0 | 1 | 2): number[] => {
 export const CANNON_HINGE: Vec3 = sized(HINGE);
 /** The foot of the cannon's post, on its saddle on the left shoulder. */
 export const CANNON_POST: Vec3 = sized(POST);
+/** The joint of the cannon's arm, between its foot and its hinge. */
+export const CANNON_ELBOW: Vec3 = sized(ELBOW);
 /** Radians the stowed cannon is turned about its hinge's right axis from the deployed one: muzzle back. */
 export const CANNON_FOLD = 2.9;
 /** The cannon's muzzle, from its hinge, deployed (the stepped muzzle's face). */
@@ -2836,6 +3238,7 @@ const TRUNK_PARTS = new Set([
   'Harpoon harness',
   'Laser saddle',
   'Laser mount',
+  'Laser knuckle',
   'Shoulder laser',
   'Harpoon',
   'Rib guard',

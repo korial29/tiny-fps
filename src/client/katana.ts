@@ -7,7 +7,7 @@ import { CUTS, TICK_HZ } from '../shared/constants';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { button, grip } from './gun';
-import { TWILL, dim, place } from './mesh';
+import { STRIDE, TWILL, dim, place } from './mesh';
 import type { Vec3 } from './mesh';
 import { turn } from './rig';
 import type { Quat } from './rig';
@@ -190,36 +190,32 @@ export const katana = (lod: number): number[] => {
 const wristBuilt: number[][] = [];
 /** Where the blades start in wristBlade(lod): the housing comes first. */
 const wristSplit: number[] = [];
-const wristSteel = [0.55, 0.62, 0.64];
-const wristEdge = [0.8, 0.84, 0.81];
+// Pale blue steel (the user's model, 2026-11-24).
+const wristSteel = [0.5, 0.62, 0.8];
+const wristEdge = [0.82, 0.89, 1];
 /** How far the blades and their housing stand over the back of the hand. */
 const dorsalLift = 0.026;
-/**
- * How far the blades curve in toward the palm (-x) at their point, metres: none at the heel, more
- * toward the tip, a talon's hook (the user, 2026-11-23: more curved).
- */
-const WRIST_CURVE = 0.055;
 /** How far each blade stands off the hand's middle, across it. */
-const WRIST_GAP = 0.02;
-/** The share of the profile's depth (spine to edge) the wrist blades keep. */
-const WRIST_SLIM = 0.6;
+const WRIST_GAP = 0.024;
+/** How much farther apart their points are, each side. */
+const WRIST_SPLAY = 0.012;
 /**
  * Metres the wrist blades sit lower than the outline: their heels inside the lowered housing, under
  * its crown (the user, 2026-11-23: the blade always in its box).
  */
 const WRIST_SINK = 0.024;
-/** The share of the blades' length over which they close onto their point. */
-const WRIST_TAPER = 0.09;
-/** Stations of the wrist blades' outline averaged each way: a smooth edge and spine. */
-const SMOOTH = 3;
 /** How far the blades sit down into their housing, below where they were drawn first. */
 const BLADE_DROP = 0.028;
 /** The blades' length to their first design's: short enough to fold back into their housing. */
 const BLADE_LENGTH = 0.8;
 /** The housing's brushed silver, the bracer's (silver in hunter.ts). */
 const HOUSING = [0.57, 0.66, 0.66];
-const curveAt = (along: number) => -WRIST_CURVE * Math.max(0, (along - 0.04) / 0.303) ** 2;
-const wristTip: Vec3 = [0.055 + curveAt(0.343) - BLADE_DROP, -0.343 * BLADE_LENGTH, 0];
+/** Its rails, a little paler, and what is cut in it. */
+const RAIL = [0.66, 0.74, 0.74];
+const SLOT = [0.07, 0.08, 0.09];
+/** The exponent of its section's superellipse: the lower, the squarer. */
+const BOXY = 0.22;
+const wristTip: Vec3 = [0.05 - BLADE_DROP, -0.343 * BLADE_LENGTH, 0];
 
 /** Right wrist space: +x over the knuckles, -y along the fingers, z across the hand. */
 export const wristBlade = (lod: number): number[] => {
@@ -227,13 +223,17 @@ export const wristBlade = (lod: number): number[] => {
     return wristBuilt[lod];
   }
   const out: number[] = [];
-  // The housing: a smooth, low dome over the blades' heels, rounded on its sides, in the bracer's
-  // brushed silver (TWILL); a rounded nose over the wrist, and its back sloping gently down onto
-  // the bracer's back. It is posed on the forearm, so its brushing holds still (wristHousing()).
+  // The housing (the user's model, 2026-11-24): a low casing over the blades' heels, its top flat
+  // and its sides steep, in the bracer's brushed silver (TWILL); a blunt nose over the wrist with
+  // a slot for each blade, and its back sloping gently down onto the bracer's back. A ribbed
+  // rail runs along each of its shoulders. It is posed on the forearm, so its brushing holds
+  // still (wristHousing()).
   // Its sides and its sloped end sink into the bracer (whose back is some 4.2 cm up), so the two
   // meet in one crease of the same metal, no edge between them.
   // Low (the user, 2026-11-23: a lower block under the blades).
-  const [bed, crown, end] = [0.03, 0.074, 0.036];
+  // Lower still (the user, 2026-11-24): its crown 4 mm over the blades' spines, and the blades no
+  // deeper than it at any station, so that they stay within it folded and clear of the hand out.
+  const [bed, crown, end] = [0.03, 0.06, 0.036];
   const height = (y: number) => {
     const t = Math.min(1, Math.max(0, (y - 0.05) / 0.125));
     return crown - (crown - end) * t * t * (3 - 2 * t);
@@ -241,15 +241,15 @@ export const wristBlade = (lod: number): number[] => {
   // Wide enough to hold both blades' heels (WRIST_GAP) under its flat top.
   const halfWidth = (y: number) => 0.031 - 0.006 * Math.min(1, Math.max(0, (y - 0.05) / 0.125));
   const nose = (y: number) =>
-    Math.sqrt(Math.max(0, 1 - ((-0.012 - Math.min(y, -0.012)) / 0.014) ** 2));
+    Math.max(0, 1 - ((-0.012 - Math.min(y, -0.012)) / 0.014) ** 16) ** 0.0625;
   const dome = (angle: number, y: number): Vec3 => {
     const k = nose(y);
     const [c, si] = [Math.cos(angle), Math.sin(angle)];
-    // A superellipse's upper half: a flat top and steep sides joined by rounded shoulders.
+    // A superellipse's upper half: a flat top and steep sides joined by tight shoulders.
     return [
-      bed + (height(y) - bed) * k * Math.abs(si) ** 0.35,
+      bed + (height(y) - bed) * k * Math.abs(si) ** BOXY,
       y,
-      halfWidth(y) * k * Math.sign(c) * Math.abs(c) ** 0.35,
+      halfWidth(y) * k * Math.sign(c) * Math.abs(c) ** BOXY,
     ];
   };
   const spot = (angle: number, y: number): [Vec3, Vec3] => {
@@ -267,7 +267,9 @@ export const wristBlade = (lod: number): number[] => {
   };
   const steps = lod ? 14 : 8;
   const angles = Array.from({ length: steps + 1 }, (_, i) => (Math.PI * i) / steps);
-  const ys = [-0.026, -0.023, -0.018, -0.012, 0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175];
+  const ys = [
+    -0.026, -0.0255, -0.024, -0.018, -0.012, 0, 0.025, 0.05, 0.075, 0.1, 0.125, 0.15, 0.175,
+  ];
   const grid = ys.map(y => angles.map(a => spot(a, y)));
   const vertex = ([p, n]: [Vec3, Vec3]) =>
     out.push(...p, ...n, HOUSING[0], HOUSING[1], TWILL, HOUSING[2]);
@@ -287,63 +289,94 @@ export const wristBlade = (lod: number): number[] => {
       }
     }
   }
-  wristSplit[lod] = out.length;
-  // Viewed edge-on to the wrist, the two silhouettes are parallel: a deep
-  // crescent at the heel, two scallops and a long swept terminal point.
-  // Each station gives the distance along the hand and both sides of the outline.
-  const profile = [
-    [-0.012, 0.057, 0.088],
-    [0.04, 0.054, 0.088],
-    [0.053, 0.055, 0.088],
-    [0.062, 0.056, 0.07],
-    [0.072, 0.057, 0.065],
-    [0.082, 0.057, 0.067],
-    [0.092, 0.056, 0.082],
-    [0.097, 0.053, 0.105],
-    [0.11, 0.038, 0.101],
-    [0.119, 0.052, 0.1],
-    [0.137, 0.061, 0.098],
-    [0.15, 0.058, 0.096],
-    [0.159, 0.032, 0.104],
-    [0.166, 0.048, 0.103],
-    [0.182, 0.06, 0.101],
-    [0.198, 0.061, 0.099],
-    [0.21, 0.055, 0.097],
-    [0.219, 0.028, 0.106],
-    [0.242, 0.046, 0.105],
-    [0.269, 0.061, 0.101],
-    [0.291, 0.071, 0.095],
-    [0.306, 0.075, 0.091],
-    [0.311, 0.076, 0.087],
-    [0.315, 0.073, 0.089],
-    [0.328, 0.068, 0.078],
-    [0.343, 0.055, 0.055],
-  ];
+  /** A flat face through `q`, turned away from `mid`. */
+  const face = (q: Vec3[], mid: Vec3, rgb: number[]) => {
+    for (const [p, r, t] of [
+      [q[0], q[1], q[2]],
+      [q[0], q[2], q[3]],
+    ]) {
+      const n = cross(sum([r, 1], [p, -1]), sum([t, 1], [p, -1]));
+      const away = n[0] * (p[0] - mid[0]) + n[1] * (p[1] - mid[1]) + n[2] * (p[2] - mid[2]) > 0;
+      tri(out, p, away ? r : t, away ? t : r, rgb);
+    }
+  };
+  const inside: Vec3 = [bed, 0.07, 0];
+  // A ribbed rail along each shoulder: ridges up to a crest and down again, seen close; a plain
+  // rail from afar.
+  const rails = out.length;
+  const ridges = lod ? 20 : 1;
+  for (const side of [-1, 1]) {
+    const ring = (y: number, r: number): Vec3[] =>
+      [-0.3, 0.8, 1.9].map(a => [
+        height(y) - 0.0045 + r * Math.cos(a),
+        y,
+        side * (halfWidth(y) + 0.0005 + r * Math.sin(a)),
+      ]);
+    for (let i = 0; i < 2 * ridges; i++) {
+      const [y0, y1] = [i, i + 1].map(k => 0.002 + (0.148 * k) / (2 * ridges));
+      const [r0, r1] = lod ? (i % 2 ? [0.0058, 0.0036] : [0.0036, 0.0058]) : [0.0047, 0.0047];
+      const [a, b] = [ring(y0, r0), ring(y1, r1)];
+      for (let k = 0; k < 2; k++) {
+        face([a[k], a[k + 1], b[k + 1], b[k]], inside, RAIL);
+      }
+    }
+  }
+  for (let i = rails + 8; i < out.length; i += STRIDE) {
+    out[i] = TWILL;
+  }
+  // The slot each blade comes out of, within the nose's flat face.
   for (const side of [-1, 1]) {
     const z = side * WRIST_GAP;
-    const last = profile.length - 1;
-    const rings = profile.map(([along], i): Vec3[] => {
-      // A smooth blade (the user, 2026-11-23): the outline averaged over SMOOTH stations each way,
-      // its notches and scallops gone (the point's own station left out of it).
-      const near = profile.slice(Math.max(i - SMOOTH, 0), Math.min(i + SMOOTH + 1, last));
-      const [lower, upper] = [1, 2].map(k => near.reduce((t, r) => t + r[k], 0) / near.length);
-      // The blades are WRIST_SLIM of the outline's depth, kept along the spine (narrower), and
-      // over the last WRIST_TAPER of their length both sides close evenly onto the point.
-      const t = Math.sqrt(Math.min(1, (profile[last][0] - along) / WRIST_TAPER));
-      const depth = (upper - lower) * WRIST_SLIM;
-      const x = dorsalLift + curveAt(along) - BLADE_DROP - WRIST_SINK;
-      const spine = upper - depth * 0.5 * (1 - t) + x;
-      const edge = spine - depth * t;
-      if (i === last) {
-        return [[spine, -along * BLADE_LENGTH, z]];
+    face(
+      [
+        [0.031, -0.0262, z - 0.0035],
+        [0.0548, -0.0262, z - 0.0035],
+        [0.0548, -0.0262, z + 0.0035],
+        [0.031, -0.0262, z + 0.0035],
+      ],
+      inside,
+      SLOT,
+    );
+  }
+  wristSplit[lod] = out.length;
+  // The blades (the user's model, 2026-11-24), seen edge-on to the wrist: a long straight shank,
+  // a flare, a round notch cut in behind it, two barbs swept back, each cut in under the next, and
+  // a long point. Each station is the distance along the hand and the depth from spine to edge.
+  const profile = [
+    [-0.012, 0.012],
+    [0.166, 0.012],
+    [0.178, 0.0225],
+    [0.181, 0.014],
+    [0.185, 0.0095],
+    [0.19, 0.0075],
+    [0.195, 0.0095],
+    [0.199, 0.014],
+    [0.202, 0.025],
+    [0.216, 0.0165],
+    [0.227, 0.0125],
+    [0.231, 0.026],
+    [0.27, 0.018],
+    [0.312, 0.0095],
+    [0.343, 0],
+  ];
+  for (const side of [-1, 1]) {
+    const rings = profile.map(([along, depth]): Vec3[] => {
+      // The two splay a little toward their points: each reads apart from the other in the own view.
+      const z = side * (WRIST_GAP + WRIST_SPLAY * Math.max(0, along / 0.343));
+      // The spine runs straight from under the housing's crown (the user's model, 2026-11-24:
+      // straight blades; a talon's hook before) and drops a little to the point.
+      const spine =
+        dorsalLift + 0.082 - BLADE_DROP - WRIST_SINK - 0.008 * clamp((along - 0.26) / 0.083) ** 2;
+      const y = -along * BLADE_LENGTH;
+      if (!depth) {
+        return [[spine, y, z]];
       }
-      const ridge = spine - (spine - edge) * 0.24;
-      const rake = Math.min(0.014, (spine - edge) * 0.35);
+      const ridge = spine - depth * 0.3;
       return [
-        [spine, -along * BLADE_LENGTH + rake, z],
-        [ridge, -along * BLADE_LENGTH + 0.6 * rake, z + 0.0035],
-        [edge, -along * BLADE_LENGTH - rake, z],
-        [ridge, -along * BLADE_LENGTH + 0.6 * rake, z - 0.0035],
+        [spine, y, z],
+        [ridge, y, z + 0.003],
+        [spine - depth, y, z],
+        [ridge, y, z - 0.003],
       ];
     });
     loft(out, rings, (_, facet) => {

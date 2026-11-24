@@ -1035,7 +1035,7 @@ export const GUARD: Vec3 = [0.3, -0.24, 0.44];
  * close, the arm bent toward the eye, the computer on the forearm facing up, the view above it
  * clear (the user, 2026-11-24, after a reference shot).
  */
-export const COMPUTER: Vec3 = [0.1, -0.2, 0.42];
+export const COMPUTER: Vec3 = [0.065, -0.195, 0.435];
 /** The right forearm and hand's line to the key (view space): in from the right, nearly level, a little ahead. */
 const POKE: Vec3 = [-0.95, 0.15, 0.25];
 /** Where its elbow goes then (view space, mirrored): out to the left, down and back. */

@@ -74,9 +74,13 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   clicks round 700 Hz 75 ms apart and a breath of noise (`SOUND.HUNTER_TRACK`), then a looped
   electronic hum at 1.5 kHz over 1.2 kHz, each buzzing at 65 Hz, until the lock
   (`SOUND.HUNTER_SEEK`). The lock keeps its tone (`SOUND.HUNTER_LOCK`).
-- **Wrist computer.** A bronze housing on the back of his left bracer, its lid open, with three
-  square cells of red Yautja-like glyphs (`computer.ts`). Each glyph has `PER_GLYPH` (5) lit
-  segments, one per shot left. They go out from the right glyph to the left. With the cannon out,
+- **Wrist computer.** After a prop's photograph (the user, 2026-11-24): a worn pewter housing of
+  brushed metal on the back of his left bracer, its lid open on a rod hinge (`computer.ts`). On its
+  deck, from the elbow to the wrist: a plate with two claws, four cells of black glass in a raised
+  bezel, three bars and the fire key. A ribbed spring runs along its near edge and an engraved
+  skirt falls round the forearm on its near side. Each cell is a glyph of short red dashes; two lit dashes are one
+  shot, the cells count `SHOTS` (4, 4, 4 and 3), and they go out from the wrist's to the elbow's.
+  With the cannon out,
   in the own view (the user, 2026-11-24, after a reference shot), the left arm bends in low on the
   left of the view, the computer facing up (`COMPUTER`). The right forearm comes in from the right,
   bent nearly level, the hand straight on its line, the index on the computer (`POKE`). It presses
@@ -108,9 +112,13 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   (`DISC_HOLD`, `DISC_CURL`, `DISC_RAISE`, `DISC_TILT`). The disc in hand and in flight is
   `DISC_SCALE` (1.5) times the hip's; its hit radius is still `DISK_R`; in flight it is the same mesh, spinning
   nearly flat, with a blue trail (`Tracer.solids()` and `draw()`, `src/client/beams.ts`).
-- **Blades' shape.** Narrower (`WRIST_SLIM`), smooth (`SMOOTH`), more curved (`WRIST_CURVE`) and
-  closing evenly onto the point (`WRIST_TAPER`); their heels sit inside the lower housing
-  (`WRIST_SINK`, `src/client/katana.ts`).
+- **Blades' shape.** After a model (the user, 2026-11-24): a long straight shank, a flare with a
+  round notch behind it, two barbs swept back and a long point, in pale blue steel, splayed a
+  little toward their points (`WRIST_SPLAY`) and straight. Their housing is
+  low and square, with a ribbed rail along each shoulder and a slot for each
+  blade in its flat nose. The blades are no deeper than it, so they stay inside it folded and
+  clear of the hand out (`src/client/katana.ts`). They slide out to `SOUND.HUNTER_BLADE_DRAW`: a
+  loud scrape, each blade's locking click, the bracer's thunk and a ring.
 - **No thrust.** The blades slash where the katana would thrust: FORWARD with FIRE gives `CUT.SLASH`,
   and its special the leap, never the lunge (`cutOf(keys, false)`, `src/shared/blade.ts`).
 - **The blades in the own view.** The right hand is a clenched fist, the blades rolled well over to

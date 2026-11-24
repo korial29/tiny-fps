@@ -43,7 +43,9 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   [Hunter](docs/HUNTER.md) for that class.
 - **Client.** `src/client/index.ts` owns the entry point, `hud.ts` the HUD and
   menus, and `render.ts` the WebGL renderer. See [characters](docs/CHARACTERS.md)
-  and [graphics](docs/GRAPHICS.md) for their specific work. For audio start
+  and [graphics](docs/GRAPHICS.md) for their specific work, and
+  [design tools](docs/CHARACTERS.md#design-tools) for the turntable page and
+  Blender, which sketches shapes but never ships them. For audio start
   with `audio.ts`, `voice/cast.ts`, `voice/clips.ts` (paths under
   `src/client/`) and the generators in `scripts/cast.py` and `scripts/voice.py`.
   Exclude `src/client/voice/{mp3,opus,cast-mp3,cast-opus}.ts` from general

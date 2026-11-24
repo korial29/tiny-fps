@@ -38,6 +38,10 @@ import {
   RIFLE_CURL,
   RIFLE_HOLD,
   RIFLE_TILT,
+  tiltOf,
+  holdOf,
+  LONG_CURL,
+  LONG_HOLD,
   grip as gunGrip,
   pressAt,
   buttonAt,
@@ -2329,8 +2333,12 @@ export const createBody = (world?: World): Body => {
     const [gp, ga] = holster();
     /** The weapon in hand by kind, for its button: the gun, the katana, the rail gun, the rifle. */
     const pk = me?.wield ? 1 : me ? kindOf(me) : 0;
-    const fh = [0, 1, 2].map(i => TILT[1] * ga[2][i] - TILT[0] * ga[1][i]) as Vec3;
-    const wrist = [0, 1, 2].map(i => gp[i] - 0.078 * fh[i] + 0.022 * ga[0][i]) as Vec3;
+    // The grip's tilt in the hand: a long gun's is its own (tiltOf()), but not the Hunter's, whose
+    // cannon and disc only borrow the rail gun's and the rifle's flags.
+    const tilt = hunter ? TILT : tiltOf(pk);
+    const fh = [0, 1, 2].map(i => tilt[1] * ga[2][i] - tilt[0] * ga[1][i]) as Vec3;
+    const [far, palm] = holdOf(hunter ? 0 : pk);
+    const wrist = [0, 1, 2].map(i => gp[i] - far * fh[i] + palm * ga[0][i]) as Vec3;
     // The rail gun's front grip, for the left hand.
     // Cup the fixed lower shell with the thumb along the tube as the sleeve extends.
     const [fc, fd, fu] = harpoonDraw
@@ -2492,7 +2500,9 @@ export const createBody = (world?: World): Body => {
             ? discIn()
               ? DISC_CURL
               : 0.3
-            : 0.9) -
+            : !hunter && pk >= 2 && sd > 0
+              ? LONG_CURL
+              : 0.9) -
           curl) *
           taken +
         (GUARD_CURL + 0.5 * tucked - curl) * guard +
@@ -2631,7 +2641,8 @@ export const createBody = (world?: World): Body => {
           unit(turn(fd)),
           turn([-0.5, -1, -0.35]),
           fu && turn(fu),
-          fu ? RIFLE_HOLD : FIST,
+          // The Hunter's harpoon keeps the fist it had.
+          fu ? RIFLE_HOLD : hunter ? FIST : LONG_HOLD,
           fu ? RIFLE_TILT : undefined,
           false,
           !!fu,
@@ -2639,7 +2650,7 @@ export const createBody = (world?: World): Body => {
         for (const k of [arm - 1, arm, arm + 1, arm + 2]) {
           q.rot[k] = slerp(q.rot[k], held.rot[k], two);
         }
-        curls[0] += ((fu ? RIFLE_CURL : 0.9) - curls[0]) * two;
+        curls[0] += ((fu ? RIFLE_CURL : hunter ? 0.9 : LONG_CURL) - curls[0]) * two;
       }
       if (sd < 0) {
         cupping = fu ? two : 0;
@@ -2804,9 +2815,9 @@ export const createBody = (world?: World): Body => {
     // the wrist and its skin on the foot at TAP; the left hand's x, its palm side, up the battery.
     if (slapW > 0.002 && me) {
       const r = solve(q);
-      const ax = gunAxes(r.rot[J.HAND_R]);
+      const ax = gunAxes(r.rot[J.HAND_R], hunter ? 0 : kindOf(me));
       const [foot, [, , up]] = loadFrame(
-        gunGrip(r.pos[J.HAND_R], r.rot[J.HAND_R]),
+        gunGrip(r.pos[J.HAND_R], r.rot[J.HAND_R], hunter ? 0 : kindOf(me)),
         ax,
         kindOf(me),
         Math.max(swapOf(me), 0.4),

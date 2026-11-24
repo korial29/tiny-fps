@@ -9,6 +9,7 @@ import {
   GUARD,
   RIFLE_GRIP,
   RIFLE_HOLD,
+  LONG_HOLD,
   RIFLE_RISE,
   axes as gunAxes,
   foregrip,
@@ -503,8 +504,8 @@ describe('the laser rifle in both hands', () => {
         body.update(p, DT, kick);
       }
       const s = pose(body, p, pitch);
-      const at = grip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
-      const ax = gunAxes(s.rot[J.HAND_R]);
+      const at = grip(s.pos[J.HAND_R], s.rot[J.HAND_R], 3);
+      const ax = gunAxes(s.rot[J.HAND_R], 3);
       const hand = draw(body, p, pitch)
         .filter(v => [GLOVE, FLESH].some(c => c.every((n, i) => v.c[i] == n)))
         .filter(v => away(v.at, s.pos[J.HAND_L]) < 0.16)
@@ -540,8 +541,8 @@ describe('the rail gun in both hands', () => {
       const q = s.rot[J.HAND_L];
       const [fing, x, thumb] = [turn(q, [0, -1, 0]), turn(q, [1, 0, 0]), turn(q, [0, 0, -1])];
       const palm = add(
-        add(s.pos[J.HAND_L], fing.map(v => v * 0.078) as Vec3),
-        x.map(v => v * 0.022) as Vec3,
+        add(s.pos[J.HAND_L], fing.map(v => v * LONG_HOLD[0]) as Vec3),
+        x.map(v => v * LONG_HOLD[1]) as Vec3,
       );
       expect(away(palm, at)).toBeLessThan(0.015);
       expect(dot(thumb, g)).toBeGreaterThan(0.7);
@@ -554,8 +555,8 @@ describe('the rail gun in both hands', () => {
       const body = watch(p, 90);
       const s = pose(body, p);
       const [foot, [, , up]] = loadFrame(
-        grip(s.pos[J.HAND_R], s.rot[J.HAND_R]),
-        gunAxes(s.rot[J.HAND_R]),
+        grip(s.pos[J.HAND_R], s.rot[J.HAND_R], 2),
+        gunAxes(s.rot[J.HAND_R], 2),
         2,
         swapOf(p),
       );
@@ -620,10 +621,11 @@ describe('the rail gun in both hands', () => {
       const [at] = foregrip(s.pos[J.HAND_R], s.rot[J.HAND_R]);
       const q = s.rot[J.HAND_L];
       const palm = add(
-        add(s.pos[J.HAND_L], turn(q, [0, -1, 0]).map(v => v * 0.078) as Vec3),
-        turn(q, [1, 0, 0]).map(v => v * 0.022) as Vec3,
+        add(s.pos[J.HAND_L], turn(q, [0, -1, 0]).map(v => v * LONG_HOLD[0]) as Vec3),
+        turn(q, [1, 0, 0]).map(v => v * LONG_HOLD[1]) as Vec3,
       );
-      expect(away(palm, at)).toBeLessThan(0.015);
+      // 15.4 mm with the grip held further into the hand (LONG_HOLD).
+      expect(away(palm, at)).toBeLessThan(0.016);
     }
   });
 });

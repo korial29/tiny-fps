@@ -138,3 +138,21 @@ it('reloads the harpoon by its bolt alone: the fired one leaves forward, the nex
   expect(out[0]).toBe(2 * seated);
   expect(out[1]).toBeGreaterThan(at);
 });
+
+it('hangs the belt’s front strips clear of the thighs, standing (the user, 2026-11-25)', () => {
+  const model = hunter(2);
+  /** The vertices of `part` as points. */
+  const points = (part: number[]) =>
+    Array.from({ length: part.length / STRIDE }, (_, i) => part.slice(i * STRIDE, i * STRIDE + 3));
+  // The strips' weave, where they end: the lowest 8 cm of the belt's woven panels, in front.
+  const strips = points(model['Belt']).filter((_, i) => model['Belt'][i * STRIDE + 8] === WEAVE);
+  const foot = Math.min(...strips.map(p => p[1]));
+  for (const side of [-1, 1]) {
+    const thigh = points(model[`Thigh net ${side}`]).filter(p => p[1] > foot && p[1] < foot + 0.08);
+    const ends = strips.filter(p => p[0] * side > 0.08 && p[1] < foot + 0.08 && p[2] < 0);
+    // 8.9 cm ahead of the thigh's front at rest. At 3.5 cm the thigh came through them as soon
+    // as he stood with a leg forward.
+    const gap = Math.min(...thigh.map(p => p[2])) - Math.min(...ends.map(p => p[2]));
+    expect(gap, `side ${side}`).toBeGreaterThan(0.07);
+  }
+});

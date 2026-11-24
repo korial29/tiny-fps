@@ -1617,6 +1617,8 @@ export function hunter(lod: 0 | 1 | 2) {
   }
   // A ring of folded black strips sits under the tassets, flaring over the thigh net.
   const strips = 16;
+  /** How far the front strips' ends stand out over the thighs, metres. */
+  const OVER_THIGH = 0.11;
   for (let i = 0; i < strips; i++) {
     panel(
       (u, v) => {
@@ -1624,10 +1626,13 @@ export function hunter(lod: 0 | 1 | 2) {
         const flare = 1 - (1 - v) ** 3;
         const hip = Math.sin(2 * angle) ** 2;
         const fold = 0.006 * Math.sin(Math.PI * u) + 0.004 * u;
+        // Further out over the thighs in front, more the lower: standing, the thighs came
+        // through the front strips from halfway down (the user, 2026-11-25).
+        const over = OVER_THIGH * flare * hip * Math.max(0, Math.cos(angle)) ** 0.5;
         return [
-          (0.193 + 0.055 * flare + 0.027 * hip + fold) * Math.sin(angle),
+          (0.193 + 0.055 * flare + 0.027 * hip + fold + 0.6 * over) * Math.sin(angle),
           0.987 - v * (0.26 + 0.016 * (i % 2) + 0.023 * Math.sin(Math.PI * u)),
-          -(0.166 + 0.041 * flare + 0.058 * hip + fold) * Math.cos(angle),
+          -(0.166 + 0.041 * flare + 0.058 * hip + fold + over) * Math.cos(angle),
         ];
       },
       lod ? 4 : 2,

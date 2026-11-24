@@ -131,7 +131,7 @@ what each step costs:
 1. **Rigid pieces through the store** (done): `store.ts` keeps a piece built once at the origin
    (`mesh()`); a frame lists where each one stands (`Pieces`: a turn, a place, a scale) and the scene's
    vertex shader places it (`R` in `VERT`), in the shadow passes and the scene alike. The runners'
-   pads, collar, guard, helmets, pack, crotch panel, pouch and buckle go there (`soldier()`'s `list`,
+   pads, collar, guard, helmets, pack, crotch panel, pouch and the ninja's blades go there (`soldier()`'s `list`,
    `pads()`'s). Without a list (the tests, the own body, a runner coming apart) the old path draws
    them into `out`, and the `store.highline*` and `store.moon*` tests check both give the same triangles. Measured: 202 000 to
    159 000 vertices written a match frame, the frame's CPU 9.7 to 8.7 ms in the browser, the GPU's

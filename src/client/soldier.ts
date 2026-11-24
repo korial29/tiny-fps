@@ -85,7 +85,7 @@ import { ROLE } from '../shared/kit';
 import { SASH, armor } from './armor';
 import { CUP_F, crotch, hose, pack } from './pack';
 import { fetched, pouch, pouchAt } from './pouch';
-import { buckle, tails } from './buckle';
+import { blades, drape } from './sash';
 import type { Tracer } from './beams';
 import {
   BEHIND,
@@ -1351,10 +1351,10 @@ export const soldier = (
       armor(out, at, cs, lod > 2, plate, ninja, color, !plated);
     }
     if (ninja) {
-      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
-        buckle(o, a, q, build),
+      rigid(`blades ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        blades(o, a, q, build),
       );
-      tails(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, r.t, Math.hypot(p.vx, p.vz));
+      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), color, lod);
     }
     if (!r.cut.eaten) {
       piece(out, r.cut, colors, lod, sink, r.face.w, armored);
@@ -1452,10 +1452,10 @@ export const soldier = (
       rigid('pouch', s.pos[J.PELVIS], s.rot[J.PELVIS], pouch);
     }
     if (ninja) {
-      rigid(`buckle ${build} ${color}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
-        buckle(o, a, q, build),
+      rigid(`blades ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
+        blades(o, a, q, build),
       );
-      tails(out, s.pos[J.PELVIS], s.rot[J.PELVIS], build, r.t, Math.hypot(p.vx, p.vz));
+      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), color, lod);
     }
     if (xeno && lod) {
       // Its hands in its chitin (the user, 2026-11-17: the skin's texture on them): each a rigid

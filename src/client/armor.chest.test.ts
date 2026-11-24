@@ -215,18 +215,19 @@ describe('the armour', () => {
       }
     });
 
-    it("ties the ninja's waist in a sash: wide, nearly level, in its own grey, drawn alone on a map with no armour (the user, 2026-11-17; it was a thin belt in a V in his team's colour, 2026-11-13)", () => {
+    it("ties the ninja's waist in a wide sash in his pads' grey, nearly level, drawn alone on a map with no armour (the user, 2026-11-24, on a picture; it was a thin grey band, 2026-11-17)", () => {
+      const team = [0.1, 0.8, 0.3];
       for (const build of [0, 1]) {
         const out: number[] = [];
         const s = body(1, build);
         skin(out, s, solve(rest([0, 0, 0], 0, build)), palette([0.9, 0.2, 0.1]));
         const n = out.length;
-        armor(out, 0, s, true, undefined, true, [0.1, 0.8, 0.3], true);
+        armor(out, 0, s, true, undefined, true, team, true);
         expect(out.length).toBeGreaterThan(n);
         const pts: number[][] = [];
         for (let i = n; i < out.length; i += STRIDE) {
-          // All of it the sash: in its grey, not the team's colour, round the waist; plain cloth
-          // here, the weave being the shader's.
+          // All of it the sash: in its grey, not the team's colour, round the waist; plain cloth here, the
+          // weave and the folds being the shader's.
           expect([out[i + 6], out[i + 7], out[i + 9]]).toEqual(SASH);
           expect(out[i + 8]).toBe(-1);
           pts.push([out[i], out[i + 1], out[i + 2]]);
@@ -235,12 +236,18 @@ describe('the armour', () => {
         const front = ys(p => Math.abs(p[0]) < 0.02 && p[2] < 0);
         const hips = ys(p => Math.abs(p[0]) > 0.14);
         expect(Math.min(...front)).toBeCloseTo(BELT.y, 2);
-        // Wide: 4.5 cm and more, where the belt was 4.
-        expect(Math.max(...front) - Math.min(...front)).toBeGreaterThan(0.045);
-        // Nearly level: up over the hips, by less than a third of its height (the V rose 5 cm).
+        // Wide: 10 cm and more, where the band was 5.
+        expect(Math.max(...front) - Math.min(...front)).toBeGreaterThan(0.1);
+        // Nearly level: up over the hips, by a fraction of its height.
         const rise = Math.min(...hips) - Math.min(...front);
-        expect(rise).toBeGreaterThan(0.008);
+        expect(rise).toBeGreaterThan(0.004);
         expect(rise).toBeLessThan(0.02);
+        // Over the vest's plates at its middle (12 mm), its top rolled in to the skin.
+        const z = (y0: number, y1: number) =>
+          Math.min(
+            ...pts.filter(p => Math.abs(p[0]) < 0.03 && p[1] > y0 && p[1] < y1).map(p => p[2]),
+          );
+        expect(z(BELT.y + 0.02, BELT.y + 0.07)).toBeLessThan(z(BELT.y + BELT.h - 0.004, 2) - 0.008);
       }
     });
 

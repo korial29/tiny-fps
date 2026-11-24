@@ -10,7 +10,7 @@
   "src/client/body.arms.test.ts": 7.4,
   "src/client/body.test.ts": 9.8,
   "src/client/body.view.test.ts": 22.4,
-  "src/client/buckle.test.ts": 3.1,
+  "src/client/sash.test.ts": 3.1,
   "src/client/chase.test.ts": 0.2,
   "src/client/cigar.test.ts": 4.4,
   "src/client/combat.test.ts": 0.1,

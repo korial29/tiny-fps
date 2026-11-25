@@ -19,8 +19,13 @@ describe('decor, the scenery loaded with its map', () => {
     expect(d.sky).toEqual([]);
   });
 
-  it('loads nothing for Highline: its city is drawn by render.ts', async () => {
-    expect(await decor(mapOf('highline'))).toBe(BARE);
+  it('loads nothing for Highline, at once: its city is drawn by render.ts', () => {
+    expect(decor(mapOf('highline'))).toBe(BARE);
+  });
+
+  it('gives a map loaded before at once, the same scenery', async () => {
+    const d = await decor(mapOf('landfall'));
+    expect(decor(mapOf('landfall'))).toBe(d);
   });
 
   it('draws a map with its scenery after its brushes, the moon’s Earth last', async () => {

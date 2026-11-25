@@ -867,13 +867,23 @@ export type Decor = { land: number[]; sky: number[]; heavens?: Vec3 };
 /** The scenery of a map that has none of its own: the city's is drawn here. */
 export const BARE: Decor = { land: [], sky: [] };
 
-/** Loads the scenery of the map `def` from its own chunk: Tranquility's or Landfall's, none for the others. */
-export const decor = (def: WorldDef): Promise<Decor> =>
-  def.scenery === 'moon'
-    ? import('./tranquility').then(m => m.default(def, palette({ def }).map(String)))
-    : def.scenery === 'beach'
-      ? import('./landfall').then(m => m.default(def))
-      : Promise.resolve(BARE);
+/** The scenery of each map already loaded: it is the same each time the map is played. */
+const decors = new Map<WorldDef, Decor>();
+
+/**
+ * The scenery of the map `def`: none for a map that has no chunk of its own (Highline), and one
+ * already loaded, at once; else a promise of it, from Tranquility's or Landfall's chunk.
+ */
+export const decor = (def: WorldDef): Decor | Promise<Decor> => {
+  const had = def.scenery === 'moon' || def.scenery === 'beach' ? decors.get(def) : BARE;
+  if (had) {
+    return had;
+  }
+  const keep = (d: Decor) => (decors.set(def, d), d);
+  return def.scenery === 'moon'
+    ? import('./tranquility').then(m => keep(m.default(def, palette({ def }).map(String))))
+    : import('./landfall').then(m => keep(m.default(def)));
+};
 
 /** All the map's vertices, drawn once: the city (on the moon and the beach, `d` instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
 export const scenery = (world: World, d = BARE): number[] =>

@@ -184,7 +184,8 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     // The scene starts once the loading screen is painted: building the map holds the main thread
     // a while. A tab in the background has no frames, and starts after a wait.
     // The map's own scenery comes in its chunk meanwhile: a scene asked for before it is in starts
-    // when it comes, with the refresh period sampled meanwhile. The city's comes at once.
+    // when it comes, with the refresh period sampled meanwhile. The city's, or a map's played
+    // before, is there at once.
     let look: Decor | undefined;
     let asked: [number | undefined] | undefined;
     const got = (d: Decor) => {
@@ -193,7 +194,12 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         start(...asked);
       }
     };
-    void decor(mapOf(key)).then(got, () => got(BARE));
+    const came = decor(mapOf(key));
+    if (came instanceof Promise) {
+      void came.then(got, () => got(BARE));
+    } else {
+      look = came;
+    }
     const start = (period?: number) => {
       if (live) {
         return;

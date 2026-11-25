@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IDLE } from '../../test/teams';
 import { TEAM_COLOR } from '../shared/constants';
 import { STILL, spawn } from '../shared/physics';
@@ -14,9 +14,12 @@ import type { FlagState, PlayerInfo, SnapPlayer, SocketLike, Snapshot } from '..
 import { build } from '../shared/world';
 import { tinyFps } from './index';
 import type { TinyFps } from './index';
+import { decor } from './render';
 
 /** The game with no WebGL (jsdom has none): the sockets, the HUD and the events still run. */
 describe('tinyFps, the match through the socket', () => {
+  // The moon's scenery loaded once (render.ts decor()): a scene on it then starts at once.
+  beforeAll(async () => void (await decor(MOON)));
   const world = build(ROOFTOPS);
   let sent: (string | ArrayBuffer)[];
   let sock: SocketLike;

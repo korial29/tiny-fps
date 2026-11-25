@@ -169,4 +169,38 @@ describe('the character screen', () => {
     });
     game.destroy();
   });
+
+  it('goes from Start straight into the game: the lock its click takes passes to the canvas', () => {
+    // jsdom has no pointer lock: the element that asked last holds it.
+    let held: Element | null = null;
+    Object.defineProperty(document, 'pointerLockElement', { configurable: true, get: () => held });
+    document.exitPointerLock = () => {};
+    const asks: Element[] = [];
+    Element.prototype.requestPointerLock = function (this: Element) {
+      asks.push(this);
+      held = asks[asks.length - 1];
+      return Promise.resolve();
+    };
+    const sock: SocketLike = {
+      binaryType: '',
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+      send: () => {},
+      close: () => {},
+    };
+    const game = tinyFps(host, { name: 'Ann', socket: sock, cast: true });
+    sock.onopen!();
+    expect(asks).toEqual([]);
+    q('.go').click();
+    // The click's gesture: the container takes the lock, the game's canvas not built yet.
+    expect(asks).toEqual([host]);
+    vi.advanceTimersByTime(400);
+    const canvas = host.firstElementChild!.shadowRoot!.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    expect(asks).toEqual([host, canvas]);
+    game.destroy();
+    delete (document as { pointerLockElement?: Element | null }).pointerLockElement;
+    delete (Element.prototype as { requestPointerLock?: unknown }).requestPointerLock;
+  });
 });

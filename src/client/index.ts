@@ -251,6 +251,10 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
   const lobby = opts.cast
     ? createLobby(container, mapOf(map), c => {
         picked = c;
+        // Start goes straight into the game, not to the pause menu: its click (or Enter) is the
+        // gesture a pointer lock needs, and the game's canvas does not exist yet. The container
+        // holds the lock meanwhile; play() moves it to the canvas, which needs no new gesture.
+        Promise.resolve(container.requestPointerLock?.()).catch(() => {});
         if (up) {
           join();
         }
@@ -356,6 +360,12 @@ const play = (
   // the click that takes the pointer lock.
   for (const e of ['pointerdown', 'keydown', 'click']) {
     wrap.addEventListener(e, () => audio.unlock());
+  }
+  // The lock taken on Start (tinyFps()) passes to the canvas: the game starts without the menu.
+  // The sound too, on the page's activation by that click (where the browser accepts it).
+  if (document.pointerLockElement == container) {
+    Promise.resolve(canvas.requestPointerLock()).catch(() => {});
+    audio.unlock();
   }
   const fx = createEffects();
   const announcer = createAnnouncer();

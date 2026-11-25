@@ -16,6 +16,8 @@ const { drawn } = vi.hoisted(() => ({ drawn: [] as string[] }));
 vi.mock('./pacing', () => ({ createPacing: () => ({ draw: () => true }) }));
 vi.mock('./render', async importOriginal => ({
   ...(await importOriginal<typeof Render>()),
+  // No builds for the scene to wait for: run for real, they took over 10 s on a loaded runner.
+  warmSteps: () => [],
   createRenderer: () => ({
     frame: () => (drawn.push('F'), true),
     destroy: () => {},

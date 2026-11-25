@@ -15,6 +15,14 @@ import { build } from '../shared/world';
 import { tinyFps } from './index';
 import type { TinyFps } from './index';
 import { decor } from './render';
+import type * as Render from './render';
+
+// The renderer's builds (warmSteps()) are left out: the scene waits for none. Run for real, the
+// first test's hook spent them, over 10 s on a loaded runner.
+vi.mock('./render', async importOriginal => ({
+  ...(await importOriginal<typeof Render>()),
+  warmSteps: () => [],
+}));
 
 /** The game with no WebGL (jsdom has none): the sockets, the HUD and the events still run. */
 describe('tinyFps, the match through the socket', () => {

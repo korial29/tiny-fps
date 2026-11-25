@@ -1297,6 +1297,16 @@ const earth = (o: number[]) => {
 
 /** The moon's scenery vertices, in the renderer's format. */
 export const moonscape = (def: WorldDef): number[] => {
+  const g = moonscaping(def);
+  let n = g.next();
+  while (!n.done) {
+    n = g.next();
+  }
+  return n.value;
+};
+
+/** moonscape(), pausing (yield) between its parts: a few tens of milliseconds each (tasks.ts drive()). */
+export function* moonscaping(def: WorldDef): Generator<undefined, number[], undefined> {
   const red: number[] = [];
   base(red);
   if (def.relief) {
@@ -1306,6 +1316,7 @@ export const moonscape = (def: WorldDef): number[] => {
   const at = def.relief?.at ?? (() => 0);
   LAYOUT.crags.forEach(c => crag(red, c, at));
   const o = red.concat(mirror(red));
+  yield;
   if (def.relief) {
     pebbles(o, def);
   }
@@ -1316,16 +1327,20 @@ export const moonscape = (def: WorldDef): number[] => {
     }
   }
   craters(o, def);
+  yield;
   if (def.relief) {
     apron(o, def);
     pits(o);
+    yield;
     rims(o, def);
+    yield;
     terrain(o, def);
+    yield;
     sites(o, def);
   }
   ranges(o, unit(def.sun.dir as Vec3));
   return o;
-};
+}
 
 /** The Earth, drawn last: render.ts moves it with the eye from HEAVENS. The stars are drawn by the sky's shader. */
 export const heavens = (): number[] => {

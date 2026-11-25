@@ -218,8 +218,13 @@ GEN[TEX.ROCK] = (u, v) => {
   return [c, clamp(0.35 + 0.5 * f - 0.3 * pit - 0.25 * crack)];
 };
 
+/** The layers, made once: every renderer (the game's, the character screen's) uploads the same. */
+let made: Uint8ClampedArray | undefined;
+
 /** All layers, RGBA, layer after layer, rows top to bottom: the upload of a texture array. */
-export const textures = (): Uint8ClampedArray => {
+export const textures = (): Uint8ClampedArray => (made ??= layers());
+
+const layers = (): Uint8ClampedArray => {
   const out = new Uint8ClampedArray(LAYERS * SIZE * SIZE * 4);
   GEN.forEach((gen, l) => {
     for (let i = 0; i < SIZE * SIZE; i++) {
@@ -241,9 +246,27 @@ let plated: Uint8Array | undefined;
  * groove's crisp line, so PLATE_TEXELS keeps it under a millimetre wide.
  */
 export const plates = (): Uint8Array => {
+  while (plating()) {}
+  return plated!;
+};
+
+/** The plates under way (plating()). */
+let making: Generator<undefined, Uint8Array, undefined> | undefined;
+
+/** Takes plates() a few layers further: true while there is more to do. A step of the renderer's warm-up (render.ts warmSteps()). */
+export const plating = (): boolean => {
   if (plated) {
-    return plated;
+    return false;
   }
+  const n = (making ??= make()).next();
+  if (n.done) {
+    [plated, making] = [n.value, undefined];
+  }
+  return !n.done;
+};
+
+/** The plates' texels, pausing (yield) every 8 layers of z: 15 ms on an M2. */
+function* make(): Generator<undefined, Uint8Array, undefined> {
   const P = PLATES;
   const n = P * PLATE_TEXELS;
   let seed = 3;
@@ -254,6 +277,9 @@ export const plates = (): Uint8Array => {
   const out = new Uint8Array(n * n * n);
   // Scalars only, as in a loop over vertices: millions of distances.
   for (let k = 0; k < n; k++) {
+    if (k % 8 == 7) {
+      yield;
+    }
     const z = (k + 0.5) / PLATE_TEXELS;
     const cz = Math.floor(z);
     for (let j = 0; j < n; j++) {
@@ -285,5 +311,5 @@ export const plates = (): Uint8Array => {
       }
     }
   }
-  return (plated = out);
-};
+  return out;
+}

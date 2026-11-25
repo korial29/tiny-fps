@@ -275,7 +275,7 @@ const chestTop = (a: number) => 1.5 - 0.045 * Math.cos((a * Math.PI * 1.4) / 180
  * either end (the user, 2026-11-17: it fell in two steps, a block and a ledge with walls under the
  * bell), steep enough to be under the split before the shoulder's skin starts (52 degrees). The
  * shoulder's bell (pads.ts) is over what is left bare. The breach that ran across the plate by the
- * armpits (2026-11-13) was the rim of the arm's hole in the trunk's skin: see TURN in cook().
+ * armpits (2026-11-13) was the rim of the arm's hole in the trunk's skin: see TURN in cooking().
  */
 export const ARMPIT = { a: [36, 66], low: 1.34, round: [50, 64], r: 0.03 };
 const chestHigh = (a: number) => {
@@ -992,7 +992,7 @@ const moulding = (s: Skin, gi: number) => {
     }
     const [x, y, z] = c;
     // The rest normal of the skin as drawn, the build's own: the plate is set off along it. A
-    // corner on the rim of a hole has its own the other way (`turned`, cook()).
+    // corner on the rim of a hole has its own the other way (`turned`, cooking()).
     const o = unit(
       ...([0, 1, 2].map(j =>
         [0, 1, 2].reduce(
@@ -1137,9 +1137,15 @@ const casting = (s: Skin) => {
   };
 };
 
-/** The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not. */
+/** Skin triangles cooking() goes through between two of its pauses: some 40 ms on an M2. */
+const SLICE = 250;
 
-const cook = (s: Skin, fine: boolean): Recipe => {
+/**
+ * The recipe of the armour on the skin `s`, `fine` (curved outlines refined, scratches) or not,
+ * pausing (yield) every SLICE skin triangles and before the scratches: the close one takes a
+ * third of a second, which preparing() spreads over tasks of their own.
+ */
+function* cooking(s: Skin, fine: boolean): Generator<undefined, Recipe, undefined> {
   // The regions are written on the man's rest mesh: another build's plates are cut there and sit
   // on its own skin, corner for corner.
   const { t, l } = s;
@@ -1194,6 +1200,9 @@ const cook = (s: Skin, fine: boolean): Recipe => {
     g.mould ? moulding(s, i) : g.cast ? casting(s) : undefined,
   );
   for (let k = 0; k < t.length / 3; k++) {
+    if (k % SLICE == SLICE - 1) {
+      yield;
+    }
     const part = partOf(l[k]);
     if (part < 0) {
       continue;
@@ -1360,11 +1369,12 @@ const cook = (s: Skin, fine: boolean): Recipe => {
   at = -1;
   flat = 0;
   if (fine) {
+    yield;
     scratchesOn(s, add, moulds, g => (at = g));
     at = -1;
   }
   return r;
-};
+}
 
 /**
  * The plates' details (the user, 2026-11-13, on a picture of a trooper's armour: discreet, on the
@@ -1649,7 +1659,7 @@ const scratchesOn = (
     });
     const mould = moulds[g];
     const ms = mould && cs.map(c => mould(c, k));
-    // On a moulded plate, inside it where it lies (cook()).
+    // On a moulded plate, inside it where it lies (cooking()).
     if (ms && !cs.every((c, i) => LIMITS[g].every(f => f(landed(c, ms[i])) >= 0))) {
       return false;
     }
@@ -1681,7 +1691,7 @@ const scratchesOn = (
       pick(0, 2, 3),
     );
     if (raise) {
-      // A box: walls from the plate up to its top, wound outward as the plates' (cook()).
+      // A box: walls from the plate up to its top, wound outward as the plates' (cooking()).
       const lift = (i: number, d: number) => {
         const c = cs[i];
         const nl = Math.hypot(c[6], c[7], c[8]) || 1;
@@ -1858,15 +1868,36 @@ const wearing = (t: number[], ninja: boolean, astro: boolean, bare: boolean) => 
   return Int32Array.from(keep);
 };
 
-/** The armour's recipe on the skin `s`, `fine` or not (armor()), made now if it is not yet: the close one takes a quarter of a second. */
-export const prepare = (s: Skin, fine: boolean) => {
-  const book = recipes[+fine];
-  let r = book.get(s);
-  if (!r) {
-    r = cook(s, fine);
-    book.set(s, r);
+/** The recipes under way (preparing()), by skin, not `fine` then `fine`. */
+const cooks = [
+  new WeakMap<Skin, Generator<undefined, Recipe, undefined>>(),
+  new WeakMap<Skin, Generator<undefined, Recipe, undefined>>(),
+];
+
+/**
+ * Takes the recipe of the armour on `s` a slice further (cooking()): true while there is more to
+ * do. A step of the renderer's warm-up (render.ts warmSteps()), a task each.
+ */
+export const preparing = (s: Skin, fine: boolean): boolean => {
+  if (recipes[+fine].has(s)) {
+    return false;
   }
-  return r;
+  let g = cooks[+fine].get(s);
+  if (!g) {
+    cooks[+fine].set(s, (g = cooking(s, fine)));
+  }
+  const n = g.next();
+  if (n.done) {
+    recipes[+fine].set(s, n.value);
+    cooks[+fine].delete(s);
+  }
+  return !n.done;
+};
+
+/** The armour's recipe on the skin `s`, `fine` or not (armor()), made now if it is not yet (the rest of it, if preparing() began it): the close one takes a third of a second. */
+export const prepare = (s: Skin, fine: boolean): Recipe => {
+  while (preparing(s, fine)) {}
+  return recipes[+fine].get(s)!;
 };
 
 /**
@@ -1952,7 +1983,7 @@ export const armor = (
   // Each corner once, though most are the corner of two or three triangles.
   for (let k = 0, q = 0; k < u.length; k += 2, q += 6) {
     const ci = u[k];
-    // A weight is the other way for a corner whose normal is turned (cook()): the place is not.
+    // A weight is the other way for a corner whose normal is turned (cooking()): the place is not.
     const kind = u[k + 1];
     const o = from + c[ci] * 3 * STRIDE;
     const b0 = c[ci + 1];

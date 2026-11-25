@@ -58,8 +58,9 @@ import { createPacing } from './pacing';
 import { brief, goal } from './mission';
 import { lamps } from './lamps';
 import { packsOf } from './props';
-import { BARE, FACE, HEAD, PORTRAIT, createRenderer, decor } from './render';
+import { BARE, FACE, HEAD, PORTRAIT, createRenderer, decor, warmSteps } from './render';
 import type { Decor } from './render';
+import { stepwise } from './tasks';
 import { STEPS, createLoader } from './loading';
 import { createLobby } from './lobby';
 import type { Lobby } from './lobby';
@@ -183,16 +184,21 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     p.onmessage = ev => early.push(ev);
     // The scene starts once the loading screen is painted: building the map holds the main thread
     // a while. A tab in the background has no frames, and starts after a wait.
-    // The map's own scenery comes in its chunk meanwhile: a scene asked for before it is in starts
-    // when it comes, with the refresh period sampled meanwhile. The city's, or a map's played
-    // before, is there at once.
+    // The map's own scenery comes in its chunk meanwhile, and the renderer's builds run a task at a
+    // time: a scene asked for before both are done starts when they are, with the refresh period
+    // sampled meanwhile. The city's scenery, or a map's played before, is there at once.
     let look: Decor | undefined;
+    /** The renderer's builds are done (warmSteps()), one task each: the tab answers meanwhile. */
+    let warm = false;
     let asked: [number | undefined] | undefined;
-    const got = (d: Decor) => {
-      look = d;
-      if (asked) {
+    const ready = () => {
+      if (asked && look && warm) {
         start(...asked);
       }
+    };
+    const got = (d: Decor) => {
+      look = d;
+      ready();
     };
     const came = decor(mapOf(key));
     if (came instanceof Promise) {
@@ -200,11 +206,19 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     } else {
       look = came;
     }
+    stepwise(
+      warmSteps(buildOf(picked ?? {}, mapOf(key))),
+      () => {
+        warm = true;
+        ready();
+      },
+      () => !live,
+    );
     const start = (period?: number) => {
       if (live) {
         return;
       }
-      if (!look) {
+      if (!look || !warm) {
         asked = [period ?? asked?.[0]];
         return;
       }

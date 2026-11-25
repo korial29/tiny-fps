@@ -89,7 +89,8 @@
       /* The maps: a card each, its picture, its name and a line of lore; the checked one lit. */
       .maps {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        /* 220px: the three in a row beside the settings on a wide page. */
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 16px;
       }
       .map {
@@ -495,6 +496,19 @@
               <img
                 src="./maps/tranquility.jpg"
                 alt="A combat ship on its pad by the red dome of Tranquility, mountains on the crater's horizon, the Earth in a black sky"
+              />
+              <i>✓</i>
+              <div>
+                <em></em>
+                <strong></strong>
+                <p></p>
+              </div>
+            </label>
+            <label class="map">
+              <input type="radio" name="map" value="landfall" />
+              <img
+                src="./maps/landfall.jpg"
+                alt="The wreck across the beach of Landfall, smoke rising from it over a turquoise lagoon, palms along the sand"
               />
               <i>✓</i>
               <div>

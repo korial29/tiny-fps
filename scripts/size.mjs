@@ -105,7 +105,8 @@ const BUDGETS = [
   // 52 KB + 1024 B until the bot and vehicle simulation speed-ups and the Hunter's weapons (#338, 2026-11-20).
   // 53 KB until Landfall's map, its relief, wreck and debris (the user, 2026-11-25: 58,000 B).
   // 58,000 B until Landfall's hollow hull and the bots' pull ups through its decks (the user, 2026-11-25: 58,500 B).
-  { file: 'dist/local.js', max: 58_500 },
+  // 58,500 B until that hull rebased on the ws-free room entry (#399) and the fires' damage (#400) (the user, 2026-11-25: 58,700 B).
+  { file: 'dist/local.js', max: 58_700 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

@@ -1,8 +1,8 @@
 // Web Audio: the sounds of sfx.ts placed in 3D around the listener (HRTF, fainter with distance by
-// the inverse law), their levels in dB, and the music loop.
+// the inverse law), their levels in dB, the music loop and a map's ambience.
 import type { Vec3 } from './mesh';
 import { LAYERS, LOOPED, MUSIC_RATE, RATE, anthem, music, render, seam } from './sfx';
-import type { Voice } from './sfx';
+import type { Air, Voice } from './sfx';
 import { CAST } from './voice/cast';
 import { CLIPS } from './voice/clips';
 
@@ -69,6 +69,10 @@ const NEAR = 2;
 /** A level in dB as a gain, and back. */
 export const gain = (db: number) => 10 ** (db / 20);
 export const db = (g: number) => 20 * Math.log10(g);
+/** A map's cry from afar (Air), dB over the world's bus: it is tens of metres off. */
+const CRY = 16;
+/** Seconds between two of them: at least, and as much more at most. */
+const CRIES = [5, 9];
 /** Sounds playing at once: past it the quietest goes. */
 const VOICES = 24;
 const MUSIC = 0.5;
@@ -176,6 +180,7 @@ export const createAudio = (
   song = music,
   voiced = VOICED,
   theme = anthem,
+  air?: Air,
 ): Audio => {
   let ctx: AudioContext;
   try {
@@ -266,6 +271,42 @@ export const createAudio = (
     src.buffer = b;
     return src;
   };
+
+  /** A loop of the buffer `get` gives once there is one, at `db()`: started on its first set then. */
+  const looping = (get: () => AudioBuffer | undefined, db: () => number): Loop => {
+    let src: AudioBufferSourceNode | undefined;
+    let g: GainNode;
+    return {
+      set(volume, rate) {
+        const b = !src && get();
+        if (b) {
+          src = source(b);
+          src.loop = true;
+          src.connect((g = out(master, 0)));
+          src.start();
+        }
+        if (src) {
+          g.gain.setTargetAtTime(volume * gain(db()), ctx.currentTime, 0.08);
+          src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.08);
+        }
+      },
+    };
+  };
+  /**
+   * The map's ambience: its beds' buffers and its cry's last, rendered at the unlock as the
+   * sounds are (no frame of a match waits for them); the beds' loops, on the world's bus; the
+   * volume each was last set to (set again only once it has moved by a hundredth: listen() runs
+   * every frame); when the next cry is due.
+   */
+  const airs: AudioBuffer[] = [];
+  const beds = (air?.beds ?? []).map((_, i) =>
+    looping(
+      () => airs[i],
+      () => LEVELS[3],
+    ),
+  );
+  const [vols, was]: number[][] = [[], []];
+  let due = 0;
 
   /** Buffer `b` (from `clip`'s start for its length) at `level` dB as play() places it; false when unheard. */
   const emit = (
@@ -394,6 +435,12 @@ export const createAudio = (
           const s = render(id, layers);
           bufs[id] = buffer(LOOPED.includes(id) ? seam(s) : s);
         });
+        if (air) {
+          airs.push(
+            ...air.beds.map(make => buffer(make(), MUSIC_RATE)),
+            buffer(render(0, [air.cry])),
+          );
+        }
         sing(theme, title);
         if (!menu) {
           sing(song, bed);
@@ -406,6 +453,26 @@ export const createAudio = (
     },
     listen(at, y) {
       [eye, yaw] = [at, y];
+      if (air && started) {
+        const t = ctx.currentTime;
+        air.mix(at, t, vols);
+        for (let i = 0; i < beds.length; i++) {
+          if (!(Math.abs(vols[i] - was[i]) < 0.01)) {
+            beds[i].set((was[i] = vols[i]), 1);
+          }
+        }
+        if (t >= due) {
+          if (due) {
+            emit(
+              airs[beds.length],
+              air.from(Math.random(), Math.random()),
+              LEVELS[3] + CRY,
+              0.85 + 0.3 * Math.random(),
+            );
+          }
+          due = t + CRIES[0] + CRIES[1] * Math.random();
+        }
+      }
     },
     play(id, at, db = 0, rate = 1, radio = false) {
       emit(bufs[id], at, db + level(id), rate, undefined, radio);
@@ -424,24 +491,11 @@ export const createAudio = (
         emit(cast, at, db + LEVELS[0], mimic ? rate * MIMIC.rate : rate, CAST[id], radio, mimic)
       );
     },
-    loop(id) {
-      let src: AudioBufferSourceNode | undefined;
-      let g: GainNode;
-      return {
-        set(volume, rate) {
-          if (!src && bufs[id]) {
-            src = source(bufs[id]);
-            src.loop = true;
-            src.connect((g = out(master, 0)));
-            src.start();
-          }
-          if (src) {
-            g.gain.setTargetAtTime(volume * gain(level(id)), ctx.currentTime, 0.08);
-            src.playbackRate.setTargetAtTime(rate, ctx.currentTime, 0.08);
-          }
-        },
-      };
-    },
+    loop: id =>
+      looping(
+        () => bufs[id],
+        () => level(id),
+      ),
     menu(on) {
       if (on != menu) {
         menu = on;

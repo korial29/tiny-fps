@@ -15,7 +15,7 @@ import type { Audio } from './audio';
 import { LAYERS as SOUNDS, MUSIC_RATE, RATE, SOUND as IDS } from './sfx';
 import { CAST } from './voice/cast';
 import { CLIPS, LINE } from './voice/clips';
-import type { Voice } from './sfx';
+import type { Air, Voice } from './sfx';
 
 /** Two sounds, named here: the game has none yet. */
 const SOUND = { HIT: 0, HEART: 1 } as const;
@@ -375,6 +375,88 @@ describe('loop', () => {
     createAudio(Array.from({ length: 10 }, () => [])).unlock();
     const lengths = fake().buffers.map(b => b.length);
     expect(lengths.slice(0, 10)).toEqual([10, 11, 12, 13, 14, 15, 16, 17, 13, 14]);
+  });
+});
+
+describe('a map\u2019s ambience', () => {
+  /** Two beds of 21 and 22 samples: the first as loud as the listener's x, the second silent. */
+  const air = (): Air => ({
+    beds: [() => new Float32Array(21), () => new Float32Array(22)],
+    mix: vi.fn((eye: readonly number[], _t: number, out: number[]) => {
+      out[0] = eye[0] / 100;
+      out[1] = 0;
+    }),
+    cry: [[2, 440, 0, 0.01, 0, 0.1, 0, 1, 0, 1, 0.5]],
+    from: (u, v) => [EYE[0] + 20 * u, EYE[1], EYE[2] - 20 - v],
+  });
+  const beds = () => fake().sources.filter(s => s.loop && s.buffer!.length > 20);
+  const start = (a: Air) => {
+    install();
+    const audio = createAudio(LAYERS, undefined, undefined, undefined, undefined, a);
+    audio.listen(EYE, 0);
+    expect(a.mix).not.toHaveBeenCalled();
+    audio.unlock();
+    return audio;
+  };
+
+  it('renders the beds and the cry at the unlock, and loops the beds from the first frame after it, on the world\u2019s bus', () => {
+    LEVELS[3] = -6;
+    const audio = start(air());
+    expect(fake().buffers.slice(2, 5)).toEqual([
+      { length: 21, rate: MUSIC_RATE },
+      { length: 22, rate: MUSIC_RATE },
+      { length: 10, rate: RATE },
+    ]);
+    expect(beds()).toHaveLength(0);
+    audio.listen(EYE, 0);
+    audio.listen(EYE, 0);
+    expect(beds().map(s => s.buffer!.length)).toEqual([21, 22]);
+    const [g] = beds().map(s => s.to!);
+    expect(g.to).toBe(fake().gains[0]);
+    expect(g.gain.setTargetAtTime).toHaveBeenLastCalledWith(
+      expect.closeTo(0.1 * gain(-6)),
+      3,
+      expect.any(Number),
+    );
+  });
+
+  it('sets a bed again only once its volume has moved by a hundredth', () => {
+    const audio = start(air());
+    audio.listen(EYE, 0);
+    const set = beds()[0].to!.gain.setTargetAtTime;
+    audio.listen([EYE[0] + 0.5, EYE[1], EYE[2]], 0);
+    expect(set).toHaveBeenCalledTimes(1);
+    audio.listen([EYE[0] + 30, EYE[1], EYE[2]], 0);
+    expect(set).toHaveBeenCalledTimes(2);
+    expect(set).toHaveBeenLastCalledWith(expect.closeTo(0.4), 3, expect.any(Number));
+  });
+
+  it('cries from afar now and then: placed, not at once, and again later', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const audio = start(air());
+    audio.listen(EYE, 0);
+    const cries = () => fake().sources.filter(s => !s.loop && s.to!.pos);
+    expect(cries()).toHaveLength(0);
+    audio.listen(EYE, 0);
+    expect(cries()).toHaveLength(0);
+    // 5 s and half of 9 more.
+    fake().currentTime = 3 + 9.6;
+    audio.listen(EYE, 0);
+    expect(cries()).toHaveLength(1);
+    expect(cries()[0].to!.pos).toEqual([10, 0, -20.5]);
+    expect(cries()[0].playbackRate.value).toBe(1);
+    audio.listen(EYE, 0);
+    expect(cries()).toHaveLength(1);
+    fake().currentTime += 9.6;
+    audio.listen(EYE, 0);
+    expect(cries()).toHaveLength(2);
+    vi.restoreAllMocks();
+  });
+
+  it('has none without one: nothing looped by listen()', () => {
+    const audio = unlocked();
+    audio.listen(EYE, 0);
+    expect(fake().sources.filter(s => s.loop)).toHaveLength(1);
   });
 });
 

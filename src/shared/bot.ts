@@ -16,7 +16,7 @@ import {
   TICK_HZ,
 } from './constants';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
-import { locate, navOf, path, ROUTES } from './nav';
+import { locate, navOf, path, WADE } from './nav';
 import type { Step, Vec3 } from './nav';
 import type { Flying } from './plasma';
 import { stepOf } from './plasma';
@@ -220,7 +220,7 @@ const SWEEP = 0.35;
  */
 const round = (w: World, base: Vec3, from: Vec3): { at: Vec3; look: number }[] => {
   const nav = navOf(w);
-  const ins = [-1, ...ROUTES.keys()].map(r => {
+  const ins = Array.from({ length: nav.ways + 1 }, (_, k) => k - 1).map(r => {
     const pts = [from, ...path(nav, w, from, base, r).map(st => st.to)];
     return pts.reverse().find(q => flat(q[0], q[2], base[0], base[2]) > ENTRY) ?? from;
   });
@@ -363,8 +363,6 @@ interface Flight {
 
 export class Bot {
   public readonly id: number;
-  /** The route it prefers, an index of nav.ts's ROUTES. */
-  private prefer: number;
   /** Its way: the points it goes through, walking or on a leg; the last is its goal or as near as it gets. */
   private steps: Step[] = [];
   /** The goal of the way, and the tick it was planned. */
@@ -432,7 +430,6 @@ export class Bot {
 
   public constructor(id: number, skill = SKILL) {
     this.id = id;
-    this.prefer = id % ROUTES.length;
     this.persona = personaOf(id, skill);
     this.seed = id * 2654435761 + 1;
   }
@@ -830,9 +827,17 @@ export class Bot {
     // The carrier goes home the quickest way: its route was for spreading the attack. Not a body
     // that jumps unlike the marine the links were flown with: it keeps to the route it knows.
     const direct = (this.why === 'flag home' && !this.steer) || this.why.endsWith(' rack');
-    const prefer = direct ? -1 : this.prefer;
-    this.steps = this.rackSteps ?? path(navOf(w), w, at(p), goal, prefer);
+    const nav = navOf(w);
+    // The route it prefers, one of the world's: the bots of a team spread over them.
+    const prefer = direct ? -1 : this.id % nav.ways;
+    this.steps = this.rackSteps ?? path(nav, w, at(p), goal, prefer);
     this.rackSteps = undefined;
+    // A dead end of the mesh (a ledge it came down on): the way stops where it stands, so it makes
+    // straight for the goal as a body off the mesh does, off a drop that does not hurt.
+    const [x, , z] = this.steps[0].to;
+    if (this.steps.length === 1 && this.steps[0].to !== goal && flat(p.x, p.z, x, z) < 1) {
+      this.steps = [{ to: goal }];
+    }
     this.step = 0;
     this.flight = undefined;
     this.best = Infinity;
@@ -958,7 +963,8 @@ export class Bot {
         floorAt(w, x - fz * PLAYER_R, z + fx * PLAYER_R, y),
         floorAt(w, x + fz * PLAYER_R, z - fx * PLAYER_R, y),
       );
-      if (under < p.y - hurts) {
+      // A drop that hurts, or a bed too near the kill floor (Landfall's lagoon): no way.
+      if (under < Math.max(p.y - hurts, w.def.floor + WADE)) {
         return false;
       }
     }
@@ -966,7 +972,7 @@ export class Bot {
     if (ray(w, [p.x, p.y + 1.9, p.z], [fx, 0, fz], reach) < reach) {
       return false;
     }
-    if (ray(w, [p.x, p.y + STEP_H + 0.1, p.z], [fx, 0, fz], ahead) >= ahead) {
+    if (ray(w, [p.x, p.y + STEP_H + 0.05, p.z], [fx, 0, fz], ahead) >= ahead) {
       return 'open';
     }
     // A box to jump onto: low enough, with a floor behind it no lower than the bot stands, not a

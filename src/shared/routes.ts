@@ -228,3 +228,29 @@ export const above = (legs: Leg[], y: number): Leg[] => {
   const i = legs.findIndex(l => l.k === 'leap' && l.y > y + 0.1);
   return legs.slice(i > 0 && legs[i - 1].k === 'go' ? i - 1 : i);
 };
+
+/**
+ * Landfall's way round the wreck's tail, through the lagoon where the bed is out of depth (flown
+ * by beach.test.ts): from `start` in red's shallows, walked west so the first jump is come at
+ * along its line, onto the float aground there, to the second float, up onto the engine and down
+ * to the raft on the centre line (`out`); and from the raft back by the same boxes to red's
+ * shallows (`in`). Blue's are their mirror across z = 100, so a way round is `out` then the
+ * mirror of `in`.
+ */
+export const LAGOON: { start: P; out: Leg[]; in: Leg[] } = {
+  start: [26, 118],
+  out: [
+    leap([23, 117.5], [20, 117.5], 0.35, { sprint: false }),
+    leap([16.4, 117.2], [12, 114.8], 0.5, { sprint: false }),
+    leap([10.3, 114], [6, 112.5], 1.4, { sprint: false }),
+    go(4, 108.8, 1.4, false),
+    leap([3.5, 107.7], [3, 102], 0.4, { sprint: false }),
+  ],
+  in: [
+    go(3, 97, 0.4),
+    leap([3, 103.5], [3.5, 108.5], 1.4, { sprint: false }),
+    leap([6.5, 112.5], [11, 114.5], 0.5, { sprint: false }),
+    leap([12.6, 115], [17, 117.3], 0.35, { sprint: false }),
+    go(21, 117.5, 0.35, false),
+  ],
+};

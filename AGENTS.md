@@ -72,9 +72,12 @@ default habit of finishing a change with checks and a PR.
    are optional: run them only when the user asks or when you need them to
    understand a problem.
 3. Keep iterating on the user's feedback until they say it is OK.
-4. Once the user says it is OK, create the PR, then ask whether to run the
-   tests locally.
-5. If they say no, watch the PR's CI by default and fix any failure it shows.
+4. Once the user says it is OK, create the PR.
+5. Watch the PR's CI right away without asking, and fix any failure it shows.
+   Run tests locally only when the user asks.
+6. Once the PR is merged, clean up locally without asking: remove the PR's
+   worktree (`git worktree remove`), delete its local branch, switch back to
+   `master` and pull `origin/master`.
 
 ## Commands and checks
 

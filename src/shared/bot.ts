@@ -905,7 +905,8 @@ export class Bot {
     const last = this.step === this.steps.length - 1;
     // A point where a jump lands may stand against a wall: blocked close to it is there.
     const near = d < 2 && this.ticks - this.better > STUCK_JUMP;
-    if (d < (last ? 1 : 0.5) || (near && !last)) {
+    // Over a point it drops to (a hole in the floor it stands on, a wing's edge) it is not there yet.
+    if (d < (last ? 1 : p.y < y + 1 ? 0.5 : 0) || (near && !last)) {
       if (!last) {
         this.next();
         return this.pilot(p);
@@ -943,11 +944,14 @@ export class Bot {
       return { keys: 0, yaw, free: true, exact: false };
     }
     let keys = FORWARD | SPRINT;
-    if (p.ground && hop && !(p.held & JUMP)) {
-      keys |= JUMP;
-    }
-    if (Math.abs(turn(this.look, yaw)) < 0.15 && !this.steps[this.step + 1]?.leg) {
-      keys |= this.dash(w, p, yaw, d);
+    // Before a leg, no jump or dash of its own: the leg's jump is from its point (onto a crate).
+    if (!this.steps[this.step + 1]?.leg) {
+      if (p.ground && hop && !(p.held & JUMP)) {
+        keys |= JUMP;
+      }
+      if (Math.abs(turn(this.look, yaw)) < 0.15) {
+        keys |= this.dash(w, p, yaw, d);
+      }
     }
     return { keys, yaw, free: true, exact: false };
   }
@@ -1007,7 +1011,7 @@ export class Bot {
     if (ray(w, [p.x, p.y + 1.9, p.z], [fx, 0, fz], reach) < reach) {
       return false;
     }
-    if (ray(w, [p.x, p.y + STEP_H + 0.05, p.z], [fx, 0, fz], ahead) >= ahead) {
+    if (ray(w, [p.x, p.y + STEP_H + 0.01, p.z], [fx, 0, fz], ahead) >= ahead) {
       return 'open';
     }
     // A box to jump onto: low enough, with a floor behind it no lower than the bot stands, not a

@@ -221,12 +221,12 @@ export interface Piece {
   min: Vec3;
   max: Vec3;
 }
-/** Red's pieces and the centre line's, as they are made. */
+/** Red's pieces and the centre line's, as they are made: ghosts, collided with and drawn by the scenery (client/hulk.ts). */
 const mine: Piece[] = [];
 const line: Piece[] = [];
 const note = (l: Piece[], kind: string, b: Brush): Brush => {
   l.push({ kind, min: b.min, max: b.max });
-  return b;
+  return ghost(b);
 };
 
 /** The highest and the lowest ground under a rectangle. */

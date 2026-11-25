@@ -20,6 +20,8 @@ const { paint, draw } = vi.hoisted(() => ({
 vi.mock('./pacing', () => ({ createPacing: () => ({ draw }) }));
 vi.mock('./render', async importOriginal => ({
   ...(await importOriginal<typeof Render>()),
+  // The map's scenery is not drawn here: no wait for its chunk.
+  decor: () => Promise.resolve({ land: [], sky: [] }),
   createRenderer: () => ({
     frame: paint,
     destroy: () => {},
@@ -58,7 +60,7 @@ describe('inputs between rendered frames', () => {
     sock.onmessage!({ data: encodeSnapshot({ ...IDLE, tick, players, rovers }) });
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers({
       toFake: [
         'requestAnimationFrame',
@@ -98,7 +100,8 @@ describe('inputs between rendered frames', () => {
       }),
     });
     snap(10);
-    advance(160);
+    // Async: the scene starts once the map's scenery is in (render.ts decor()).
+    await vi.advanceTimersByTimeAsync(160);
     const root = host.firstElementChild!.shadowRoot!;
     Object.defineProperty(root, 'pointerLockElement', { value: root.querySelector('canvas') });
     expect(paint).toHaveBeenCalled();

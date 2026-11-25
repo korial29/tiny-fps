@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BEACH, HULL as SHAPE, LAYOUT, RISE, SHIP, ZED, thick } from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
-import { HULL, hulk, parts } from './hulk';
+import { hulk, parts } from './hulk';
+import { HULL } from './paint';
 import { STRIDE } from './mesh';
 
 const MID = ZED / 2;

@@ -8,7 +8,7 @@ import { STRIDE } from './mesh';
 import { GAPS, INDOORS, LINTELS, furnishing, moonbase } from './moonbase';
 import { PORTHOLES, TIP, hull } from './moonhull';
 import { moonscape } from './moonscape';
-import { palette, scenery } from './render';
+import { decor, palette, scenery } from './render';
 import { uses } from './vision';
 
 const v = moonscape(MOON);
@@ -426,8 +426,11 @@ describe('furnishing', () => {
   });
 });
 
+/** Tranquility's scenery, from its chunk. */
+const look = await decor(MOON);
+
 describe('moonbase, the doorways as drawn', () => {
-  const all = scenery(build(MOON));
+  const all = scenery(build(MOON), look);
   type P = [number, number, number];
   /** The triangles round each base: three corners each. */
   const tris: P[][] = [];

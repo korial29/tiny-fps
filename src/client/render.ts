@@ -36,14 +36,10 @@ import {
   TWILL,
 } from './mesh';
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
-import { furnishing } from './moonbase';
-import { hangar, satellite } from './satellite';
 import { mouths, rooms } from '../shared/station';
-import { jungle } from './jungle';
-import { HEAVENS, heavens, moonscape } from './moonscape';
 import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
 import { PLUME, SMOKE, plumes } from './smoke';
-import { GLOSS as SHEEN, HULL, PANEL, hulk } from './hulk';
+import { GLOSS as SHEEN, HULL, PANEL } from './paint';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, rackWeapon, vest, vestMesh } from './props';
@@ -776,7 +772,7 @@ export const sunAt = (eye: Vec3, yaw: number): Vec3 => [
 ];
 
 /** The tints of a world's brushes, white first and each once: the shader's palette, MAX_TINTS at most. */
-export const palette = ({ def }: World): Vec3[] =>
+export const palette = ({ def }: Pick<World, 'def'>): Vec3[] =>
   [
     ...new Map<string, Vec3>([
       ['1,1,1', [1, 1, 1]],
@@ -863,26 +859,31 @@ export const city = (world: World): World => ({
   def: { ...world.def, brushes: [...deepen(world.def), ...skyline(world.def)] },
 });
 
-/** All the map's vertices, drawn once: the city (on the moon, its scenery instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
-export const scenery = (world: World): number[] =>
+/**
+ * A map's own scenery, loaded with its chunk before the renderer is made (decor()): its ground drawn
+ * once, and on the moon the Earth (`sky`, the ground's last vertices) and where it stands.
+ */
+export type Decor = { land: number[]; sky: number[]; heavens?: Vec3 };
+/** The scenery of a map that has none of its own: the city's is drawn here. */
+export const BARE: Decor = { land: [], sky: [] };
+
+/** Loads the scenery of the map `def` from its own chunk: Tranquility's or Landfall's, none for the others. */
+export const decor = (def: WorldDef): Promise<Decor> =>
+  def.scenery === 'moon'
+    ? import('./tranquility').then(m => m.default(def, palette({ def }).map(String)))
+    : def.scenery === 'beach'
+      ? import('./landfall').then(m => m.default(def))
+      : Promise.resolve(BARE);
+
+/** All the map's vertices, drawn once: the city (on the moon and the beach, `d` instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
+export const scenery = (world: World, d = BARE): number[] =>
   world.def.scenery === 'moon'
-    ? [
-        ...level(world),
-        ...moonscape(world.def),
-        ...furnishing(world.def, palette(world).map(String)),
-        ...(world.def.station
-          ? [...satellite(world.def.station), ...hangar(world.def.station)]
-          : []),
-        ...vision(world.def),
-        ...zones(world.def),
-        ...heavens(),
-      ]
+    ? [...level(world), ...d.land, ...vision(world.def), ...zones(world.def), ...d.sky]
     : world.def.scenery === 'beach'
       ? [
           ...level(world),
           ...shore(world.def),
-          ...jungle(world.def),
-          ...hulk(world.def),
+          ...d.land,
           ...vision(world.def),
           ...zones(world.def),
           ...plumes(world.def),
@@ -1032,7 +1033,8 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 };
 
 /** Throws when the browser has no WebGL2. */
-export const createRenderer = (canvas: HTMLCanvasElement, world: World): Renderer => {
+/** `d` is the map's own scenery (decor()): without it, Tranquility and Landfall draw their brushes only. */
+export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE): Renderer => {
   /** The animation state of each runner drawn. */
   let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
@@ -1089,9 +1091,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
 
   const size = () => backing(canvas.clientWidth, canvas.clientHeight, devicePixelRatio);
   // What is drawn is the world plus a city, a street and the runner's red; the physics knows only `world`.
-  const ground = scenery(world);
+  const ground = scenery(world, d);
   /** The Earth, the last of the ground's vertices (the stars are the sky's). */
-  const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
+  const heavensN = world.def.scenery === 'moon' ? d.sky.length / STRIDE : 0;
   /** Landfall's sea, the last of the ground's vertices: drawn apart, after what stands in it. */
   const seaN = world.def.scenery === 'beach' ? lagoon(world.def).length / STRIDE : 0;
   /** Its smoke and fires, the last before the sea: drawn apart too, after the sky they rise into. */
@@ -1772,7 +1774,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
         gl.drawArrays(gl.TRIANGLES, 0, sky0);
-        const [x, y, z] = HEAVENS;
+        const [x, y, z] = d.heavens ?? [0, 0, 0];
         uni('uniform4fv', 'R', [0, 0, 0, 1, eye[0] - x, eye[1] - y, eye[2] - z, 1]);
         uni('uniform4f', 'Ob', globe, fade, edge, 1);
         gl.drawArrays(gl.TRIANGLES, sky0, heavensN);

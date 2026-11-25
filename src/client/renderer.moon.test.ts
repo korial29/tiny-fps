@@ -27,6 +27,7 @@ import {
   SHIP_NEAR,
   city,
   createRenderer,
+  decor,
   fogOf,
   fogRef,
   palette,
@@ -255,7 +256,7 @@ describe('createRenderer', () => {
       expect(ob(ROOM, ORBIT.SEAM + 300)).toEqual([0, 0, 0, 0]);
     });
 
-    it('draws the moon’s stars in the sky, and its Earth wherever the eye is, at the same angle: they are infinitely far', () => {
+    it('draws the moon’s stars in the sky, and its Earth wherever the eye is, at the same angle: they are infinitely far', async () => {
       const sn = (w: World) => {
         calls.length = 0;
         createRenderer(canvas, w);
@@ -263,7 +264,7 @@ describe('createRenderer', () => {
       };
       expect(sn(build(MOON))).toBe(1);
       expect(sn(ROOM)).toBe(0);
-      const rd = createRenderer(canvas, build(MOON));
+      const rd = createRenderer(canvas, build(MOON), await decor(MOON));
       for (const eye of [
         [80, 2, 200],
         [-150, 600, 400],

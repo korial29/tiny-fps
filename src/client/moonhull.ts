@@ -6,7 +6,8 @@ import { TAU } from '../shared/physics';
 import { glow } from './flag';
 import { STRIDE, dress, place, segment, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { GAPS, INDOORS, LINTELS, UP, box, face, lit } from './moonbase';
+import { UP, box, face, lit } from './brick';
+import { GAPS, INDOORS, LINTELS } from './moonbase';
 
 const [CX, CZ] = DOME;
 const R = 22.4;

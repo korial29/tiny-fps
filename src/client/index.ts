@@ -56,9 +56,10 @@ import { gather } from './lights';
 import { marks } from './marks';
 import { createPacing } from './pacing';
 import { brief, goal } from './mission';
-import { lamps } from './satellite';
+import { lamps } from './lamps';
 import { packsOf } from './props';
-import { FACE, HEAD, PORTRAIT, createRenderer } from './render';
+import { BARE, FACE, HEAD, PORTRAIT, createRenderer, decor } from './render';
+import type { Decor } from './render';
 import { STEPS, createLoader } from './loading';
 import { createLobby } from './lobby';
 import type { Lobby } from './lobby';
@@ -182,8 +183,23 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
     p.onmessage = ev => early.push(ev);
     // The scene starts once the loading screen is painted: building the map holds the main thread
     // a while. A tab in the background has no frames, and starts after a wait.
+    // The map's own scenery comes in its chunk meanwhile: a scene asked for before it is in starts
+    // when it comes, with the refresh period sampled meanwhile. The city's comes at once.
+    let look: Decor | undefined;
+    let asked: [number | undefined] | undefined;
+    const got = (d: Decor) => {
+      look = d;
+      if (asked) {
+        start(...asked);
+      }
+    };
+    void decor(mapOf(key)).then(got, () => got(BARE));
     const start = (period?: number) => {
       if (live) {
+        return;
+      }
+      if (!look) {
+        asked = [period ?? asked?.[0]];
         return;
       }
       live = play(
@@ -195,6 +211,7 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
         period,
         !!opts.cast,
         opts.voices !== false,
+        look,
       );
       // The game first in its container, the loading screen over it.
       container.append(loader.el);
@@ -291,6 +308,7 @@ const play = (
   period?: number,
   cast = false,
   voices = true,
+  look = BARE,
 ): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
@@ -422,7 +440,7 @@ const play = (
   const wrecks = createWrecks(world, { tracer, audio, fx });
   let rd: Renderer | undefined;
   try {
-    rd = createRenderer(canvas, world);
+    rd = createRenderer(canvas, world, look);
   } catch {
     // No WebGL2: stay connected, say so on the title screen.
   }

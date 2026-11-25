@@ -383,7 +383,7 @@ const ICO = [1, 2, 3, 4, 6].map(ico);
  * as one rounded mass with no facet. One tone a stone, darker at the foot (from `g` up a third of
  * the way to `top`); what is wholly under the ground (`floor`, if given) is not drawn.
  */
-const stone = (
+export const stone = (
   o: number[],
   lod: number | Vec3[][],
   pt: (u: Vec3) => Vec3,

@@ -175,7 +175,7 @@ for (const card of document.querySelectorAll('.map')) {
   );
 }
 
-// ?name=…&mode=local|server&map=highline|tranquility&body=0|1&bots=0|4|8&skill=0…7&url=… joins
+// ?name=…&mode=local|server&map=highline|tranquility|landfall&body=0|1&bots=0|4|8&skill=0…7&url=… joins
 // right away;
 // without it, the choices of the last visit.
 const was = load();

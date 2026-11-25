@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AIRS,
   LAYERS,
   LOOPED,
   MUSIC_RATE,
@@ -9,8 +10,12 @@ import {
   anthem,
   moon,
   music,
+  blaze,
+  breeze,
+  chirr,
   render,
   seam,
+  surf,
 } from './sfx';
 import type { Voice } from './sfx';
 
@@ -796,5 +801,163 @@ describe('the fists’ glory kill', () => {
     expect(level(0, 0.05)).toBeGreaterThan(level(0.15, 0.2));
     expect(level(0.15, 0.2)).toBeGreaterThan(0.01);
     expect(level(0.15, 0.2)).toBeGreaterThan(level(0.3, 0.35));
+  });
+});
+
+describe('Landfall\u2019s ambience', () => {
+  const rms = (s: Float32Array, a = 0, b = s.length) =>
+    Math.sqrt(s.subarray(a, b).reduce((sum, x) => sum + x * x, 0) / (b - a));
+  const air = AIRS.landfall;
+  const BEDS = { surf, breeze, chirr, blaze };
+  const times: Record<string, number> = {};
+  const made = Object.fromEntries(
+    Object.entries(BEDS).map(([name, make]) => {
+      const t0 = performance.now();
+      const s = make();
+      times[name] = performance.now() - t0;
+      return [name, s];
+    }),
+  );
+  /** Each bed's volume for a listener at (x, z), at `t`. */
+  const heard = (x: number, z: number, t = 0) => {
+    const out: number[] = [];
+    air.mix([x, 1.6, z], t, out);
+    return out;
+  };
+
+  it('is Landfall\u2019s alone: the surf, the wind, the insects and the fire', () => {
+    expect(Object.keys(AIRS)).toEqual(['landfall']);
+    expect(air.beds).toEqual([surf, breeze, chirr, blaze]);
+  });
+
+  describe.each(Object.keys(BEDS))('%s', name => {
+    const s = made[name];
+
+    it('is deterministic, finite and within [-1, 1]: no clipping', () => {
+      expect(
+        Buffer.from(BEDS[name as keyof typeof BEDS]().buffer).equals(Buffer.from(s.buffer)),
+      ).toBe(true);
+      expect(s.every(Number.isFinite)).toBe(true);
+      expect(peak(s)).toBeLessThanOrEqual(0.8 + 1e-6);
+      expect(peak(s)).toBeGreaterThan(0.2);
+      expect(rms(s)).toBeGreaterThan(0.01);
+    });
+
+    it('lasts five to twelve seconds and renders fast', () => {
+      expect(s.length / MUSIC_RATE).toBeGreaterThanOrEqual(4.8);
+      expect(s.length / MUSIC_RATE).toBeLessThanOrEqual(12);
+      expect(times[name]).toBeLessThan(300);
+    });
+
+    it('loops without a jump: the step from the end to the start is no bigger than any other', () => {
+      let most = 0;
+      for (let i = 1; i < s.length; i++) {
+        most = Math.max(most, Math.abs(s[i] - s[i - 1]));
+      }
+      expect(Math.abs(s[0] - s[s.length - 1])).toBeLessThanOrEqual(most);
+    });
+
+    it('is as loud where it ends as where it starts: no step in the level at the loop', () => {
+      const n = MUSIC_RATE / 4;
+      const [head, tail] = [rms(s, 0, n), rms(s, s.length - n)];
+      expect(head / tail).toBeGreaterThan(0.5);
+      expect(head / tail).toBeLessThan(2);
+    });
+  });
+
+  it('breaks two waves a loop: the surf swells to several times its quietest', () => {
+    const s = made.surf;
+    const n = MUSIC_RATE / 2;
+    const loud = Array.from({ length: 24 }, (_, i) => rms(s, i * n, (i + 1) * n));
+    expect(Math.max(...loud) / Math.min(...loud)).toBeGreaterThan(3);
+    // The same wave six seconds on, within a little: the weaker ones between differ.
+    const peaks = loud.map((v, i) => (v > 0.6 * Math.max(...loud) ? i : -1)).filter(i => i >= 0);
+    expect(peaks.some(i => i < 12)).toBe(true);
+    expect(peaks.some(i => i >= 12)).toBe(true);
+  });
+
+  it('crackles: the fire has clicks well over its rumble', () => {
+    expect(peak(made.blaze) / rms(made.blaze)).toBeGreaterThan(5);
+    expect(peak(made.breeze) / rms(made.breeze)).toBeLessThan(5);
+  });
+
+  it('sings high: the insects are above 4 kHz, the wind is not', () => {
+    /** The share of the energy a one-pole low-pass at 2 kHz lets through. */
+    const low = (s: Float32Array) => {
+      const a = 1 - Math.exp((-2 * Math.PI * 2000) / MUSIC_RATE);
+      let [y, kept, all] = [0, 0, 0];
+      for (const x of s) {
+        y += (x - y) * a;
+        kept += y * y;
+        all += x * x;
+      }
+      return kept / all;
+    };
+    expect(low(made.chirr)).toBeLessThan(0.25);
+    expect(low(made.breeze)).toBeGreaterThan(0.4);
+  });
+
+  it('is loudest at the waterline for the surf, and still heard at the trees', () => {
+    expect(heard(30, 150)[0]).toBe(1);
+    expect(heard(60, 150)[0]).toBeLessThan(0.5);
+    expect(heard(92, 150)[0]).toBeGreaterThan(0.2);
+    expect(heard(2, 150)[0]).toBeLessThan(heard(30, 150)[0]);
+  });
+
+  it('brings the wind and the insects up toward the forest, the wind in gusts', () => {
+    const [shore, trees] = [heard(30, 150), heard(92, 150)];
+    expect(trees[1]).toBeGreaterThan(shore[1] * 2);
+    expect(shore[2]).toBe(0);
+    expect(trees[2]).toBeGreaterThan(0.3);
+    const gusts = Array.from({ length: 200 }, (_, t) => heard(92, 150, t)[1]);
+    expect(Math.min(...gusts)).toBeGreaterThan(0.05);
+    expect(Math.max(...gusts)).toBeLessThanOrEqual(1);
+    expect(Math.max(...gusts) / Math.min(...gusts)).toBeGreaterThan(3);
+  });
+
+  it('crackles by each torn engine and each broken end of the hull, in both halves, not at a camp', () => {
+    for (const [x, z] of [
+      [70, 138.5],
+      [70, 61.5],
+      [4.5, 112],
+      [4.5, 88],
+      [36, 100],
+      [44, 100],
+      [74, 100],
+      [82, 100],
+    ]) {
+      expect(heard(x + 2, z)[3]).toBeGreaterThan(0.8);
+    }
+    expect(heard(60, 174)[3]).toBe(0);
+    expect(heard(60, 26)[3]).toBe(0);
+  });
+
+  it('writes its volumes into the array it is given: nothing made a frame', () => {
+    const out = [9, 9, 9, 9];
+    air.mix([50, 1.6, 120], 3, out);
+    expect(out).toHaveLength(4);
+    expect(out.every(v => v >= 0 && v <= 1)).toBe(true);
+  });
+
+  it('gives the gull four mews over a second, clean at both ends, from over the lagoon', () => {
+    const s = render(0, [air.cry]);
+    expect(s.length / RATE).toBeGreaterThan(1);
+    expect(s.length / RATE).toBeLessThan(1.4);
+    expect(s.every(Number.isFinite)).toBe(true);
+    expect(peak(s)).toBeGreaterThan(0.2);
+    expect(peak(s)).toBeLessThanOrEqual(1);
+    expect(Math.abs(s[0])).toBeLessThan(0.01);
+    expect(Math.abs(s[s.length - 1])).toBeLessThan(0.01);
+    for (const [u, v] of [
+      [0, 0],
+      [0.999, 0.999],
+      [0.5, 0.2],
+    ]) {
+      const [x, y, z] = air.from(u, v);
+      expect(x).toBeLessThanOrEqual(30);
+      expect(y).toBeGreaterThan(10);
+      expect(z).toBeGreaterThanOrEqual(0);
+      expect(z).toBeLessThanOrEqual(200);
+    }
   });
 });

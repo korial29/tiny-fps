@@ -23,7 +23,7 @@ import { glory } from '../shared/tackle';
 import { TONES, toneOf } from './features';
 import { styleOf } from './hair';
 import { shaved } from './skin';
-import { SONGS, SOUND } from './sfx';
+import { AIRS, SONGS, SOUND } from './sfx';
 import { gap2 } from '../shared/rover';
 import { SHIP, altitude, limits } from '../shared/ship';
 import { PHASE, inside } from '../shared/station';
@@ -322,7 +322,7 @@ const play = (
       .catch(() => {});
   }
   const predictor = createPredictor(world);
-  const audio = createAudio(undefined, undefined, SONGS[key]);
+  const audio = createAudio(undefined, undefined, SONGS[key], undefined, undefined, AIRS[key]);
   audio.mute(savedMute());
   hud.mute(audio.muted);
   hud.frags(0);

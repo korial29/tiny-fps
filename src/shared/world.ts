@@ -74,8 +74,8 @@ export interface WorldDef {
   fog?: [r: number, g: number, b: number, density: number];
   /** The share of GRAVITY that pulls the players down. Absent: 1. */
   gravity?: number;
-  /** What is drawn around the play area: the city (street, towers, parks, traffic) or the moon (crater rim, base, stars, the Earth). Absent: the city. */
-  scenery?: 'city' | 'moon';
+  /** What is drawn around the play area: the city (street, towers, parks, traffic) the moon (crater rim, base, stars, the Earth) or the beach (sand, sea, forest, wreck). Absent: the city. */
+  scenery?: 'city' | 'moon' | 'beach';
   /** Whether the runners wear space helmets, with the pack on the back, its hose and the breath. */
   helmets?: boolean;
   /** Whether the runners wear armour over a grey suit: white with space helmets, else in the team's colour. */

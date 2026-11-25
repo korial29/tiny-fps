@@ -44,7 +44,12 @@ import type { Brush } from './world';
 const world = build(BEACH);
 const relief = world.relief!;
 const { brushes, teams } = BEACH;
-const solid = brushes.filter(b => !b.ghost);
+/** The boxes of the wreck, the debris and the camps: ghosts since hulk.ts draws the ship on them, told by LAYOUT.pieces. */
+const solid = brushes.filter(b =>
+  LAYOUT.pieces.some(
+    p => p.min.every((v, k) => v === b.min[k]) && p.max.every((v, k) => v === b.max[k]),
+  ),
+);
 const MID = ZED / 2;
 
 const twin = (b: Brush): Brush => ({
@@ -205,7 +210,8 @@ describe('LANDFALL, symmetry', () => {
         ),
       ).toBe(true);
     }
-    // Every drawn brush is a piece: nothing is left for the artist to guess.
+    // Every box of the wreck is a piece, and the level draws none of them itself: hulk.ts does.
+    expect(solid.every(b => b.ghost)).toBe(true);
     expect(LAYOUT.pieces).toHaveLength(solid.length);
     expect(LAYOUT.hull).toEqual(HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]));
     expect(LAYOUT.crags).toHaveLength(2 * ROCKS.length);

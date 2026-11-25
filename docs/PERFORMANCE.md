@@ -236,6 +236,28 @@ A pixel changes by about one level of 255 (the blue, with a 5-bit mantissa, a li
 most, on the brightest surfaces. Everything in the 11-11-10 format would save 0.5 ms more, with the
 halos changed by up to 15 levels.
 
+### The map drawn by the runs in view (2026-11-25)
+
+Every pass drew the whole map: the sun's shadow window, about 90 m a side, got all of Highline's
+216 000 vertices and Tranquility's 529 000. `cells()` (`cells.ts`) cuts the map's opaque vertices at
+load (20 to 27 ms) into runs of neighbouring triangles, 48 m at most unless one triangle is bigger,
+each with its bounds; `seen()` keeps the runs whose bounds reach into a pass's frustum and draws
+through short gaps between them (25 to 130 µs a pass). The runs keep the triangles' order, so the
+depth ties between coplanar faces fall as before, and a triangle outside a frustum gives no pixel:
+the frames are the same to the byte. From the spawns the sun's pass draws 2 to 6 % of Highline and
+about 20 % of Tranquility, the view a quarter to four fifths. On the M2 at 1600 by 900, a frame's
+GPU (median, base then after):
+
+| Scene                                  | Before       | After        |
+| -------------------------------------- | ------------ | ------------ |
+| Highline, a marine, a ninja and a xeno | 12.4 to 12.8 | 12.1 to 12.3 |
+| Highline, no runner                    | 5.7 to 5.8   | 5.5 to 5.6   |
+| Tranquility, three astronauts at 3 m   | 17.6         | 16.6 to 16.7 |
+| Tranquility, three xenomorphs at 3 m   | 14.7 to 15.1 | 14.3 to 14.4 |
+
+The renderer's tests read a pass's run draws as one draw of the whole map (`test/draws.ts`);
+`cells.test.ts` checks the cut on Highline itself.
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by

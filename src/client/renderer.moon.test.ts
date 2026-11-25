@@ -36,6 +36,7 @@ import {
 import type * as Traffic from './traffic';
 import { duo } from '../../test/teams';
 import { pose } from '../../test/flesh';
+import { record } from '../../test/draws';
 
 // The traffic is off unless a test turns it on: the draws below are counted to the vertex.
 const cars = vi.hoisted(() => ({ on: false }));
@@ -67,7 +68,7 @@ const fakeGl = (calls: Call[], ext: () => unknown) =>
       /^[A-Z_\d]+$/.test(name)
         ? K(name)
         : (...args: unknown[]) => {
-            calls.push([name, ...args]);
+            record(calls, [name, ...args], FLOOR_VERTS);
             return name == 'getExtension'
               ? ext()
               : name == 'getUniformLocation'

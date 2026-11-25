@@ -69,6 +69,7 @@ import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, plating, textures } from '.
 import { drawDrops, fall } from './drops';
 import { traffic } from './traffic';
 import { vision, zones } from './vision';
+import { cells, seen } from './cells';
 
 /** Tints a world can use at once, white included (see palette). */
 export const MAX_TINTS = 16;
@@ -1162,6 +1163,18 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const seaN = world.def.scenery === 'beach' ? lagoon(world.def).length / STRIDE : 0;
   /** Its smoke and fires, the last before the sea: drawn apart too, after the sky they rise into. */
   const smokeN = seaN && plumes(world.def).length / STRIDE;
+  /** The ground's opaque vertices, before the Earth, the smoke and the sea. */
+  const opaque = ground.length / STRIDE - heavensN - smokeN - seaN;
+  /** Those cut into runs, each pass drawing those in its view (cells.ts), and the draws of the last one. */
+  const runs = cells(ground, opaque);
+  const draws = new Int32Array(runs.n * 2);
+  /** Draws the ground's opaque runs in the frustum of `m`, the matrix the pass draws with. */
+  const map = (m: Float32Array) => {
+    const n = seen(runs, m, draws);
+    for (let i = 0; i < n; i++) {
+      gl.drawArrays(gl.TRIANGLES, draws[i * 2], draws[i * 2 + 1]);
+    }
+  };
   /** True while portrait() draws: its runner stands high over the map, never in orbit. */
   let posing = false;
   /** Seconds a posing frame moves its runner on: 0 but for a picture drawn again (see `posed`). */
@@ -1767,9 +1780,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       use(shade);
       for (let i = 0; i <= pk.maps; i++) {
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
-        uni('uniformMatrix4fv', 'm', false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
+        const lm = i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM;
+        uni('uniformMatrix4fv', 'm', false, lm);
         gl.clear(gl.DEPTH_BUFFER_BIT);
-        gl.drawArrays(gl.TRIANGLES, 0, first + beamAt / STRIDE);
+        map(lm);
+        gl.drawArrays(gl.TRIANGLES, opaque, first - opaque + beamAt / STRIDE);
         place(true);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
@@ -1853,7 +1868,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       if (heavensN) {
         // The Earth goes with the eye, so it is as far as the stars, and never fades into the globe.
         const sky0 = first - heavensN;
-        gl.drawArrays(gl.TRIANGLES, 0, sky0);
+        map(vp);
         const [x, y, z] = d.heavens ?? [0, 0, 0];
         uni('uniform4fv', 'R', [0, 0, 0, 1, eye[0] - x, eye[1] - y, eye[2] - z, 1]);
         uni('uniform4f', 'Ob', globe, fade, edge, 1);
@@ -1861,7 +1876,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         uni('uniform4fv', 'R', STILL);
         uni('uniform4f', 'Ob', globe, fade, edge, 0);
       } else {
-        gl.drawArrays(gl.TRIANGLES, 0, first - seaN - smokeN);
+        map(vp);
       }
       // What moves, with the code of its own materials and none of the map's (fragOf()).
       if (bodyAt || pieces.length) {

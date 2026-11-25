@@ -235,19 +235,34 @@ c=mix(c,F.rgb,fz);if(Vn>0)c=hv(c);o=vec4(c,1);return;}`;
 /** The middle of the hull's middle section and the nose's end, where the fire was hottest: x, metres. */
 const HOT = [(HULL.sections[1][0] + HULL.sections[1][1]) / 2, HULL.sections[2][1] - 2];
 /**
- * The track of the landing, at the end of GRAIN: soot along the centre line under the hull, scorched
- * sand over the banks and clean sand past them. `wd` is the distance from the line, pulled about by
- * noise stretched along x, the way the hull slid, so the edges are streaks. It is shortest at HOT,
- * where it burnt hardest, so the track is widest there, narrower and in pieces between, and gone
- * out to sea (the bed is darker behind the tail) and past the nose, where it opens into the fan
- * the forest burnt in (jungle.ts). Patches of the soot are sand melted to dark glass: smooth and
- * mirroring, as wet sand is (`bw`).
+ * The track of the landing, at the end of GRAIN: the furrow's floor and the inner slopes of its
+ * banks are no longer sand but burnt earth, a crust of grey-black ash cracked into plates as dried
+ * lava is; scorched sand over the banks' outer slopes, clean sand past them. `wd` is the distance
+ * from the line, pulled about by noise: shortest at HOT, where it burnt hardest, so the track is
+ * widest there; gone out to sea some 15 m behind the waterline (the bed is dark through the
+ * shallows) and past the nose, where it opens into the fan the forest burnt in (jungle.ts).
+ *
+ * The plates are the cells of points scattered one a square (`u`, warped so their sizes differ):
+ * `ck` is 0 in the crack between the two nearest and 1 on a plate, `id` the plate's own number. A
+ * plate is ash or sand whole, so the crust's edge is broken along cracks, and the scorched sand
+ * by it is cracked too, less and less out to where `wd` ends the piece. The ash replaces the
+ * sand's colour and bump, ripples and grain with them: matt, paler where ash dusts the plates'
+ * tops, black and sunk in the cracks (`h`, on a wider slope than the black: one a pixel wide glints), which glow a dull orange under the hull at HOT. It
+ * takes the wet sand's mirror away (`bw`) but for a few patches melted to glass, which are
+ * flat.
  */
-const CHAR = `float cz=abs(q.y-${ZED / 2}.);if(cz<40.){float sk=vn(vec2(q.x*.035,q.y*.4)),fn=vn(vec2(q.x*.14,q.y*2.3)),
-wd=cz/(1.+1.2*smoothstep(${HOT[1] - 14}.,${HOT[1] + 6}.,q.x))+14.*sk+4.*fn+25.
--30.*smoothstep(-30.,${FRAME.shore + 4}.,q.x)*(1.-smoothstep(${HOT[1] + 8}.,${HOT[1] + 26}.,q.x))-4.*max(max(1.-abs(q.x-${HOT[0]}.)/26.,1.-abs(q.x-${HOT[1]}.)/14.),0.),
-s1=1.-smoothstep(10.,23.,wd),s2=1.-smoothstep(7.,13.,wd);
-c*=mix(vec3(1),vec3(.13,.09,.07),s1*(.5+.5*fn));c=mix(c,vec3(.02+.03*fn),s2);bw=max(bw,s2*smoothstep(.6,.7,vn(q*.3)));}`;
+const CHAR = `float cz=abs(q.y-${ZED / 2}.);if(cz<40.){
+float ht=max(max(1.-abs(q.x-${HOT[0]}.)/26.,1.-abs(q.x-${HOT[1]}.)/14.),0.),
+wd=cz/(1.+1.2*smoothstep(${HOT[1] - 14}.,${HOT[1] + 6}.,q.x))+6.*vn(vec2(q.x*.06,q.y*.15))+30.
+-30.*smoothstep(8.,20.,q.x)*(1.-smoothstep(${HOT[1] + 8}.,${HOT[1] + 26}.,q.x))-3.*ht;
+c*=mix(vec3(1),vec3(.13,.09,.07),(1.-smoothstep(18.,29.,wd))*(.7+.3*vn(q*.7)));
+if(wd<19.){vec2 u=q*2.5+2.*vn(q*.3),ic=floor(u),fc=fract(u);float d1=9.,d2=9.,id=0.;
+for(int j=0;j<9;j++){vec2 g=vec2(j%3,j/3)-1.,o=ic+g,pt=g+vec2(h3(vec3(o,1)),h3(vec3(o,2)))-fc;float d=dot(pt,pt);
+if(d<d1){d2=d1;d1=d;id=h3(vec3(o,3));}else if(d<d2)d2=d;}
+float fk=1.-smoothstep(.3,1.,pw*8.),e=sqrt(d2)-sqrt(d1),fe=fk*min(19.-wd,1.),ck=mix(1.,smoothstep(0.,.1,e),fe),cb=mix(1.,smoothstep(0.,.25,e),fe),a=step(wd+1.5*id,18.),gl=a*smoothstep(.8,.86,vn(q*.3));
+h=cb*mix(h,.02+f2*.012*vn(q*5.),a)*(1.-gl);c*=.4+.6*ck;
+c=mix(c,vec3(1,.94,.88)*(.03+.05*id+.2*ck*vn(q*2.5)*vn(q*9.))*ck*(1.-.7*gl)+vec3(2.,.4,.05)*(1.-ck)*fk*ht*step(.75,id)*smoothstep(9.,4.,cz),a);
+bw=mix(bw,gl,a);}}`;
 
 /**
  * The sand's pixel, in main(), before its normal is taken: `c` its colour, `h` its height for the

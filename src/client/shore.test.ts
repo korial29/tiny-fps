@@ -173,9 +173,14 @@ describe("the beach's shader", () => {
     // The sea is told from the rest by its layer, which the depth passes leave out.
     expect(SEA).toBeLessThan(-4.5);
     expect(FRAG).toContain(`abs(L-(${SAND}))`);
-    // The charred track runs along the hull's line, hottest under the middle section and at the nose's end.
+    // The burnt track runs along the hull's line, hottest under the middle section and at the nose's end.
     expect(FRAG).toContain(`cz=abs(q.y-${ZED / 2}.)`);
     expect(FRAG).toContain(`abs(q.x-${(HULL.sections[1][0] + HULL.sections[1][1]) / 2}.)`);
     expect(FRAG).toContain(`abs(q.x-${HULL.sections[2][1] - 2}.)`);
+    // Its ash is another ground: plates between cracks, which take the sand's bump and mirror away.
+    for (const word of ['h3(vec3(o,3))', 'h=cb*mix(h,', 'bw=mix(bw,gl,a)']) {
+      expect(fragOf(BEACH, 'LAND')).toContain(word);
+      expect(rest).not.toContain(word);
+    }
   });
 });

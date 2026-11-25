@@ -2,10 +2,10 @@
 // the map's relief, triangle for triangle, carried on past its lattice in every direction; the sea
 // is a level sheet over it whose vertices know how deep the bed is under them, and the shader does
 // the rest (SKY, WATER, GRAIN, WET below, compiled only into Landfall's program). No DOM.
-import { FRAME, ZED } from '../shared/beach';
-import { noise, raise } from '../shared/relief';
-import type { WorldDef } from '../shared/world';
-import { unit } from './mesh';
+import { FRAME, HULL, ZED } from '../shared/beach';
+import { ground, hash, noise, raise } from '../shared/relief';
+import type { World, WorldDef } from '../shared/world';
+import { basis, dress, place, smooth, unit } from './mesh';
 
 /** The sand's layer: lit paint (its colour in c.x, c.y, c.w) that the shader grains, ripples and wets. No other material's band holds it. */
 export const SAND = -1.09;
@@ -59,6 +59,49 @@ const isle = (o: number[]) => {
       ...at(k, 0),
       ...at(k + 1, 1),
       ...at(k, 1),
+    );
+  }
+};
+
+/** A charred lump, to be squashed: what the fire left of the ship's skin and of the driftwood, strewn along the track. */
+const LUMP = dress(
+  smooth(
+    [
+      [0, -1],
+      [1, 0],
+      [0, 1],
+    ],
+    4,
+  ),
+  [1, 1, 1],
+);
+/** How many lumps, and how far from the centre line the furthest lie, metres. */
+export const [LUMPS, STREWN] = [72, 17];
+/**
+ * The lumps on the ground `gy`: from the waterline to the nose's end, most of them near the line,
+ * none under a section of the hull.
+ */
+const lumps = (o: number[], gy: (x: number, z: number) => number) => {
+  const [x0, x1] = [FRAME.shore + 4, HULL.sections[2][1]];
+  for (let i = 0; i < LUMPS; i++) {
+    const h = (k: number) => hash(i, k, 31);
+    const [x, d] = [x0 + (x1 - x0) * h(1), 3 + (STREWN - 3) * h(2) * h(2)];
+    if (d < HULL.r + 1.5 && HULL.sections.some(([a, b]) => x > a && x < b)) {
+      continue;
+    }
+    const [z, w, t] = [
+      ZED / 2 + (h(3) < 0.5 ? d : -d),
+      0.12 + 0.3 * h(4) * h(4),
+      0.03 + 0.04 * h(5),
+    ];
+    place(
+      o,
+      LUMP,
+      [x, gy(x, z) + 0.2 * w, z],
+      basis(7 * h(5), 0),
+      [0, 0, 0],
+      [w * (0.6 + h(6)), 0.7 * w, w],
+      [t, t, t],
     );
   }
 };
@@ -138,6 +181,10 @@ const build = (def: WorldDef): [number[], number[]] => {
     }
   }
   isle(out[0]);
+  if (r) {
+    const w = { relief: r } as World;
+    lumps(out[0], (x, z) => ground(w, x, z));
+  }
   made.set(def, out);
   return out;
 };
@@ -185,6 +232,23 @@ vec3 sc=mix(vec3(.02,.42,.5),vec3(.004,.09,.3),1.-exp(-d*.18))*lw*(1.-tr.g*tr.g)
 vec3 c=(sc*(1.-fr)+(K1(r,0.)+sv*X*2.*pow(max(dot(n,nz(O+V)),0.),600.))*fr)*(1.-fo)+fo*.9*lw;
 c=mix(c,F.rgb,fz);if(Vn>0)c=hv(c);o=vec4(c,1);return;}`;
 
+/** The middle of the hull's middle section and the nose's end, where the fire was hottest: x, metres. */
+const HOT = [(HULL.sections[1][0] + HULL.sections[1][1]) / 2, HULL.sections[2][1] - 2];
+/**
+ * The track of the landing, at the end of GRAIN: soot along the centre line under the hull, scorched
+ * sand over the banks and clean sand past them. `wd` is the distance from the line, pulled about by
+ * noise stretched along x, the way the hull slid, so the edges are streaks. It is shortest at HOT,
+ * where it burnt hardest, so the track is widest there, narrower and in pieces between, and gone
+ * out to sea (the bed is darker behind the tail) and past the nose, where it opens into the fan
+ * the forest burnt in (jungle.ts). Patches of the soot are sand melted to dark glass: smooth and
+ * mirroring, as wet sand is (`bw`).
+ */
+const CHAR = `float cz=abs(q.y-${ZED / 2}.);if(cz<40.){float sk=vn(vec2(q.x*.035,q.y*.4)),fn=vn(vec2(q.x*.14,q.y*2.3)),
+wd=cz/(1.+1.2*smoothstep(${HOT[1] - 14}.,${HOT[1] + 6}.,q.x))+14.*sk+4.*fn+25.
+-30.*smoothstep(-30.,${FRAME.shore + 4}.,q.x)*(1.-smoothstep(${HOT[1] + 8}.,${HOT[1] + 26}.,q.x))-4.*max(max(1.-abs(q.x-${HOT[0]}.)/26.,1.-abs(q.x-${HOT[1]}.)/14.),0.),
+s1=1.-smoothstep(10.,23.,wd),s2=1.-smoothstep(7.,13.,wd);
+c*=mix(vec3(1),vec3(.13,.09,.07),s1*(.5+.5*fn));c=mix(c,vec3(.02+.03*fn),s2);bw=max(bw,s2*smoothstep(.6,.7,vn(q*.3)));}`;
+
 /**
  * The sand's pixel, in main(), before its normal is taken: `c` its colour, `h` its height for the
  * bump, `pw` the pixel's size on it. Patches, dimples the size of a footprint, wind ripples and
@@ -198,7 +262,7 @@ h+=.012*rp+f2*.03*(vn(q*2.2)-.5)+f1*.008*(vn(q*6.+3.)-.5);
 c*=(.88+.24*vn(q*.13+9.))*(1.+.05*rp+f3*.16*(vn(q*170.)-.5)+f1*.07*(vn(q*37.)-.5));
 c*=mix(vec3(1),vec3(.52,.47,.4),bw);
 if(y<0.){vec2 u=q*3.+vn(q*.8)*2.;float ca=vn(u+T*.3)-vn(u+7.-T*.25);c*=1.+.45*f2*pow(max(1.-abs(ca)*2.5,0.),6.)*smoothstep(0.,-.3,y);}
-float wl=${LIFT}-(${SWASH});bw*=.35+.65*smoothstep(wl+.12,wl,y);}`;
+float wl=${LIFT}-(${SWASH});bw*=.35+.65*smoothstep(wl+.12,wl,y);${CHAR}}`;
 
 /** The wet sand's mirror, in main(), after the light: `k` the sky its normal reflects, `fr` the fresnel term. */
 export const WET = `c+=bw*k*(.02+.3*fr);`;

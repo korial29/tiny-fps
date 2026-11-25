@@ -624,6 +624,8 @@ const team = (red: boolean) => {
 const SHOULDER: Vec3 = [71, HULL.axis[1] + RINGS[3][0], MID + 3.7];
 
 export const BEACH: WorldDef = {
+  // Highline's runners (docs/BEACH.md): armour in the team's colour, no helmet.
+  armor: true,
   name: 'Landfall',
   tag: 'Beach · wreck',
   lore: 'A ship came down across a Caribbean beach, its tail in the lagoon and its nose in the trees. The survivors camp at either end of the sand and fight over the wreck between them.',

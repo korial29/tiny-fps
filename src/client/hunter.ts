@@ -2751,6 +2751,32 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
       }
     }
   }
+  // The feed tube the next bolt slides into on reloading (harpoonFeed(); the user, 2026-11-25: it
+  // went through the stock): a spine along the bolt's axis over the stock, from inside the receiver
+  // to just past the heel, where a ridged lip opens into a dark bore. The bore ends on a dark disc
+  // behind the heel's face, so the stock's own end never shows inside the hole.
+  const [feedR, boreR, feedEnd] = [0.026, 0.019, 0.44];
+  lathe(
+    stock,
+    [0, 0.095, 0],
+    [0, 0, 1],
+    [1, 0, 0],
+    [
+      [0.04, feedR],
+      [feedEnd - 0.008, feedR, shell],
+      [feedEnd, boreR, ridge],
+    ],
+    ring,
+  );
+  skin(
+    stock,
+    (a, s) => [boreR * Math.cos(a), 0.095 - boreR * Math.sin(a), s],
+    around(ring),
+    [feedEnd, 0.42],
+    () => 0,
+    -1,
+  );
+  disc(stock, [0, 0.095, 0.42], [0, 0, 1], [1, 0, 0], boreR, ring, groove);
   part(bolt, [0, 0.095, -0.1], [0, 0.095, -1.09], [0.015, 0.016, 0.014], ivory);
   part(bolt, [0, 0.095, -1.07], [0, 0.095, -1.24], [0.018, 0.024, 0.001], silver, 0.6);
   // Two swept barbs behind the point, flat in the horizontal plane and seen from both faces.
@@ -3150,13 +3176,14 @@ export const HARPOON_RACK = 0.35;
 export const HARPOON_OUT = 0.09;
 /**
  * The next bolt's slide into its seat at `swap` of the harpoon's reload (swapOf(), 0 to 1; -1 none):
- * absent for the first 35 % (the tube empty after the shot), then eased in by 85 %, seated after.
+ * absent for the first 35 % (the tube empty after the shot), then eased in by 55 % (a quick slide,
+ * the user, 2026-11-25), seated after.
  */
 export const harpoonFeed = (swap: number): number => {
   if (swap < 0) {
     return 1;
   }
-  const t = Math.min(1, Math.max(0, (swap - HARPOON_RACK) / 0.5));
+  const t = Math.min(1, Math.max(0, (swap - HARPOON_RACK) / 0.2));
   return t * t * (3 - 2 * t);
 };
 

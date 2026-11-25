@@ -237,6 +237,15 @@ describe('the sounds of the game', () => {
     }
   });
 
+  it('reloads the harpoon with a very short slide and a brief click (the user, 2026-11-25)', () => {
+    const s = sound('HARPOON_RELOAD');
+    const at = (a: number, b: number) => rms(s.subarray(a * RATE, b * RATE));
+    expect(s.length / RATE).toBeLessThan(0.3);
+    // The slide, then the click as the bolt seats (harpoonFeed() over 0.26 s) louder than it.
+    expect(at(0.03, 0.15)).toBeGreaterThan(0.02);
+    expect(at(0.23, 0.245)).toBeGreaterThan(2 * at(0.17, 0.2));
+  });
+
   it('make the death cry a brief cry of pain (the user, 2026-11-17): loud at once, falling, under half a second', () => {
     for (const n of ['DEATH', 'HER_DEATH'] as const) {
       const s = sound(n);

@@ -22,6 +22,8 @@ vi.mock('./render', async importOriginal => ({
   ...(await importOriginal<typeof Render>()),
   // The map's scenery is not drawn here: no wait for its chunk.
   decor: () => Promise.resolve({ land: [], sky: [] }),
+  // Nor are its meshes: no builds for the scene to wait for (on a loaded runner they took over 10 s).
+  warmSteps: () => [],
   createRenderer: () => ({
     frame: paint,
     destroy: () => {},

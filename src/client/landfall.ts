@@ -5,4 +5,10 @@ import type { Decor } from './render';
 import { hulk } from './hulk';
 import { jungle } from './jungle';
 
-export default (def: WorldDef): Decor => ({ land: [...jungle(def), ...hulk(def)], sky: [] });
+/** The beach's forest, then its wreck: a yield between the two (tasks.ts drive()). */
+export default function* (def: WorldDef): Generator<undefined, Decor, undefined> {
+  const land = jungle(def);
+  yield;
+  // concat(), not push(...): a spread of a million numbers overflows the stack.
+  return { land: land.concat(hulk(def)), sky: [] };
+}

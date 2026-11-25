@@ -11,7 +11,8 @@ import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { TONES } from './features';
 import { CAST, HAIR_NAMES, swatch } from './hud';
-import { PORTRAIT, backing, createRenderer } from './render';
+import { PORTRAIT, backing, createRenderer, warmSteps } from './render';
+import { stepwise } from './tasks';
 import type { Renderer, Shot } from './render';
 
 /** A whole choice: the body, the skin, the haircut and the class. */
@@ -383,17 +384,26 @@ export const createLobby = (
       }
     }
   };
-  // In a match the screen has no renderer: the game's stays the only one (paint()).
+  // In a match the screen has no renderer: the game's stays the only one (paint()). Its builds
+  // (warmSteps()) run a task at a time first, so the page answers and its loader turns meanwhile.
   const timer =
     again ||
-    setTimeout(() => {
-      fit();
-      try {
-        rd = createRenderer(gl, studio);
-      } catch {
-        loader.textContent = 'WebGL2 is not available';
-      }
-    }, 50);
+    setTimeout(
+      () =>
+        stepwise(
+          warmSteps(undefined, roles.includes(ROLE.HUNTER)),
+          () => {
+            fit();
+            try {
+              rd = createRenderer(gl, studio);
+            } catch {
+              loader.textContent = 'WebGL2 is not available';
+            }
+          },
+          () => !gone,
+        ),
+      50,
+    );
   if (!again) {
     raf = requestAnimationFrame(tick);
   }

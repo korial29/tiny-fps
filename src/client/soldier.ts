@@ -1351,17 +1351,22 @@ const hunterAt: Vec3[] = [];
 let hunterWarmed = false;
 
 /** Build and index the Hunter models before they can be drawn during a match. */
-export const warmHunter = () => {
-  if (hunterWarmed) {
-    return;
-  }
-  for (const lod of [0, 1] as const) {
-    for (const piece of hunterPieces(lod).pieces) {
-      mesh(hunterKey(lod, piece), o => placeHunterPart(o, piece.vertices, ORIGIN, ID));
-    }
-  }
-  hunterWarmed = true;
-};
+export const warmHunter = () => hunterSteps().forEach(step => step());
+
+/** warmHunter() a level at a time, a step each (render.ts warmSteps()): some 150 ms each on an M2. */
+export const hunterSteps = (): (() => void)[] =>
+  hunterWarmed
+    ? []
+    : [
+        ...([0, 1] as const).map(lod => () => {
+          for (const piece of hunterPieces(lod).pieces) {
+            mesh(hunterKey(lod, piece), o => placeHunterPart(o, piece.vertices, ORIGIN, ID));
+          }
+        }),
+        () => {
+          hunterWarmed = true;
+        },
+      ];
 
 /** Places a part of the Hunter's complete rest-pose model at the player's feet and heading. */
 const placeHunterPart = (out: Out, vertices: number[], at: Vec3, q: Quat): void => {

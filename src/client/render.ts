@@ -48,13 +48,13 @@ import { JOINT, JOINTS, turn } from './rig';
 import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
-import { GRIN, animate, createRunner, soldier, warmHunter } from './soldier';
+import { GRIN, animate, createRunner, hunterSteps, soldier, warmHunter } from './soldier';
 import { PARRY_IN } from './katana';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body, cut } from './skin';
 import { CLOTH } from './mask';
 import { CHANNELS } from './features';
 import { PLATE, VERT as VERT_TEXELS } from './flesh';
-import { OWN, SCRATCHED, prepare } from './armor';
+import { OWN, SCRATCHED, preparing } from './armor';
 import { Verts } from './verts';
 import { STYLES, closeMesh } from './hair';
 import { ID, ORIGIN, data, filled, mesh, stored, used } from './store';
@@ -64,7 +64,8 @@ import type { Out } from './verts';
 import type { Runner } from './soldier';
 import { skyline, trees } from './skyline';
 import { deepen, street } from './street';
-import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, textures } from './textures';
+import { drive } from './tasks';
+import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, plating, textures } from './textures';
 import { drawDrops, fall } from './drops';
 import { traffic } from './traffic';
 import { vision, zones } from './vision';
@@ -880,9 +881,11 @@ export const decor = (def: WorldDef): Decor | Promise<Decor> => {
     return had;
   }
   const keep = (d: Decor) => (decors.set(def, d), d);
-  return def.scenery === 'moon'
-    ? import('./tranquility').then(m => keep(m.default(def, palette({ def }).map(String))))
-    : import('./landfall').then(m => keep(m.default(def)));
+  return (
+    def.scenery === 'moon'
+      ? import('./tranquility').then(m => drive(m.default(def, palette({ def }).map(String))))
+      : import('./landfall').then(m => drive(m.default(def)))
+  ).then(keep);
 };
 
 /** All the map's vertices, drawn once: the city (on the moon and the beach, `d` instead), the brushes, the street under them, the parks' trees, the runner's red and the team zones. */
@@ -1043,38 +1046,68 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
 };
 
 /** Throws when the browser has no WebGL2. */
+/**
+ * What a renderer builds before its first frame, as steps of a few tens of milliseconds, each kept
+ * where every renderer finds it (memoized, or in the GPU store): the runners' skins at every level,
+ * now, built on the first runner to come near (the close one with its face's channels takes a
+ * tenth of a second) they would stall a frame of the match. So would their armour's recipes (a
+ * quarter of a second close up; the own body's, close and of the own `build`, a third of a second
+ * on the first frame), the halves a katana's cut makes of each (cut(), some 40 ms for every level
+ * and limb), her close hair, every style (half a second for the five: a style can come with a
+ * player who joins or change in the menu mid-match), the xenomorph's skins and rigid pieces (its
+ * close skull alone took a frame of 70 ms), the racks' weapons and the textures. An armour's
+ * recipe is a step of many (preparing()), a slice of its skin at a time. createRenderer()
+ * runs them at once; index.ts runs them one task each before, so the loading screen paints on.
+ * `own` is the own runner's build, whose first-person body is drawn close: a match's, not the
+ * character screen's. `hunter`: the Hunter's pieces too (warmHunter()), which the character
+ * screen draws on a tile and a match only once one comes.
+ */
+/** A step of a renderer's warm-up: true when it has more to do (it is run again). */
+export type Step = () => boolean | void;
+
+/** Runs `step` to its end. */
+const through = (step: Step) => {
+  while (step()) {}
+};
+
+/** A build's skins at the levels runners are drawn at, their armour's recipes and the halves of the cuts. */
+const outfit = (build: number): Step[] => [
+  ...[0, 1, 3].map(lod => () => preparing(body(lod, build), lod > 2)),
+  ...[0, 1, 2, 3].map(lod => () => {
+    for (let limb = LIMB.HEAD; limb <= LIMB.LEG_R; limb++) {
+      cut(lod, limb, build);
+    }
+  }),
+];
+
+export const warmSteps = (own?: number, hunter = false): Step[] => [
+  ...(hunter ? hunterSteps() : []),
+  () => void textures(),
+  plating,
+  ...outfit(0),
+  ...(own === undefined ? [] : [() => preparing(body(2, own), true)]),
+  ...Array.from({ length: STYLES }, (_, s) => () => void closeMesh(s)),
+  () => [0, 1, 2, 3].forEach(lod => beast(lod)),
+  ...[0, 1, 3].map(
+    lod => () => partsOf(lod).forEach(({ key, make }) => mesh(key, o => make(o, ORIGIN, ID))),
+  ),
+  () => {
+    [0, 2, 3].forEach(rackWeapon);
+    vestMesh();
+  },
+];
+
 /** `d` is the map's own scenery (decor()): without it, Tranquility and Landfall draw their brushes only. */
 export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE): Renderer => {
   /** The animation state of each runner drawn. */
   let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
   let looks: ReadonlyMap<number, Choice> = new Map();
-  // The runners' skins at every level, now: built on the first runner to come near (the close one
-  // with its face's channels takes a tenth of a second), they would stall a frame of the match. So
-  // would their armour's recipes (a quarter of a second close up). And the halves a katana's cut
-  // makes of each (cut(), some 40 ms for every level and limb), built on the frame of the cut.
-  const dressed = (build = 0) => {
-    [0, 1, 3].forEach(lod => prepare(body(lod, build), lod > 2));
-    for (let lod = 0; lod < 4; lod++) {
-      for (let limb = LIMB.HEAD; limb <= LIMB.LEG_R; limb++) {
-        cut(lod, limb, build);
-      }
-    }
-  };
-  dressed();
-  // Her close hair, every style (half a second for the five): a style can come with a player who
-  // joins or change in the menu mid-match, and the store's buffer grows now, not in a frame.
-  for (let s = 0; s < STYLES; s++) {
-    closeMesh(s);
-  }
-  // The xenomorph's skins too (the own body's as well), but no armour recipe: it wears none. And
-  // its rigid pieces: its close skull alone took a frame of 70 ms.
-  [0, 1, 2, 3].forEach(lod => beast(lod));
-  [0, 1, 3].forEach(lod =>
-    partsOf(lod).forEach(({ key, make }) => mesh(key, o => make(o, ORIGIN, ID))),
-  );
-  [0, 2, 3].forEach(rackWeapon);
-  vestMesh();
+  // The runners' skins, armour, cuts, hair and the xenomorph, built now (warmSteps()): a frame of
+  // the match would stall on them. Done already when index.ts ran the steps one task each.
+  warmSteps().forEach(through);
+  /** Another build's skins and armour, as a runner of it comes (wear()). */
+  const dressed = (build: number) => outfit(build).forEach(through);
   /** Each rover's wheels: the angle they have rolled to, and where the rover was last frame. */
   const spins: number[] = [];
   const was: [number, number][] = [];

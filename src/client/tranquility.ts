@@ -3,16 +3,22 @@
 import type { WorldDef } from '../shared/world';
 import type { Decor } from './render';
 import { furnishing } from './moonbase';
-import { HEAVENS, heavens, moonscape } from './moonscape';
+import { HEAVENS, heavens, moonscaping } from './moonscape';
 import { hangar, satellite } from './satellite';
 
-/** The moon's ground drawn once, its runners' colours by key (render.ts palette), and its Earth apart. */
-export default (def: WorldDef, keys: string[]): Decor => ({
-  land: [
-    ...moonscape(def),
-    ...furnishing(def, keys),
-    ...(def.station ? [...satellite(def.station), ...hangar(def.station)] : []),
-  ],
-  sky: heavens(),
-  heavens: HEAVENS,
-});
+/**
+ * The moon's ground drawn once, its runners' colours by key (render.ts palette), and its Earth
+ * apart: a part at a time, a yield between two (tasks.ts drive()).
+ */
+export default function* (def: WorldDef, keys: string[]): Generator<undefined, Decor, undefined> {
+  // concat(), not push(...): a spread of a million numbers overflows the stack.
+  let land = yield* moonscaping(def);
+  yield;
+  land = land.concat(furnishing(def, keys));
+  if (def.station) {
+    yield;
+    land = land.concat(satellite(def.station), hangar(def.station));
+  }
+  yield;
+  return { land, sky: heavens(), heavens: HEAVENS };
+}

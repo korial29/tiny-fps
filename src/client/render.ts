@@ -42,6 +42,7 @@ import { mouths, rooms } from '../shared/station';
 import { jungle } from './jungle';
 import { HEAVENS, heavens, moonscape } from './moonscape';
 import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
+import { PLUME, SMOKE, plumes } from './smoke';
 import { hulk } from './hulk';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -295,6 +296,8 @@ const RELIEF = 0.06;
 // head a brush hides (a negative Ve.w, hidden() on the CPU) glows as a soft orange column (xr) on
 // what hides him: the view ray through the pixel, on past it, passes within his cylinder. One in
 // sight gets no through-wall glow. Gp pulses over the full geometry of a glory kill target.
+/** Landfall's haze over a pixel `ds` metres from the eye, for what its own code draws (the sea, the smoke). */
+const MIST = `1.-exp(-F.a*ds*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))))`;
 export const FRAG = `#version 300 es
 precision highp float;precision highp sampler2DArray;precision highp sampler2DArrayShadow;
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
@@ -390,7 +393,8 @@ if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=hv(o.rgb);return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 #ifdef BEACH
-if(L<-4.5)${WATER(`1.-exp(-F.a*ds*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))))`)}
+if(L<${SMOKE + 0.5})${PLUME(MIST)}
+if(L<-4.5)${WATER(MIST)}
 #endif
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 float ks=LD(step(abs(L-${TEX.STONE}.),.5));vec3 cg=vec3(0);
@@ -878,6 +882,7 @@ export const scenery = (world: World): number[] =>
           ...hulk(world.def),
           ...vision(world.def),
           ...zones(world.def),
+          ...plumes(world.def),
           ...lagoon(world.def),
         ]
       : [
@@ -1086,6 +1091,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
   /** Landfall's sea, the last of the ground's vertices: drawn apart, after what stands in it. */
   const seaN = world.def.scenery === 'beach' ? lagoon(world.def).length / STRIDE : 0;
+  /** Its smoke and fires, the last before the sea: drawn apart too, after the sky they rise into. */
+  const smokeN = seaN && plumes(world.def).length / STRIDE;
   /** True while portrait() draws: its runner stands high over the map, never in orbit. */
   let posing = false;
   /** Seconds a posing frame moves its runner on: 0 but for a picture drawn again (see `posed`). */
@@ -1769,7 +1776,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         uni('uniform4fv', 'R', STILL);
         uni('uniform4f', 'Ob', globe, fade, edge, 0);
       } else {
-        gl.drawArrays(gl.TRIANGLES, 0, first - seaN);
+        gl.drawArrays(gl.TRIANGLES, 0, first - seaN - smokeN);
       }
       // What moves, with the code of its own materials and none of the map's (fragOf()).
       if (bodyAt || pieces.length) {
@@ -1812,6 +1819,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         gl.disable(gl.SCISSOR_TEST);
       }
       uni('uniform1f', 'Y', 0);
+      if (smokeN) {
+        // The smoke over all of it, its colour already times its alpha; a flame has none and adds.
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.depthMask(false);
+        gl.drawArrays(gl.TRIANGLES, first - seaN - smokeN, smokeN);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
       if (v.length > bodyAt || bodyPieces.length) {
         // Last, over a cleared depth: the body never sinks into a wall.
         gl.clear(gl.DEPTH_BUFFER_BIT);

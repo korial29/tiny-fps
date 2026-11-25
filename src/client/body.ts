@@ -410,7 +410,15 @@ const hunterView = (build: number): HunterViewPart[] => {
     'Belt',
     'Flying disc',
   ]);
-  const model = hunterModel(1);
+  const whole = hunterModel(1);
+  // The strips and the tassets under the belt are parts of their own (hunter.ts, stripSwing());
+  // in the own view they hang with the belt, one piece.
+  const model: typeof whole = {
+    ...whole,
+    Belt: Object.keys(whole)
+      .filter(name => name.startsWith('Belt'))
+      .flatMap(name => whole[name]),
+  };
   const parts = Object.entries(model)
     .filter(([name]) => visible.has(name))
     .map(([name, source]) => {

@@ -94,6 +94,7 @@ import {
   hunterRig,
   handsFree,
   hunterWristEnds,
+  stripSwing,
   unfold,
 } from './hunter';
 import type { HunterPiece } from './hunter';
@@ -1315,8 +1316,18 @@ const hunterTrail = hunterWristEnds().map(p => sub(p, HUNTER_REST[J.FOREARM_R]))
 /** The far level leaves out the dreadlocks and the visor grille. */
 const hunterPieces = (lod: HunterLod) =>
   hunterRig(lod, name => lod === 0 && (name.startsWith('Dreads') || name === 'Visor grille'));
-const hunterKey = (lod: HunterLod, piece: HunterPiece) =>
-  `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon} ${+piece.disc}`;
+/** Each piece's key in the store, made once: a Hunter has some forty pieces a frame. */
+const hunterKeys = new WeakMap<HunterPiece, string>();
+const hunterKey = (lod: HunterLod, piece: HunterPiece) => {
+  let key = hunterKeys.get(piece);
+  if (!key) {
+    hunterKeys.set(
+      piece,
+      (key = `hunter ${lod} ${piece.joint} ${+piece.thin} ${+piece.harpoon} ${+piece.cannon} ${+piece.disc} ${piece.strip?.i ?? ''}`),
+    );
+  }
+  return key;
+};
 /**
  * The shoulder cannon's hinge and turn on a Hunter whose chest is at `chest` turned by `q`: stowed
  * (k 0) it lies back along the shoulder, CANNON_FOLD about the hinge from the chest's frame; out
@@ -1606,10 +1617,14 @@ export const soldier = (
           }
           continue;
         }
+        // A strip under the belt hangs on its hinge, swung out of a thigh's way (stripSwing()).
+        const [at, q] = piece.strip
+          ? stripSwing(piece.strip, joints[J.PELVIS], s.rot[J.PELVIS], joints)
+          : [joints[piece.joint], s.rot[piece.joint]];
         rigid(
           hunterKey(detail, piece),
-          joints[piece.joint],
-          s.rot[piece.joint],
+          at,
+          q,
           (o, position, rotation) => placeHunterPart(o, piece.vertices, position, rotation),
           1,
           true,

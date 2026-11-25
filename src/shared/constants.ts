@@ -398,6 +398,11 @@ export const DISK_RETURN = 10;
 export const DISK_SPEED = 52;
 export const DISK_RANGE = 28;
 export const DISK_R = 0.16;
+/**
+ * How far from a body the disc still hits it (the user, 2026-11-25: DISK_R alone was too hard to
+ * land). Only bodies: against the map it keeps DISK_R, so it does not catch on every corner.
+ */
+export const DISK_REACH = 0.5;
 export const DISK_HP = 3;
 /**
  * Ticks a thrown disc may stay out (the user, 2026-11-24): it can be thrown again only once it is

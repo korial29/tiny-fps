@@ -90,8 +90,8 @@ const BUDGETS = [
   // 281,344 B: 256 B more for the character screen opened from the pause menu (the user, 2026-11-25: raise it).
   // 281,600 B: 256 B more for the Hunter's steadier arms and the long guns' hold in the hand (the user, 2026-11-25: raise it).
   // 282,112 B: 512 B more for the Hunter's strips and tassets hung on hinges, out of his thighs' way (the user, 2026-11-25: raise it).
-  // 282,112 B until Landfall, the beach level: its sand, sea, forest and headlands (the user, 2026-11-25: 292 KB).
-  { file: 'dist/index.js', max: 292 * 1024 },
+  // 282,112 B until Landfall, the beach level: its sand, sea, forest and headlands (the user, 2026-11-25: 292,000 B).
+  { file: 'dist/index.js', max: 292_000 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -99,8 +99,8 @@ const BUDGETS = [
   // 48 KB until the bots' navigation mesh (the user, 2026-11-19: 50 KB, then 51 for CI's zlib, 2026-11-20).
   // 51 KB until the bots' fair fights and team play (the user, 2026-11-20: 52 KB).
   // 52 KB + 1024 B until the bot and vehicle simulation speed-ups and the Hunter's weapons (#338, 2026-11-20).
-  // 53 KB until Landfall's map, its relief, wreck and debris (the user, 2026-11-25: 58 KB).
-  { file: 'dist/local.js', max: 58 * 1024 },
+  // 53 KB until Landfall's map, its relief, wreck and debris (the user, 2026-11-25: 58,000 B).
+  { file: 'dist/local.js', max: 58_000 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

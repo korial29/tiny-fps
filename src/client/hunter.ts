@@ -2779,7 +2779,8 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
   disc(stock, [0, 0.095, 0.42], [0, 0, 1], [1, 0, 0], boreR, ring, groove);
   part(bolt, [0, 0.095, -0.1], [0, 0.095, -1.09], [0.015, 0.016, 0.014], ivory);
   part(bolt, [0, 0.095, -1.07], [0, 0.095, -1.24], [0.018, 0.024, 0.001], silver, 0.6);
-  // Two swept barbs behind the point, flat in the horizontal plane and seen from both faces.
+  // Two swept barbs behind the point, flat in the horizontal plane and seen from both faces: thin
+  // blades, their inner edge close along the outer (the user, 2026-11-25: finer, for realism).
   for (const side of [-1, 1]) {
     for (const up of [-1, 1]) {
       panel(
@@ -2787,7 +2788,7 @@ const harpoonParts = (lod: 0 | 1 | 2) => {
         [
           [0, 0.095, -1.2],
           [side * 0.045, 0.095, -1.08],
-          [side * 0.012, 0.095, -1.11],
+          [side * 0.027, 0.095, -1.11],
         ],
         silver,
         [0, up, 0],

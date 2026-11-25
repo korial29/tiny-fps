@@ -7,7 +7,7 @@ import { HEAVY_TAP, STING, TAILS } from '../shared/constants';
 import { TAU } from '../shared/physics';
 import type { PlayerState } from '../shared/types';
 import { ease } from './gun';
-import { cross, face, sheet } from './helmet';
+import { cross, face, pow, sheet } from './helmet';
 import type { Spot } from './helmet';
 import { CHITIN, GLOSS, SHINE, STRIDE, TUBE, basis, unit } from './mesh';
 import type { Vec3 } from './mesh';
@@ -2077,12 +2077,12 @@ const faceAt = (x: number, y: number): Vec3 => {
 const HINGE: Vec3 = [0.05, -0.036, -0.02];
 // Shut (the user, 2026-11-24: its mouth closed): the mandible's lip a tooth's length under the
 // upper jaw's edge, the teeth clenched between them. It was 0.8, gaping, FLOOR 3 cm lower with it.
-const GAPE = 0.3;
+const GAPE = 0.42;
 // A narrow mouth (the user, 2026-11-24). Its front flush with the face over it: 1 cm further back,
 // as it hung open, the shut mandible sat behind the upper jaw (the user, 2026-11-24).
 const ARC = [0.034, 0.034, -0.055];
 /** The height of the mandible's underside, under the chin and at the hinges. */
-const FLOOR = [-0.084, -0.074];
+const FLOOR = [-0.091, -0.081];
 /** The jaw's plane: the way its teeth point, and its height `z` ahead. */
 const JAW_UP: Vec3 = [0, Math.cos(GAPE), -Math.sin(GAPE)];
 const jawY = (z: number) => HINGE[1] - (HINGE[2] - z) * Math.tan(GAPE);
@@ -2369,28 +2369,106 @@ export const teeth = (out: Out, head: Vec3, q: Quat, lod: number) => {
       -1,
       false,
     );
+  /**
+   * A human incisor (the user, 2026-11-25), in steel like the rest: a blade from `root` along `way`,
+   * `len` long, `w` wide along `across` near its cutting edge and narrower at its root, thin front
+   * to back and thinner still at the edge, a chisel. Its section a rounded rectangle (a
+   * superellipse) and its edge's corners rounded off, so it reads as a tooth, not a box (the user,
+   * 2026-11-25: less square). Its root's end unseen.
+   */
+  const incisor = (root: Vec3, way: Vec3, across: Vec3, len: number, w: number) => {
+    const fore = unit(cross(across, way));
+    const t = 0.0026;
+    const n = lod > 2 ? 12 : 8;
+    // Down the tooth: how far along it, the half width (of w) and half thickness (of t) there.
+    const rows = [
+      [0, 0.36, 0.5],
+      [0.72, 0.5, 0.32],
+      [0.92, 0.46, 0.22],
+      [1, 0.3, 0.12],
+    ];
+    const at3 = (v: Vec3) => on(at, q, v);
+    const ring = rows.map(([k, hw, ht]) =>
+      Array.from({ length: n }, (_, i): Spot => {
+        const [c, s] = [Math.cos((TAU * i) / n), Math.sin((TAU * i) / n)];
+        const [a, b] = [pow(c, 0.5) * hw * w, pow(s, 0.5) * ht * t];
+        const m = unit(
+          [0, 1, 2].map(
+            j => (across[j] * pow(c, 1.5)) / hw / w + (fore[j] * pow(s, 1.5)) / ht / t,
+          ) as Vec3,
+        );
+        return [
+          at3([0, 1, 2].map(j => root[j] + way[j] * len * k + across[j] * a + fore[j] * b) as Vec3),
+          turn(q, m),
+        ];
+      }),
+    );
+    for (let r = 0; r + 1 < ring.length; r++) {
+      for (let i = 0; i < n; i++) {
+        const [a, b, c, d] = [
+          ring[r][i],
+          ring[r][(i + 1) % n],
+          ring[r + 1][(i + 1) % n],
+          ring[r + 1][i],
+        ];
+        face(out, TEETH, -1, [a, b, c]);
+        face(out, TEETH, -1, [a, c, d]);
+      }
+    }
+    // The cutting edge, a fan over the last ring.
+    const tip: Spot = [
+      at3([0, 1, 2].map(j => root[j] + way[j] * len * 1.01) as Vec3),
+      turn(q, way),
+    ];
+    const last = ring[ring.length - 1];
+    for (let i = 0; i < n; i++) {
+      face(out, TEETH, -1, [tip, last[(i + 1) % n], last[i]]);
+    }
+  };
   /** The upper jaw's edge at x, a hair inside the face. */
   const gum = (x: number, r: number): Vec3 => [x, GUM + 0.003, faceZ(x, GUM + 0.004) + r];
   // The upper teeth, steel (the user, 2026-11-16), long cones hung from the upper jaw's edge round
   // its arc, the fangs longest, a little forward at their tips.
-  // Close together (the user, 2026-11-24): each against the next.
+  // Close together (the user, 2026-11-24): each against the next. The middle three gave way to four
+  // human incisors (the user, 2026-11-25), the two central ones widest, either side of the middle.
   for (let i = 0; i < 11; i++) {
     const x = -0.036 + (0.072 * i) / 10;
+    if (Math.abs(x) < 0.012) {
+      continue;
+    }
     const r = 0.0036 + 0.0006 * fang(x);
     tooth(gum(x, r), [0, -1, -0.12], (0.015 + 0.005 * fang(x)) * (1 - 40 * x * x), r);
   }
-  // The lower ones, up out of the mandible round its arc.
+  for (const [x, w, len] of [
+    [0.0036, 0.0068, 0.0125],
+    [0.0104, 0.0056, 0.0112],
+  ]) {
+    for (const s of [-1, 1]) {
+      const e = 0.002;
+      const across = unit([
+        1,
+        0,
+        (s * (faceZ(s * x + e, GUM + 0.004) - faceZ(s * x - e, GUM + 0.004))) / (2 * e),
+      ]);
+      incisor(gum(s * x, 0.0018), unit([0, -1, -0.08]), across, len, w);
+    }
+  }
+  // The lower ones, up out of the mandible round its arc; the front four human incisors, narrower
+  // than the upper ones (the user, 2026-11-25).
   for (let i = 0; i < 12; i++) {
-    const p = arcAt(-1.3 + (2.6 * i) / 11);
-    const r = 0.0034 + 0.0006 * fang(p[0]);
+    const a = -1.3 + (2.6 * i) / 11;
+    const p = arcAt(a);
     const h = jawH(p[0]) - 0.002;
-    tooth(
-      p.map((v, j) => v + JAW_UP[j] * h) as Vec3,
-      // Less forward than the jaw hangs: square to it, they pointed out of the mouth.
-      unit([0, JAW_UP[1] + 0.7, JAW_UP[2]]),
-      (0.013 + 0.004 * fang(p[0])) * (1 - 40 * p[0] * p[0]),
-      r,
-    );
+    const base = p.map((v, j) => v + JAW_UP[j] * h) as Vec3;
+    // Less forward than the jaw hangs: square to it, they pointed out of the mouth.
+    const way = unit([0, JAW_UP[1] + 0.7, JAW_UP[2]]);
+    if (Math.abs(a) < 0.4) {
+      const across = unit([ARC[0] * Math.cos(a), 0, ARC[1] * Math.sin(a)]);
+      incisor(base, way, across, 0.0138, Math.abs(a) < 0.2 ? 0.0068 : 0.0066);
+      continue;
+    }
+    const r = 0.0034 + 0.0006 * fang(p[0]);
+    tooth(base, way, (0.0165 + 0.004 * fang(p[0])) * (1 - 36 * p[0] * p[0]), r);
   }
   // Its upper gum, a band of sinew along the jaw's edge over the roots of the teeth.
   const band = Array.from({ length: 17 }, (_, i) => -0.046 + (0.092 * i) / 16);

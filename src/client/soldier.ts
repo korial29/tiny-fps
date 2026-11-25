@@ -1015,11 +1015,12 @@ const ANKLE = [
 const prowl = (pose: Pose, s: ReturnType<typeof solve>, p: PlayerState): Pose => {
   const rot = pose.rot.slice();
   const X: Vec3 = [1, 0, 0];
-  // Bent, but not squat (the user, 2026-11-15): the neck clear, the head carried high.
+  // Bent, but not squat (the user, 2026-11-15): the neck clear. The head a little lower than the
+  // look, the face tipped down at the foe (the user, 2026-11-25: held too high, it lacked menace).
   rot[J.SPINE] = mul(rot[J.SPINE], axis(X, -0.2));
   rot[J.CHEST] = mul(rot[J.CHEST], axis(X, -0.16));
-  rot[J.NECK] = mul(rot[J.NECK], axis(X, 0.22));
-  rot[J.HEAD] = mul(rot[J.HEAD], axis(X, 0.12));
+  rot[J.NECK] = mul(rot[J.NECK], axis(X, 0.06));
+  rot[J.HEAD] = mul(rot[J.HEAD], axis(X, -0.16));
   // Out of a blow, the upper arms hang lower than the runner's guard, the elbows still bent so the
   // claws point ahead: raised forward, the shoulder's skin pinched into a fold (the user, 2026-11-15).
   // A swing of the bone the shortest way toward hanging, its twist about itself kept: a blend of the

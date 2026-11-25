@@ -33,7 +33,17 @@ import {
   section,
   walked,
 } from './beach';
-import { EYE, FLAG_H, FLAG_REACH, PLAYER_H, PLAYER_R, SNAP_EVERY, STEP_H } from './constants';
+import {
+  EYE,
+  FLAG_H,
+  FLAG_REACH,
+  PLAYER_H,
+  PLAYER_R,
+  SNAP_EVERY,
+  STEP_H,
+  SWIM_DEPTH,
+  SWIM_SPEED,
+} from './constants';
 import { TEAM_TINT } from './map';
 import { MAPS } from './maps';
 import { rockMid, rockOf } from './moon';
@@ -93,7 +103,10 @@ const blue = (l: Leg[]) => l.map(q => mirror(q, ZED));
 const across = (l: Leg[]) => [...l, ...blue(l.slice(0, -1).reverse())];
 const inArea = (p: PlayerState) =>
   p.x < EDGE.east + 1e-3 &&
-  p.x > -15 &&
+  // Out at sea a swimmer goes as far as the relief's bound, the ellipse nobody crosses.
+  ((p.x - BEACH.relief!.bound[0]) / BEACH.relief!.bound[2]) ** 2 +
+    ((p.z - BEACH.relief!.bound[1]) / BEACH.relief!.bound[3]) ** 2 <=
+    1 + 1e-6 &&
   p.z > EDGE.cape - 1e-3 &&
   p.z < ZED - EDGE.cape + 1e-3 &&
   p.y >= DEPTH - 1e-3;
@@ -380,23 +393,22 @@ describe('LANDFALL, the water', () => {
     }
   });
 
-  it('puts a runner who walks out to sea back at a spawn where the bed passes the depth, and not before', () => {
+  it('lets a runner who walks out to sea swim from where the bed passes SWIM_DEPTH: afloat, slow, never respawned', () => {
     for (const z of [122, 132, 150, 170, 180, 70, 40]) {
       const s = red().put(FRAME.shore, 0, z, WEST);
-      let last = s.p.x;
-      const n = s.until(
-        p => (p.ev & EV.RESPAWN) !== 0,
-        (p: PlayerState) => ((last = p.x), KEY.FORWARD),
+      let respawned = false;
+      s.until(
+        p => ((respawned ||= (p.ev & EV.RESPAWN) !== 0), false),
+        () => KEY.FORWARD,
         WEST,
-        400,
+        600,
       );
-      expect(n, `z ${z}`).toBeGreaterThan(100);
-      expect(last).toBeGreaterThan(15.8);
-      expect(last).toBeLessThan(16.1);
-      expect(s.low).toBeGreaterThan(DEPTH - 0.02);
-      expect(s.modes).toEqual(new Set([MODE.GROUND]));
-      // Back at a spawn of his team, on the sand.
-      expect(teams[0].spawns.some(([x, , v]) => x === s.p.x && v === s.p.z)).toBe(true);
+      expect(respawned, `z ${z}`).toBe(false);
+      expect(s.p.mode, `z ${z}`).toBe(MODE.SWIM);
+      expect(s.p.x).toBeLessThan(15);
+      expect(s.p.y).toBeCloseTo(FRAME.water - SWIM_DEPTH, 5);
+      expect(Math.hypot(s.p.vx, s.p.vz)).toBeLessThan(SWIM_SPEED + 1e-3);
+      expect(s.modes.has(MODE.SWIM)).toBe(true);
     }
   });
 
@@ -1256,7 +1268,7 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(ground(world, f0.max[0], f0.max[2])).toBeGreaterThan(-1);
   });
 
-  it('is not walked: off a float without a jump, a runner is in the lagoon and back at a spawn', () => {
+  it('is not walked: off a float without a jump, a runner is in the lagoon, swimming', () => {
     for (const [x, z, yaw] of [
       [17, 117.5, WEST],
       [11, 114.5, WEST],
@@ -1264,9 +1276,9 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     ]) {
       const s = red().put(x, 0.5, z, yaw);
       s.settle();
-      const n = s.until(p => (p.ev & EV.RESPAWN) !== 0, KEY.FORWARD, yaw, 200);
+      const n = s.until(p => p.mode === MODE.SWIM, KEY.FORWARD, yaw, 200);
       expect(n, `from ${x}, ${z}`).toBeGreaterThan(0);
-      expect(s.ev & EV.JUMP).toBe(0);
+      expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
     }
   });
 
@@ -1379,8 +1391,8 @@ describe('LANDFALL, the edges', () => {
         const p = s.step(KEY.FORWARD | KEY.SPRINT | (k % 30 < 2 ? KEY.JUMP : 0), yaw);
         expect(inArea(p), `from ${x}, ${z}, step ${k}: ${p.x}, ${p.y}, ${p.z}`).toBe(true);
       }
-      // Stopped by a trunk, the wall or a rock, or drowned: not far from where he was heading.
-      expect(yaw === WEST ? s.ev & EV.RESPAWN : 1).toBeTruthy();
+      // Stopped by a trunk, the wall or a rock, or out at sea, swimming: not far from where he was heading.
+      expect(yaw === WEST ? s.modes.has(MODE.SWIM) : true).toBe(true);
     }
     // Off the nose's back, the highest place there is, and off the lagoon's engine toward the open sea.
     const top = HULL.axis[2] + HULL.r;
@@ -1564,19 +1576,5 @@ describe('LANDFALL, capture the flag, end to end through a room', () => {
     expect(end.players[0].z).toBe(Math.fround(s.p.z));
     expect(end.score).toEqual([1, 0]);
     expect(end.flags.map(f => f.state)).toEqual([FLAG.HOME, FLAG.HOME]);
-  });
-
-  it('leaves a carrier who goes under a last ground in his depth, in the shallows: where ctf.ts drops his flag, as for a fall', () => {
-    const s = red().put(20, ground(world, 20, 140), 140, WEST);
-    let last = [s.p.x, s.p.y];
-    s.until(
-      p => (p.ev & EV.RESPAWN) !== 0,
-      (p: PlayerState) => ((last = p.ground ? [p.x, p.y] : last), KEY.FORWARD),
-      WEST,
-      300,
-    );
-    expect(s.ev & EV.RESPAWN).toBeTruthy();
-    expect(last[1]).toBeGreaterThanOrEqual(DEPTH);
-    expect(last[0]).toBeGreaterThan(15.8);
   });
 });

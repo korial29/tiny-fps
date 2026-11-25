@@ -21,6 +21,13 @@ export const EYE = 1.6;
 /** Metres per second. */
 export const RUN_SPEED = 6;
 export const JUMP_SPEED = 7;
+/** Swimming: top speed in m/s, the rate (1/s) at which the speed follows the wished one, the feet's depth under the surface and the camera height above the feet. */
+export const SWIM_SPEED = 4;
+export const SWIM_ACCEL = 6;
+export const SWIM_DEPTH = 1.1;
+export const SWIM_EYE = 1.35;
+/** A swimmer who steers with no key drifts up to the surface at this speed (m/s); with FORWARD or BACK he dives and climbs where he looks, at SWIM_SPEED. */
+export const SWIM_RISE = 1.5;
 /** Metres per second squared. */
 export const GRAVITY = 20;
 /** Pitch is clamped to ±MAX_PITCH radians, just short of straight up or down. */

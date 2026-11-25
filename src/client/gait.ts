@@ -10,6 +10,7 @@ import {
   DASH_TICKS,
   DOWN_TICKS,
   PUNCHES,
+  SWIM_SPEED,
   TAILS,
   TICK_HZ,
 } from '../shared/constants';
@@ -194,6 +195,8 @@ export const MOVE = {
   RIDE: 11,
   /** The xenomorph on a wall (MODE.CLING): facing it, the hands and the feet on it (`reach`). */
   CLING: 12,
+  /** Swimming (MODE.SWIM): prone on the water, a breaststroke (see STROKE). */
+  SWIM: 13,
 } as const;
 
 /**
@@ -236,7 +239,77 @@ export const MOVES: number[][] = [
   [-0.5, 0.35, 0, 1.3, 0.3, 1.1, 0.2, 0.4, 0.4, 0.2, 0.3, 0.6, 0, 0],
   [SIT.up - 0.98, -SIT.lean, 0, 1.75, 1.5, 1.75, 1.5, 0.75, 0.75, 0.75, 0.75, 0.1, SIT.back, 0],
   [0, 0.15, 0, 1, 1.4, 1, 1.4, 2.6, 0.5, 2.6, 0.5, 0.35, 0, 0],
+  // Swimming: the glide, which is also the stroke's start (see STROKE).
+  [0.1, 0.15, 0, 0.1, 0.1, 0.1, 0.1, 3, 0.1, 3, 0.1, 0.12, 0, 0],
 ];
+
+/**
+ * The breaststroke, a row of MOVES (the prone body: SWIM_PITCH, the pelvis tipped forward, so a
+ * shoulder at 3 points the arm ahead and a hip at 0 trails the leg behind) at each of six evenly
+ * spaced keys of the cycle: the arms reaching ahead, the pull (swept out and back, elbows bent), the
+ * legs drawn up with the hands joined under the chin, the kick with the arms shooting ahead and
+ * straight into the next pull. The cycle is a closed Catmull-Rom curve through them, so no joint
+ * ever stops at a key, and the arms hold no glide.
+ */
+/** How far the pelvis tips forward for a body lying prone on the water (radians). */
+const SWIM_PITCH = 1.3;
+
+const STROKE: number[][] = [
+  [0.1, 0.15, 0, 0.1, 0.1, 0.1, 0.1, 3, 0.1, 3, 0.1, 0.12, 0, 0],
+  [0.1, 0.1, 0, 0.25, 0.5, 0.25, 0.5, 2.2, 0.9, 2.2, 0.9, 0.8, 0, 0],
+  [0.09, 0.05, -0.03, 0.7, 1.4, 0.7, 1.4, 1.9, 1.6, 1.9, 1.6, 0.55, 0, 0],
+  [0.09, 0.05, 0, 0.9, 1.9, 0.9, 1.9, 2.4, 1.9, 2.4, 1.9, 0.25, 0, 0],
+  [0.1, 0.12, 0.03, 0.3, 0.7, 0.3, 0.7, 2.9, 0.6, 2.9, 0.6, 0.15, 0, 0],
+  [0.11, 0.14, 0, 0.12, 0.2, 0.12, 0.2, 3, 0.15, 3, 0.15, 0.12, 0, 0],
+];
+
+/** Strokes per second at a speed (m/s): never still, a treading water's slow one up to one every 1.2 s. */
+export const strokeRate = (v: number): number => 0.4 + 0.45 * clamp(v / SWIM_SPEED);
+
+/** How much of the full stroke a speed gets (the rest is treading water): all of it from 2/3 of the top speed. */
+export const strokeShare = (v: number): number => clamp((v / SWIM_SPEED) * 1.5);
+
+/**
+ * Fills `row` with the swimmer's pose at phase `u` (0 to 1): the stroke, `m` of the way from a
+ * treading water (arms sculling in turn, the legs fluttering, the body bobbing) to it.
+ */
+const stroke = (row: number[], u: number, m: number): number[] => {
+  const n = STROKE.length;
+  const x = u * n;
+  const i = Math.floor(x) % n;
+  const t = x - Math.floor(x);
+  const [k0, k1, k2, k3] = [-1, 0, 1, 2].map(d => STROKE[(i + d + n) % n]);
+  const sin = (f: number, o = 0) => Math.sin(TAU * (u * f + o));
+  const tread = [
+    0.1 + 0.04 * sin(1),
+    0.2,
+    0.05 * sin(1, 0.25),
+    0.25 + 0.2 * sin(2),
+    0.6 + 0.3 * sin(2, 0.1),
+    0.25 + 0.2 * sin(2, 0.5),
+    0.6 + 0.3 * sin(2, 0.6),
+    2.4 + 0.3 * sin(1),
+    1.2 + 0.4 * sin(1, 0.2),
+    2.4 + 0.3 * sin(1, 0.5),
+    1.2 + 0.4 * sin(1, 0.7),
+    0.5 + 0.2 * sin(1, 0.1),
+    0,
+    0,
+  ];
+  for (let j = 0; j < row.length; j++) {
+    const full =
+      0.5 *
+      (2 * k1[j] +
+        (k2[j] - k0[j]) * t +
+        (2 * k0[j] - 5 * k1[j] + 4 * k2[j] - k3[j]) * t * t +
+        (3 * k1[j] - k0[j] - 3 * k2[j] + k3[j]) * t * t * t);
+    // The body rolls a little with the stroke and rides up and down on it.
+    row[j] = tread[j] + (full - tread[j]) * m;
+  }
+  row[0] += 0.03 * Math.sin(TAU * u * 2);
+  row[2] += 0.05 * m * Math.sin(TAU * u);
+  return row;
+};
 // A wall on the left is the wall on the right seen in a mirror.
 const m = MOVES[MOVE.WALL_R];
 MOVES[MOVE.WALL_L] = [
@@ -525,6 +598,9 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
   let [side, wn, lip, held] = [1, [1, 0], [0, 0, 0, -1, 0], false];
   /** On a wall (MODE.CLING): the normal toward it, and the phase of the climb, which goes with the speed. */
   let [cn, cph] = [[0, -1], 0];
+  /** Swimming: the phase of the stroke (0 to 1) and its pose. */
+  let swimPh = 0;
+  const swimRow = MOVES[MOVE.SWIM].slice();
   /** The seat he rides in, and whether a weapon keeps his right hand. */
   let sat: Seat | undefined;
   let armed = false;
@@ -606,6 +682,10 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
       [wall, cn] = [Math.atan2(-dir[0], -dir[1]), dir];
       cph = (cph + dt * 1.6 * (Math.abs(p.vy) + Math.hypot(p.vx, p.vz))) % 1;
     }
+    if (p.mode == MODE.SWIM) {
+      swimPh = (swimPh + dt * strokeRate(v)) % 1;
+      stroke(swimRow, swimPh, strokeShare(v));
+    }
     [
       air,
       air && p.vy > 0.5,
@@ -623,6 +703,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     const rides = p.mode == MODE.RIDE;
     set(W + 2 * MOVE.RIDE, +rides, 14);
     set(W + 2 * MOVE.CLING, +cling, 12);
+    set(W + 2 * MOVE.SWIM, +(p.mode == MODE.SWIM), 8);
     sat = rides ? (seat ?? { yaw: p.yaw, pitch: 0, roll: 0, steer: 0, s: 1 }) : sat;
     armed = !p.fists && (p.ammo >= 0 || !!p.railed || !!p.rifled || !!p.wield);
     set(KEN, +(!!p.wield && bow > 0), 10);
@@ -1211,7 +1292,8 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     });
 
     // The other moves, laid over the stride.
-    MOVES.forEach((c, k) => {
+    MOVES.forEach((row, k) => {
+      const c = k == MOVE.SWIM ? swimRow : row;
       const w = sw(k);
       if (w > 0.002) {
         // Along a wall the body leans well out (the user, 2026-11-09), less with the rail gun's bolt
@@ -1225,6 +1307,14 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
         }
       }
     });
+    const swimming = clamp(sw(MOVE.SWIM));
+    if (swimming > 0.002) {
+      // The body follows the look: more prone in a dive, more upright looking up.
+      rot[J.PELVIS] = mul(
+        axis(X, -(SWIM_PITCH - 0.8 * clamp(q.pitch, -1.2, 1.2)) * swimming),
+        rot[J.PELVIS],
+      );
+    }
     const ride = clamp(sw(MOVE.RIDE));
     if (ride > 0.002 && sat) {
       // The seat leans with the rover: the pelvis, and all it carries, about the seat point.

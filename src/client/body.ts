@@ -23,6 +23,7 @@ import {
 import { powerOf, sabering } from '../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../shared/physics';
 import { MODE } from '../shared/types';
+import { strokeRate, strokeShare } from './gait';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
@@ -1917,8 +1918,60 @@ const floorOf =
     return d > 0 && d < 2 * STEP_H ? y + STEP_H - d : y;
   };
 
-/** On a wall run the rail gun is put away, unless its bolt is going out. */
-export const stowed = (p: PlayerState): boolean => p.mode == MODE.WALLRUN && !p.zapping;
+/** On a wall run the rail gun is put away, unless its bolt is going out; a swimmer's hands are free. */
+export const stowed = (p: PlayerState): boolean =>
+  (p.mode == MODE.WALLRUN && !p.zapping) || p.mode == MODE.SWIM;
+
+/**
+ * A swimmer's right hand in the view (camera space, mirrored for the left) at six evenly spaced
+ * keys of gait.ts's STROKE: reaching ahead, swept wide and down, joined under the chin, then
+ * shot out ahead and straight into the next pull.
+ */
+const PULL: Vec3[] = [
+  [0.1, -0.1, 0.76],
+  [0.42, -0.26, 0.5],
+  [0.48, -0.33, 0.34],
+  [0.1, -0.28, 0.3],
+  [0.1, -0.16, 0.52],
+  [0.1, -0.11, 0.7],
+];
+/** How flat the hand lies (0 open, 1 a fist) and how far it rolls about the forearm (radians, added to the palm down), at the same keys: joined and flat, cupped through the pull, joined again under the chin. */
+const CURLS = [0.05, 0.3, 0.42, 0.05, 0.05, 0.08];
+const ROLLS = [-0.9, -0.2, 0.3, -0.9, -0.9, -0.9];
+/** A closed Catmull-Rom curve through `keys` at phase `u`: it never stops at a key. */
+const loop = (keys: number[], u: number): number => {
+  const n = keys.length;
+  const x = u * n;
+  const i = Math.floor(x) % n;
+  const t = x - Math.floor(x);
+  const [k0, k1, k2, k3] = [-1, 0, 1, 2].map(d => keys[(i + d + n) % n]);
+  return (
+    0.5 *
+    (2 * k1 +
+      (k2 - k0) * t +
+      (2 * k0 - 5 * k1 + 4 * k2 - k3) * t * t +
+      (3 * k1 - k0 - 3 * k2 + k3) * t * t * t)
+  );
+};
+/** The hand at phase `u` along PULL; `m` of the way from treading water (each hand sculling in turn) to it. */
+const strokeHand = (u: number, sd: number, m: number): Vec3 => {
+  const o = sd > 0 ? 0 : 0.5;
+  const tread: Vec3 = [
+    0.22 + 0.08 * Math.sin(TAU * (u + o)),
+    -0.28 + 0.06 * Math.cos(TAU * (u + o)),
+    0.45 + 0.1 * Math.sin(TAU * (u + o + 0.25)),
+  ];
+  return tread.map(
+    (v, j) =>
+      v +
+      (loop(
+        PULL.map(k => k[j]),
+        u,
+      ) -
+        v) *
+        m,
+  ) as Vec3;
+};
 
 /** The blends the animation eases, each toward 0 or 1, and how fast (1 / s). */
 const RATES = {
@@ -1934,6 +1987,7 @@ const RATES = {
   gun: 10,
   blade: 10,
   feast: 12,
+  swim: 8,
 };
 
 /**
@@ -1985,6 +2039,7 @@ export const createBody = (world?: World): Body => {
     gun: 0,
     blade: 0,
     feast: 0,
+    swim: 0,
   };
   /** The kick of the last shot, 0 to 1, and how much of the right hand's pose the gun and the katana take, as of the last pose(). */
   let [kick, hold, grasp, wide] = [0, 0, 0, 1.6];
@@ -1999,6 +2054,8 @@ export const createBody = (world?: World): Body => {
   let lift: Vec3 = [0, 0, 0];
   /** Seconds, for the flailing of a stumble; and since the last parry. */
   let [clock, parry] = [0, Infinity];
+  /** Swimming: the phase of the stroke (0 to 1), the same rhythm as gait.ts's. */
+  let swimPh = 0;
   /** How far into the parry the katana is (parrying()). */
   let braced = 0;
   /** Which hand the wall is on: -1 left, 1 right, eased. */
@@ -2071,6 +2128,7 @@ export const createBody = (world?: World): Body => {
     drawn = now;
     me = { ...p };
     clock += dt;
+    swimPh = p.mode == MODE.SWIM ? (swimPh + dt * strokeRate(speedOf(p))) % 1 : swimPh;
     parry += dt;
     braced = parrying(parry);
     prog = progress(prog, p, dt);
@@ -2096,9 +2154,10 @@ export const createBody = (world?: World): Body => {
       // By the weapon in hand (handOf()), not the one carried: none with the fists chosen, though
       // the pistol is still in the bag.
       gun: +(!stowed(p) && (now === 0 || now === 2 || now === 3)),
-      blade: +(!!p.wield && !p.down),
+      blade: +(!!p.wield && !p.down && p.mode != MODE.SWIM),
       // A glory kill's hold (room.ts feast()): the xenomorph's, with no blade in it.
       feast: +(xeno && !!p.lock && !p.down),
+      swim: +(p.mode == MODE.SWIM),
     };
     for (const n of Object.keys(RATES) as (keyof typeof RATES)[]) {
       w[n] += (to[n] - w[n]) * (1 - Math.exp(-dt * RATES[n]));
@@ -2406,6 +2465,7 @@ export const createBody = (world?: World): Body => {
       const toWall = w.wall * clamp(side * sd) * (me?.railed ? 1 - w.gun : 1);
       h = mix(h, [0.42, -0.16, 0.42], toWall);
       h = mix(h, sd > 0 ? [0.36, -0.26, 0.38] : [0.28, -0.1, 0.42], w.slide);
+      h = mix(h, strokeHand(swimPh, sd, strokeShare(me ? speedOf(me) : 0)), w.swim);
       // Reeling from a tackle: the hands thrown out and up, flailing against each other.
       const flail = Math.sin(clock * 12 + (sd > 0 ? Math.PI : 0));
       // A punch (no weapon at all, FIRE) drives the striking fist of its blow (SIDE) up to the
@@ -2490,6 +2550,7 @@ export const createBody = (world?: World): Body => {
         [1, w.dash],
         [0.1, toWall],
         [0.1, w.slide],
+        [loop(CURLS, swimPh), w.swim],
         [0.1, w.plant],
         [0.2, w.stun],
         [0.5, w.feast],
@@ -2558,7 +2619,10 @@ export const createBody = (world?: World): Body => {
       }
       // The palm turns down, the back of the hand to the view, flat on a ledge or the floor;
       // raking, it turns to face the way of the slash.
-      q.rot[arm + 2] = axis(Y, sd * (1 + 0.5 * (w.plant + w.slide) + 0.9 * clutch));
+      q.rot[arm + 2] = axis(
+        Y,
+        sd * (1 + 0.5 * (w.plant + w.slide) + 0.9 * clutch + w.swim * loop(ROLLS, swimPh)),
+      );
       if (typing > 0.002) {
         // The back of the right wrist up (its forearm's local +x, as with the blades), the hand
         // straight on the forearm's line (the user, 2026-11-24).

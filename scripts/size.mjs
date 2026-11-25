@@ -101,7 +101,8 @@ const BUDGETS = [
   // 279,296 B: Landfall's see-through canopy, its glass drawn in two blended passes (the user, 2026-11-26).
   // 279,424 B: with the sand's dunes and the water's chop (#414) (the user, 2026-11-26).
   // 279,552 B: the Hunter's disc reaching bodies 0.5 m off its line (the user, 2026-11-26).
-  { file: 'dist/index.js', max: 279_552 },
+  // 280,704 B: Landfall's swimming, its breaststroke and the view under the water (the user, 2026-11-26: raise; 280,400 B before the merged changes of #413 and #414).
+  { file: 'dist/index.js', max: 280_704 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -112,7 +113,8 @@ const BUDGETS = [
   // 53 KB until Landfall's map, its relief, wreck and debris (the user, 2026-11-25: 58,000 B).
   // 58,000 B until Landfall's hollow hull and the bots' pull ups through its decks (the user, 2026-11-25: 58,500 B).
   // 58,500 B until that hull rebased on the ws-free room entry (#399) and the fires' damage (#400) (the user, 2026-11-25: 58,700 B).
-  { file: 'dist/local.js', max: 58_700 },
+  // 58,950 B: Landfall's swimming (the user, 2026-11-26).
+  { file: 'dist/local.js', max: 58_950 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured

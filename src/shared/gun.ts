@@ -239,7 +239,7 @@ export const step = (
   ];
   p.cool = Math.max(0, p.cool - 1);
   p.lob = Math.max(0, (p.lob ?? 0) - 1);
-  const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB;
+  const busy = p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.SWIM;
   // The katana's swing runs down, but stays at the top of a cut's wind-up while FIRE is held there:
   // a charge. Let go after HEAVY_TAP, the rest of the cut is the heavy release, its own timer; busy
   // hands or the end of the match drop the charge and the cut goes on.

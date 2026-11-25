@@ -27,6 +27,11 @@ import {
   DASH_TICKS,
   DECAY,
   EYE,
+  SWIM_ACCEL,
+  SWIM_DEPTH,
+  SWIM_EYE,
+  SWIM_RISE,
+  SWIM_SPEED,
   FRICTION,
   GRAB_FACING,
   GRAB_GAP,
@@ -226,7 +231,7 @@ export const heightOf = (p: Pick<PlayerState, 'mode'>): number =>
 
 /** The camera height above the feet in this mode. */
 export const eyeHeight = (p: Pick<PlayerState, 'mode'>): number =>
-  p.mode === MODE.SLIDE || p.mode === MODE.CROUCH ? LOW_EYE : EYE;
+  p.mode === MODE.SWIM ? SWIM_EYE : p.mode === MODE.SLIDE || p.mode === MODE.CROUCH ? LOW_EYE : EYE;
 
 /** Horizontal speed, m/s. */
 export const speedOf = (p: Pick<PlayerState, 'vx' | 'vz'>): number => len(p.vx, p.vz);
@@ -1163,6 +1168,64 @@ const free = (p: PlayerState, w: World, c: Ctl): void => {
   }
 };
 
+/** The feet level of a swimmer: SWIM_DEPTH under the water. */
+const surface = (w: World): number => (w.def.water ?? 0) - SWIM_DEPTH;
+
+/**
+ * A body that sank (walked out along the bed, or fell in) more than the margin under the swimming
+ * level starts to swim, put back on the level at once. The margin is above the one fly() takes
+ * for a floor, so a swimmer over a bed that rises to the level lands and does not turn back.
+ */
+const wade = (p: PlayerState, w: World): void => {
+  if (
+    w.def.water === undefined ||
+    p.y >= surface(w) - 2 * SKIN ||
+    !(
+      p.mode === MODE.GROUND ||
+      p.mode === MODE.AIR ||
+      p.mode === MODE.CROUCH ||
+      p.mode === MODE.SLIDE ||
+      p.mode === MODE.WALLRUN
+    )
+  ) {
+    return;
+  }
+  enter(p, MODE.SWIM);
+  p.y = surface(w);
+  p.vy = 0;
+  p.dash = 0;
+  p.wall = SIDE.NONE;
+};
+
+/**
+ * Afloat: slowly toward the wished direction, no jump, no dash, no gravity. With FORWARD or BACK
+ * he swims where he looks, down when he looks down (a dive) and back up when he looks up, never
+ * over the surface; with neither he drifts up to it. On the bed he rests, and where the bed
+ * rises to the surface he is put on his feet.
+ */
+const swim = (p: PlayerState, w: World, c: Ctl): void => {
+  const k = Math.min(1, SWIM_ACCEL * DT);
+  const top = surface(w);
+  const f = (c.keys & KEY.FORWARD ? 1 : 0) - (c.keys & KEY.BACK ? 1 : 0);
+  // Diving takes the pace sideways too; looking up at the surface does not slow him.
+  const flat = f !== 0 && (p.pitch < 0 || p.y < top - SKIN) ? Math.cos(p.pitch) : 1;
+  p.vx += (c.wx * SWIM_SPEED * flat - p.vx) * k;
+  p.vz += (c.wz * SWIM_SPEED * flat - p.vz) * k;
+  p.vy += ((f !== 0 ? f * Math.sin(p.pitch) * SWIM_SPEED : SWIM_RISE) - p.vy) * k;
+  fly(p, w, heightOf(p), 0, false, c.bodies);
+  // Where the floor under him is at the surface's level or over it, he stands on it.
+  if (span(p, w, heightOf(p), c.bodies)[0] >= top - SKIN) {
+    p.y = Math.max(p.y, top);
+    p.vy = 0;
+    p.jumps = AIR_JUMPS;
+    p.dashes = c.kit.dashes;
+    enter(p, MODE.GROUND);
+  } else if (p.y > top) {
+    p.y = top;
+    p.vy = Math.min(p.vy, 0);
+  }
+};
+
 /** On the floor: jump, crouch, slide, stand up, and the speed. */
 const onGround = (p: PlayerState, w: World, c: Ctl, burst: boolean): void => {
   const low = (c.keys & KEY.CROUCH) !== 0;
@@ -1304,18 +1367,22 @@ export const move = (
   if (p.mode === MODE.CLING) {
     cling(p, w, c);
   }
-  if (p.mode === MODE.CLIMB) {
+  if (p.mode === MODE.SWIM) {
+    swim(p, w, c);
+  } else if (p.mode === MODE.CLIMB) {
     climb(p, w);
   } else if (p.mode !== MODE.HANG && p.mode !== MODE.CLING && !riding) {
     free(p, w, c);
   }
+
+  wade(p, w);
 
   // Drained by a rail hit: slowed on the floor plane.
   if (p.slow) {
     p.slow--;
     cap(p, SLOW_SPEED);
   }
-  if (p.y < w.def.floor) {
+  if (p.y < w.def.floor && p.mode !== MODE.SWIM) {
     // Fallen off the roofs: back at the spawn of the player's id in his team.
     respawn(p, w, team, kit);
   }

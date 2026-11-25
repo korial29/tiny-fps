@@ -41,7 +41,12 @@ export const fends = (p: PlayerState, b: Ball): boolean => {
   if (!p.wield || p.swing || p.charge || p.stun > 0 || b.arc || b.power === NADE) {
     return false;
   }
-  if (p.mode === MODE.HANG || p.mode === MODE.CLIMB || p.mode === MODE.RIDE) {
+  if (
+    p.mode === MODE.HANG ||
+    p.mode === MODE.CLIMB ||
+    p.mode === MODE.RIDE ||
+    p.mode === MODE.SWIM
+  ) {
     return false;
   }
   const [fx, fz] = forward(p.yaw);

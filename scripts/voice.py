@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory() as tmp:
     sf.write(wav, sprite, RATE)
     encoded = {}
     for ext, cmd in [
-        ("opus", ["opusenc", "--quiet", "--speech", "--bitrate", "16", wav]),
+        ("opus", ["opusenc", "--quiet", "--speech", "--bitrate", "12", wav]),
         ("mp3", ["lame", "--quiet", "-m", "m", "-b", "32", wav]),
     ]:
         dst = os.path.join(tmp, f"voice.{ext}")

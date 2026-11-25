@@ -272,6 +272,7 @@ const setEvery: Every = (cb, ms) => {
  * - The host is the player in the room the longest; when he leaves, the next oldest. Only his
  *   { t: 'map', map } counts: the map (a MAPS key) is played from the next match on, or from the
  *   next join once the room is empty. The roster tells everyone the host and the map picked.
+ *   rules.lockMap ignores it: the room plays rules.map for its whole life.
  * - The map's rovers (rover.ts) are in every snapshot. A press of USE near one seats a player; a
  *   driven rover is stepped by its driver's inputs alone (ride()), a driverless one by the tick.
  *   A player on foot walks into the rovers as they stand when his input arrives (hull()); a rover
@@ -421,7 +422,13 @@ export class Room {
       const msg = parseText<ClientText>(data);
       if (p === null && msg?.t === 'join') {
         this.join(conn, msg.name, msg);
-      } else if (p && msg?.t === 'map' && p === this.host() && Object.hasOwn(MAPS, msg.map)) {
+      } else if (
+        p &&
+        msg?.t === 'map' &&
+        !this.rules.lockMap &&
+        p === this.host() &&
+        Object.hasOwn(MAPS, msg.map)
+      ) {
         this.next = msg.map === this.mapName ? undefined : msg.map;
         this.roster();
       } else if (p && msg?.t === 'watch') {

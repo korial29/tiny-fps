@@ -594,6 +594,19 @@ describe('say', () => {
     expect(lines()).toHaveLength(3);
   });
 
+  it('says and speaks nothing without sprites (TinyFpsOptions.voices false), sounds still play', async () => {
+    install();
+    const a = createAudio(LAYERS, [], undefined, []);
+    a.unlock();
+    a.listen(EYE, 0);
+    await Promise.resolve();
+    a.say(LINE.WIN);
+    expect(a.speak(0)).toBe(false);
+    expect(fake().sources.filter(s => !s.loop)).toHaveLength(0);
+    a.play(SOUND.HIT);
+    expect(fake().sources.filter(s => !s.loop)).toHaveLength(1);
+  });
+
   it('loads the Opus sprite first', async () => {
     expect(atob(await SPRITES[0]()).slice(0, 4)).toBe('OggS');
   });

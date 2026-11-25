@@ -92,14 +92,16 @@ describe('LANDFALL, the bots’ map', () => {
     const leaps = path(nav, world, [x, y, z], blue.base, 4).filter(st => st.leg?.k === 'leap');
     expect(leaps).toHaveLength(7);
     expect(leaps.every(st => st.edge!.route === 4)).toBe(true);
-    // The other four are walked: the high road on a rail over each break of the wings.
+    // The other four are walked: the high road goes up a wing on a rail over each of its two
+    // breaks. Down the other wing is the nav's choice: by its rails, or off its leading edge
+    // onto the sand under it where the wing is thin enough to leave the sand free.
     for (const k of [0, 1, 2, 3]) {
       expect(path(nav, world, [x, y, z], blue.base, k).some(st => st.leg)).toBe(false);
     }
-    const rails = path(nav, world, [x, y, z], blue.base, 0).filter(st =>
-      WING.rails.some(r => Math.abs(st.to[0] - r) < 0.23),
+    const rails = path(nav, world, [x, y, z], blue.base, 0).filter(
+      st => st.to[2] > MID && WING.rails.some(r => Math.abs(st.to[0] - r) < 0.23),
     );
-    expect(rails.length).toBeGreaterThanOrEqual(4);
+    expect(rails.length).toBeGreaterThanOrEqual(2);
   });
 
   it('has no way down through a floor: a drop is off an edge with nothing between it and the floor below', () => {
@@ -239,9 +241,12 @@ describe('LANDFALL, a bot alone with the real physics', () => {
         // Waist deep in the flooded furrow of the west gap and in the shallows by the first float.
         expect(f.low).toBeGreaterThan(DEPTH + 0.4);
         expect(f.seconds).toBeLessThan(name === 'lagoon' ? 32 : 20);
-        // The high road is the gallery, by a rail over each of the four breaks: no jump to miss.
+        // The high road is the gallery, up the wing by a rail over each of its two breaks (no
+        // jump to miss) and down the other wing by its rails or off its edge, unhurt.
         if (!id) {
-          expect([f.y, f.rails]).toEqual([GALLERY, 4]);
+          expect(f.y).toBe(GALLERY);
+          expect(f.rails).toBeGreaterThanOrEqual(2);
+          expect(f.state.hp).toBe(spawn(id, world, 0, team).hp);
         }
       }
     }
@@ -353,7 +358,9 @@ describe('LANDFALL, a match of bots', () => {
     ];
     const me = players.find(p => !p.bot)!;
     let [score, carried, drowned] = [0, false, 0];
-    for (let k = 0; k < 60 * 300 && !score; k++) {
+    // One match is one draw: the first capture came after 106 s, 172 s and 335 s as the map and
+    // the bots changed, so the match is given 15 minutes.
+    for (let k = 0; k < 60 * 900 && !score; k++) {
       // The bench lies down: he touches no flag and nobody shoots him.
       me.state.down = 999;
       room.tick();

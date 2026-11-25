@@ -1121,6 +1121,11 @@ export const warmSteps = (own?: number, hunter = false): Step[] => [
 
 /** `d` is the map's own scenery (decor()): without it, Tranquility and Landfall draw their brushes only. */
 export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE): Renderer => {
+  // Before the builds below: with no WebGL2 they would be seconds for nothing.
+  const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
+  if (!gl) {
+    throw new Error('WebGL2 is not available');
+  }
   /** The animation state of each runner drawn. */
   let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
@@ -1135,10 +1140,6 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const was: [number, number][] = [];
   const dust = createDust();
   let clock: number | undefined;
-  const gl = canvas.getContext('webgl2', { antialias: false, depth: false });
-  if (!gl) {
-    throw new Error('WebGL2 is not available');
-  }
   const pen = document.createElement('canvas').getContext('2d')!;
   const known = new Map<string, number[]>();
   /** Any CSS colour to [r, g, b] in 0..1, gray when the browser does not know it. */

@@ -2,6 +2,7 @@
 // is judged on. Skipped unless BOTMATCH gives the number of matches: `npm run botmatch`.
 import { writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { TICK_HZ } from './constants';
 import { decodeSnapshot } from './protocol';
 import { Room } from './room';
 import { FLAG } from './types';
@@ -22,6 +23,9 @@ interface Tally {
   blocks: number;
   stopped: number;
   turns: number;
+  /** Total seconds with both flags carried, and the longest uninterrupted exchange. */
+  exchange: number;
+  longestExchange: number;
   /** Shots fired and shots that hit, the bots' gun; frags. */
   shots: number;
   hits: number;
@@ -62,6 +66,8 @@ const play = (n: number): Tally => {
     blocks: 0,
     stopped: 0,
     turns: 0,
+    exchange: 0,
+    longestExchange: 0,
     shots: 0,
     hits: 0,
     frags: 0,
@@ -82,6 +88,7 @@ const play = (n: number): Tally => {
   >();
   let flags: number[] = [FLAG.HOME, FLAG.HOME];
   let score = 0;
+  let exchange = 0;
   for (let k = 0; k < 60 * 60 * MINUTES + n * 37; k++) {
     me.state.down = 999;
     room.tick();
@@ -133,6 +140,13 @@ const play = (n: number): Tally => {
     if (last && k % 2 === 0) {
       const snap = decodeSnapshot(last)!;
       const now = snap.flags.map(f => f.state);
+      if (!snap.over && now.every(f => f === FLAG.CARRIED)) {
+        exchange += 2;
+        t.exchange += 2;
+        t.longestExchange = Math.max(t.longestExchange, exchange);
+      } else {
+        exchange = 0;
+      }
       t.taken += now.filter((f, i) => f === FLAG.CARRIED && flags[i] !== FLAG.CARRIED).length;
       const sum = snap.score[0] + snap.score[1];
       t.captures += sum > score ? sum - score : 0;
@@ -140,6 +154,8 @@ const play = (n: number): Tally => {
     }
   }
   t.stopped = Math.round(t.stopped / 60);
+  t.exchange /= TICK_HZ;
+  t.longestExchange /= TICK_HZ;
   t.frags = frags;
   return t;
 };

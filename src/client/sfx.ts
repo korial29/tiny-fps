@@ -820,20 +820,15 @@ export const LAYERS: Voice[][] = [
     [0, 220, -2, 0.001, 0.01, 0.18, 0.12, 0.15, 0, 1, 0.22, 0.01],
     [3, 400, -1, 0.01, 0.1, 0.5, 0, 0.06, 0, 1, 0.45, 0.03],
   ],
-  // HARPOON_RELOAD: the next bolt sliding home (the user, 2026-11-24: a metallic slide): a catch
-  // let go, then the shaft's steel scraping along the steel of the tube for half a second, a gritty
-  // hiss rising a little with two inharmonic partials chattering in it; as it seats (0.62 s in:
-  // harpoonFeed()'s 85 % of the 1.3 s reload) a crisp latch, a small knock and a short ring.
+  // HARPOON_RELOAD: the next bolt sliding home (the user, 2026-11-25: a very short slide and a
+  // brief click): a quick hiss of steel on steel for 0.2 s, rising a little, one thin partial in
+  // it; as it seats (0.23 s in: harpoonFeed() takes 0.2 of the 1.3 s reload) one dry click.
   [
-    [0, 2400, 0, 0.001, 0, 0.012, 0, 0.4, 0, 1, 0.25],
-    [3, 5200, 0.5, 0.04, 0.44, 0.1, 0.15, 0.3, 0, 1, 0.34, 0.03],
-    [1, 620, 0.5, 0.04, 0.44, 0.1, 0.3, 0.12, 0, 1, 0.12, 0.03],
-    [2, 2900, 0.35, 0.05, 0.42, 0.08, 0.04, 1, 0, 1, 0.06, 0.03],
-    [2, 4370, 0.35, 0.05, 0.42, 0.08, 0.05, 1, 0, 1, 0.04, 0.03],
-    [0, 2600, -2, 0.001, 0, 0.015, 0, 0.6, 0, 1, 0.45, 0.62],
-    [2, 220, -2.5, 0.001, 0.01, 0.07, 0, 1, 0, 1, 0.4, 0.62],
-    [2, 1900, -0.3, 0.001, 0.02, 0.18, 0.08, 1, 0, 1, 0.16, 0.63],
-    [2, 3050, -0.3, 0.001, 0.01, 0.12, 0.08, 1, 0, 1, 0.08, 0.63],
+    [3, 6000, 0.8, 0.02, 0.13, 0.05, 0, 0.3, 0, 1, 0.3],
+    [2, 3100, 0.5, 0.02, 0.12, 0.05, 0.05, 1, 0, 1, 0.04],
+    [0, 2600, -2, 0.001, 0, 0.012, 0, 0.6, 0, 1, 0.45, 0.23],
+    [3, 9000, 0, 0.001, 0, 0.018, 0, 0.7, 0, 1, 0.3, 0.23],
+    [2, 320, -2, 0.001, 0, 0.04, 0, 1, 0, 1, 0.22, 0.23],
   ],
   // HUNTER_FLASH: a flash unit's whine charging up in 80 ms, then its pop: a burst of bright noise,
   // a low thump under it and an electric zap falling away.

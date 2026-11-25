@@ -90,6 +90,27 @@ it('gives the own view’s harpoon a round scope over the closed receiver, not t
   expect(hunterHarpoon(2).length).toBeGreaterThan(2 * hunterHarpoon(1).length);
 });
 
+it('opens a feed tube at the back of the harpoon for the next bolt (the user, 2026-11-25: it went through the stock)', () => {
+  for (const lod of [0, 1, 2] as const) {
+    const rifle = hunterHarpoon(lod);
+    // Round the bolt's axis (y 0.145 with the action's rise): the mouth's rim at the back, 0.44 m,
+    // and the dark disc closing the bore 2 cm in, both wider than the bolt (1.6 cm).
+    const at = (z: number) => {
+      const r: number[] = [];
+      for (let i = 0; i < rifle.length; i += STRIDE) {
+        if (Math.abs(rifle[i + 2] - z) < 1e-6) {
+          r.push(Math.hypot(rifle[i], rifle[i + 1] - 0.145));
+        }
+      }
+      return r;
+    };
+    expect(Math.min(...at(0.44))).toBeCloseTo(0.019, 4);
+    expect(at(0.42).filter(r => r < 0.016).length).toBeGreaterThan(0);
+    // Nothing of the stock reaches past the mouth.
+    expect(Math.max(...rifle.filter((_, i) => i % STRIDE === 2))).toBeCloseTo(0.44, 4);
+  }
+});
+
 it('cuts the Hunter into joint pieces that rebuild his model at rest', () => {
   const { pieces, bands } = hunterRig(1);
   const total = Object.values(hunter(1)).reduce((n, part) => n + part.length, 0);
@@ -110,9 +131,9 @@ it('reloads the harpoon by its bolt alone: the fired one leaves forward, the nex
   expect(harpoonFeed(-1)).toBe(1);
   expect(harpoonFeed(0)).toBe(0);
   expect(harpoonFeed(HARPOON_RACK)).toBe(0);
-  expect(harpoonFeed(0.6)).toBeGreaterThan(0);
-  expect(harpoonFeed(0.6)).toBeLessThan(1);
-  expect(harpoonFeed(0.9)).toBe(1);
+  expect(harpoonFeed(0.45)).toBeGreaterThan(0);
+  expect(harpoonFeed(0.45)).toBeLessThan(1);
+  expect(harpoonFeed(0.6)).toBe(1);
   const axes = [
     [1, 0, 0],
     [0, 1, 0],

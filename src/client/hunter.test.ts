@@ -90,6 +90,24 @@ it('gives the own view’s harpoon a round scope over the closed receiver, not t
   expect(hunterHarpoon(2).length).toBeGreaterThan(2 * hunterHarpoon(1).length);
 });
 
+it('swept thin barbs behind the bolt’s point: the inner edge close along the outer (the user, 2026-11-25)', () => {
+  for (const lod of [0, 1, 2] as const) {
+    const rifle = hunterHarpoon(lod);
+    // The barbs' corners in the bolt's plane (y 0.145 with the action's rise): the outer one 4.5 cm off the axis, the inner one 3 mm behind it.
+    const xs = (z: number) => {
+      const r = new Set<number>();
+      for (let i = 0; i < rifle.length; i += STRIDE) {
+        if (Math.abs(rifle[i + 2] - z) < 1e-6 && Math.abs(rifle[i + 1] - 0.145) < 1e-6) {
+          r.add(Math.round(Math.abs(rifle[i]) * 1000));
+        }
+      }
+      return [...r];
+    };
+    expect(xs(-1.08)).toContain(45);
+    expect(xs(-1.11)).toEqual([27]);
+  }
+});
+
 it('opens a feed tube at the back of the harpoon for the next bolt (the user, 2026-11-25: it went through the stock)', () => {
   for (const lod of [0, 1, 2] as const) {
     const rifle = hunterHarpoon(lod);

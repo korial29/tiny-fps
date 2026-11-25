@@ -22,8 +22,10 @@ scene, nothing copied from a film or a series.
 ## The water (the user, 2026-11-25: no new rule)
 
 The lagoon is waded, not swum. The seabed is relief like the sand; the water is drawn only. Where
-the bed is deeper than a runner can stand in (`floor`, about −2.2 m of feet), the runner is put
-back at a spawn, as a fall from Highline's roofs. No slowdown, no swimming, no new wire data.
+the bed is deeper than a runner can stand in (`floor`, `DEPTH` = −1.4 m of feet: the eye is 1.6 m
+over them and stays over the drawn surface), the runner is put back at a spawn, as a fall from
+Highline's roofs: at about x = 16. A drowned carrier's flag drops on his last ground. No slowdown,
+no swimming, no new wire data.
 
 ## The wreck
 
@@ -66,3 +68,15 @@ Each camp: an escape pod (`POD`) with tarpaulin shelters, the flag by the pod, t
 | Mood     | `client/sfx.ts`, `demo/`                                  | Smoke, fire, surf, a song, the menu card (after playtest)                              |
 
 Target: 300,000 vertices at most (Tranquility: 436,467), match-frame JavaScript under 8 ms.
+
+## As built (2026-11-25)
+
+- The solid east edge is a ghost wall at x = 95 (`EDGE.east`), just behind the first trunks; the
+  forest is drawn from there. The capes' walls are at z = 4 and z = 196.
+- Each hull section lies level at its own height (`HULL.axis`): backs at 11, 13.25 and 14.5 m, a
+  flat back 5 m wide. The hold's side doors are at x 57.5..60.5.
+- The headlands' collision is `massed()`, coarser than Tranquility's `fitted()` (620 ms a half),
+  within 0.5 m of the drawn rock. Blue's rocks are drawn on the twins of red's ground.
+- The sea is the last of the ground's vertices (`lagoon()`), drawn apart in two blended passes
+  after the runners. Paint layers −5 (sea) and −1.09 (sand) are taken.
+- `LAYOUT.pieces` lists every drawn box by kind for the wreck's artist.

@@ -1,14 +1,16 @@
 // The bots' map of a world: a navigation mesh of the floor a body's middle may stand on, made from
 // the brushes alone (their tops less what stands on them, docs/BOTS.md) and the relief, joined by
-// portals where a body walks, steps or drops from one to the next. HIGHLINE's routes and the moon's
-// crossings (routes.ts) add their jumps as links, flown as the tests fly them. A way is A* over the
-// rectangles, then the funnel pulls it straight through the portals.
+// portals where a body walks, steps or drops from one to the next. HIGHLINE's routes, the moon's
+// crossings and Landfall's way round the tail (routes.ts) add their jumps as links, flown as the
+// tests fly them. A way is A* over the rectangles, then the funnel pulls it straight through the
+// portals.
+import { BEACH, HULL, ZED } from './beach';
 import { FALL_SAFE, PLAYER_H, PLAYER_R, STEP_H } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
 import { gravity } from './physics';
 import { ground } from './relief';
-import { HIGH, LOW, MID, UP, flip, leap, mirror } from './routes';
+import { HIGH, LAGOON, LOW, MID, UP, flip, leap, mirror } from './routes';
 import type { Leg } from './routes';
 import { key, near } from './world';
 import type { World } from './world';
@@ -50,8 +52,10 @@ export interface Nav {
   out: Edge[][];
   /** Cell key to the rectangles that touch the cell, PORTAL metres round included. */
   grid: Map<number, number[]>;
-  /** The route each rectangle is a crossing of, an index of ROUTES; -1 for none. */
+  /** The route each rectangle is a crossing of, under `ways`; -1 for none. */
   route: Int8Array;
+  /** How many routes the world has for its bots to spread over: ROUTES', or Landfall's five ways. */
+  ways: number;
 }
 
 /** A point a bot goes to: walking, or flying a leg there (`edge` the link of the leg). */
@@ -85,6 +89,8 @@ const KEEP = PLAYER_R + 0.05;
 const RUN_IN = 3;
 /** Metres the ends of a portal are drawn in, at most. */
 const EDGE = 0.7;
+/** Metres over the kill floor a bot keeps its feet: deeper water (Landfall's lagoon) is no floor. */
+export const WADE = 0.3;
 /** The relief's squares merged into a rectangle at most, a side. */
 const MERGE = 8;
 /** Metres of grid cell. */
@@ -179,13 +185,14 @@ const merge = (rs: Rect[]): Rect[] => {
 export const heightAt = (w: World, p: Poly, x: number, z: number): number =>
   p.r ? ground(w, x, z) : p.y;
 
-/** The relief's ground as rectangles of whole squares, none over the hole, a pit or past the bound. */
+/** The relief's ground as rectangles of whole squares, none over the hole, a pit, past the bound or in too deep. */
 const lowlands = (w: World): Rect[] => {
   const r = w.relief;
   if (!r) {
     return [];
   }
   const { x0, z0, cell, nx, nz, hole, pits, pitted, bound } = r;
+  const dry = w.def.floor + WADE;
   const [cx, cz, ea, eb] = bound;
   const [mx, mz] = [nx - 1, nz - 1];
   const over = (q: Rect, h: readonly number[]) =>
@@ -201,7 +208,7 @@ const lowlands = (w: World): Rect[] => {
         [q[0], q[3]],
         [q[2], q[3]],
       ]) {
-        inside &&= ((x - cx) / ea) ** 2 + ((z - cz) / eb) ** 2 <= 1;
+        inside &&= ((x - cx) / ea) ** 2 + ((z - cz) / eb) ** 2 <= 1 && ground(w, x, z) >= dry;
       }
       free[i + j * mx] = +(
         inside &&
@@ -381,10 +388,15 @@ const portals = (w: World, polys: Poly[], grid: Map<number, number[]>): Edge[][]
   return out;
 };
 
-/** A rectangle with (x, z) on or within `m` of it and its floor the highest not over y + 0.6, else -1. */
+/**
+ * A rectangle with (x, z) on or within `m` of it and its floor the highest not over y + 0.6, else
+ * -1. One the point is on comes before one it is only near, unless that one is a step higher (a
+ * ledge the body's edge is on): beside a sliver of floor, a body is on the sliver.
+ */
 const under = (nav: Nav, w: World, x: number, y: number, z: number, m: number): number => {
   let best = -1;
   let top = -Infinity;
+  let on = false;
   for (const i of nav.grid.get(key(Math.floor(x / CELL), Math.floor(z / CELL))) ?? []) {
     const p = nav.polys[i];
     const q = p.q;
@@ -392,8 +404,9 @@ const under = (nav: Nav, w: World, x: number, y: number, z: number, m: number): 
       continue;
     }
     const h = heightAt(w, p, Math.min(Math.max(x, q[0]), q[2]), Math.min(Math.max(z, q[1]), q[3]));
-    if (h <= y + 0.6 && h > top) {
-      [best, top] = [i, h];
+    const inside = x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3];
+    if (h <= y + 0.6 && h > top + (inside === on ? 0 : inside ? -STEP_H : STEP_H)) {
+      [best, top, on] = [i, h, inside];
     }
   }
   return best;
@@ -492,7 +505,7 @@ const build = (w: World): Nav => {
     }),
   );
   const route = new Int8Array(polys.length).fill(-1);
-  const nav: Nav = { polys, out: portals(w, polys, grid), grid, route };
+  const nav: Nav = { polys, out: portals(w, polys, grid), grid, route, ways: ROUTES.length };
   if (w.def === HIGHLINE) {
     const [red] = w.def.teams;
     for (const f of [(l: Leg) => l, flip]) {
@@ -526,6 +539,31 @@ const build = (w: World): Nav => {
         [x, y, 280 - z],
         legs.map(l => mirror(l, 280)),
         k,
+        true,
+      );
+    }
+  }
+  if (w.def === BEACH) {
+    // Landfall's five ways across the wreck's line, a route each: over the hull's back by the
+    // wings, through the hold, through the west and the east gap, and round the tail by the lagoon.
+    const [[, tail], [west, east]] = HULL.sections;
+    nav.ways = 5;
+    polys.forEach(({ q, y, r }, i) => {
+      if (q[1] <= ZED / 2 && q[3] >= ZED / 2) {
+        const x = (q[0] + q[2]) / 2;
+        route[i] = !r && y > HULL.r ? 0 : x < tail ? 4 : x < west ? 2 : x < east ? 1 : 3;
+      }
+    });
+    const [x, z] = LAGOON.start;
+    for (const blue of [false, true]) {
+      const legs = [...LAGOON.out, ...LAGOON.in.map(l => mirror(l, ZED))];
+      const sz = blue ? ZED - z : z;
+      links(
+        nav,
+        w,
+        [x, ground(w, x, sz), sz],
+        blue ? legs.map(l => mirror(l, ZED)) : legs,
+        4,
         true,
       );
     }
@@ -641,7 +679,7 @@ const nearest = (a: number[], b: number[], x: number, z: number): [number, numbe
 
 /**
  * The points a bot goes through from `a` to `b`, the last `b` or, when no way gets there, the
- * nearest point it can get to. The links of the routes other than `prefer` (an index of ROUTES)
+ * nearest point it can get to. The links of the routes other than `prefer` (a route under `ways`)
  * cost more, so bots that prefer different ones spread over the map. Off the mesh, `b` alone.
  */
 export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Step[] => {

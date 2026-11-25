@@ -41,7 +41,7 @@ import { hangar, satellite } from './satellite';
 import { mouths, rooms } from '../shared/station';
 import { jungle } from './jungle';
 import { HEAVENS, heavens, moonscape } from './moonscape';
-import { shore } from './shore';
+import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
 import { hulk } from './hulk';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
@@ -350,11 +350,17 @@ vec3 a=normalize(i+.2+.6*h);if(floor(a*s)!=i)continue;float b=l>0?.25+.4*h.y:.5+
 float r=length(d-a)/w;c+=b*exp(-r*r*1.4)*vec3(1.-.25*h.z,.9+.05*h.z,.75+.25*h.z);}
 return c;}
 #endif
+#ifdef BEACH
+float vn(vec2 p);
+#endif
 vec3 K1(vec3 d,float px);
 vec3 K0(vec3 d,float px){
 vec3 s=K1(d,px);
 #ifdef MOON
 if(Ob.x>0.){vec4 m=texture(Og,gl_FragCoord.xy*.5/vec2(textureSize(Og,0)));s=s*(1.-Ob.z*m.a)+Ob.z*m.rgb;}
+#endif
+#ifdef BEACH
+${SKY}
 #endif
 return s;}
 vec3 K1(vec3 d,float px){
@@ -383,6 +389,9 @@ vec3 gk=fa>.002?K0(kd,kp):vec3(0);
 if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=hv(o.rgb);return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
+#ifdef BEACH
+if(L<-4.5)${WATER(`1.-exp(-F.a*ds*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))))`)}
+#endif
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 float ks=LD(step(abs(L-${TEX.STONE}.),.5));vec3 cg=vec3(0);
 if(ks>.5){
@@ -476,8 +485,14 @@ ac=clamp((wd-d)/fw+.5,0.,1.)*min(1.,max(wd/fw,kd>1.5?.45:0.))*(kd<.5?1.:step(.12
 ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),0.);c*=mix(1.,.84+.16*sin(3.1416*uu),step(.5,kd));
 c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
+#ifdef BEACH
+float bw=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
+#endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
+#ifdef BEACH
+if(bs)R=mix(vec2(.05,10.),vec2(.8,140.),bw);
+#endif
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
 sd=mix(sd,.5*sqrt(max(1.-dot(Tn,O)*dot(Tn,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx*.6);
@@ -507,6 +522,9 @@ sp+=K[i].rgb*w*pow(max(dot(m,nz(d+V)),0.),R.y);}
 c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(1.-.75*kb)*(.4+.6*mix(1.,t.a,s))+hl+skp);
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
+#ifdef BEACH
+${WET}
+#endif
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-.85*kr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
@@ -593,12 +611,12 @@ export const fragOf = (
 ) =>
   FRAG.replace(
     '\n',
-    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
+    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
   );
 
-/** A map with the moon's sky: its globe, stars and craters. */
+/** A map with the moon's sky: its globe, stars and craters. Not the beach, whose sand is a relief too. */
 const moonly = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
-  def.scenery === 'moon' || def.seam !== undefined || !!def.relief;
+  def.scenery === 'moon' || def.seam !== undefined || (!!def.relief && def.scenery !== 'beach');
 
 /**
  * Column-major view-projection matrix of basis(yaw, pitch, roll) at eye. t is the tangent of half the
@@ -860,6 +878,7 @@ export const scenery = (world: World): number[] =>
           ...hulk(world.def),
           ...vision(world.def),
           ...zones(world.def),
+          ...lagoon(world.def),
         ]
       : [
           ...level(city(world)),
@@ -1065,6 +1084,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
   const ground = scenery(world);
   /** The Earth, the last of the ground's vertices (the stars are the sky's). */
   const heavensN = world.def.scenery === 'moon' ? heavens().length / STRIDE : 0;
+  /** Landfall's sea, the last of the ground's vertices: drawn apart, after what stands in it. */
+  const seaN = world.def.scenery === 'beach' ? lagoon(world.def).length / STRIDE : 0;
   /** True while portrait() draws: its runner stands high over the map, never in orbit. */
   let posing = false;
   /** Seconds a posing frame moves its runner on: 0 but for a picture drawn again (see `posed`). */
@@ -1748,7 +1769,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         uni('uniform4fv', 'R', STILL);
         uni('uniform4f', 'Ob', globe, fade, edge, 0);
       } else {
-        gl.drawArrays(gl.TRIANGLES, 0, first);
+        gl.drawArrays(gl.TRIANGLES, 0, first - seaN);
       }
       // What moves, with the code of its own materials and none of the map's (fragOf()).
       if (bodyAt || pieces.length) {
@@ -1766,6 +1787,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
         }
         place();
         still();
+      }
+      if (seaN) {
+        // The sea over what stands in it: first what it lets through, multiplied into the frame
+        // and leaving the depth alone, then the light it adds (WATER in shore.ts).
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
+        gl.depthMask(false);
+        uni('uniform1f', 'Z', 2);
+        gl.drawArrays(gl.TRIANGLES, first - seaN, seaN);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        gl.depthMask(true);
+        uni('uniform1f', 'Z', 1);
+        gl.drawArrays(gl.TRIANGLES, first - seaN, seaN);
+        gl.disable(gl.BLEND);
       }
       // The sky after the world, at depth 1: shaded only where nothing stands in front of it.
       uni('uniform3fv', 'J', rays);

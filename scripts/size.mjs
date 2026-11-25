@@ -89,7 +89,8 @@ const BUDGETS = [
   // 281,088 B: 512 B more for the menus' 8-bit theme (the user, 2026-11-24: raise it).
   // 281,344 B: 256 B more for the character screen opened from the pause menu (the user, 2026-11-25: raise it).
   // 281,600 B: 256 B more for the Hunter's steadier arms and the long guns' hold in the hand (the user, 2026-11-25: raise it).
-  { file: 'dist/index.js', max: 281_600 },
+  // 282,112 B: 512 B more for the Hunter's strips and tassets hung on hinges, out of his thighs' way (the user, 2026-11-25: raise it).
+  { file: 'dist/index.js', max: 282_112 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

@@ -359,6 +359,16 @@ describe('Room: the host picks the map', () => {
     expect(roster(b).next).toBeUndefined();
   });
 
+  it('ignores every pick under rules.lockMap: the room keeps rules.map', () => {
+    const room = new Room({ map: 'tranquility', lockMap: true });
+    const [a, b] = [join(room, 'Ann'), join(room, 'Bob')];
+    const sent = b.texts.length;
+    pick(room, a, 'highline');
+    expect(b.texts).toHaveLength(sent);
+    expect(roster(b)).toMatchObject({ host: 0, map: 'tranquility' });
+    expect(roster(b).next).toBeUndefined();
+  });
+
   it('hands the host over to the oldest player left, whose pick then counts', () => {
     const room = new Room();
     const [a, b, c] = [join(room, 'Ann'), join(room, 'Bob'), join(room, 'Cid')];

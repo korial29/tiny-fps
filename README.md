@@ -33,6 +33,7 @@ It started as a co-op shooter inspired by carlini's [Yet Another Doom Clone](htt
 | `@korial29/tiny-fps`        | The game client: rendering, lights and shadows, input, prediction, HUD | ~80 KB      |
 | `@korial29/tiny-fps/local`  | Same-browser multiplayer, no server: the host runs in a tab            | ~15.5 KB    |
 | `@korial29/tiny-fps/server` | Node WebSocket server (needs `ws`)                                     | Node only   |
+| `@korial29/tiny-fps/room`   | The authoritative `Room` alone, no `ws`: bring your own transport      | Node only   |
 
 CI checks the budgets (164 KB and 40 KB) on every pull request.
 
@@ -130,11 +131,13 @@ The canvas fills its container, at any size and ratio. Give the container a size
 
 Mounts the game and joins. Returns `{ on, players, destroy }`.
 
-| Option   | Type         | Description                                                                                  |
-| -------- | ------------ | -------------------------------------------------------------------------------------------- |
-| `name`   | `string`     | Player name shown above your head (16 characters max). A taken name gets a suffix (`Bob 2`). |
-| `url`    | `string`     | WebSocket URL, room in the path. Ignored when `socket` is given.                             |
-| `socket` | `SocketLike` | Any WebSocket-like object, e.g. `localSocket('room')`.                                       |
+| Option   | Type         | Description                                                                                          |
+| -------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| `name`   | `string`     | Player name shown above your head (16 characters max). A taken name gets a suffix (`Bob 2`).         |
+| `url`    | `string`     | WebSocket URL, room in the path. Ignored when `socket` is given.                                     |
+| `socket` | `SocketLike` | Any WebSocket-like object, e.g. `localSocket('room')`.                                               |
+| `cast`   | `boolean`    | Opens on the character screen; the map loads once its Start is pressed.                              |
+| `voices` | `boolean`    | `false`: no announcer and no players' voices, and their sprites (about 190 KB) are never downloaded. |
 
 Without WebGL2 the game stays connected and says so on screen.
 
@@ -166,17 +169,42 @@ A same-browser socket for `tinyFps`. `rules` apply to the game the tab hosts, so
 
 Starts the WebSocket server, one room per URL path, and returns an async `stop()`. `rules` apply to every room.
 
+### `Room`: `@korial29/tiny-fps/room`
+
+The host without the WebSocket server, to run behind a transport you already have (Socket.io, a worker…). Each peer is a `Conn` (`{ send(data) }`): pass it to `connect()`, its frames to `receive()` (text as a string, binary as an `ArrayBuffer` of exactly its bytes) and call `disconnect()` when it leaves. `start()` runs the clock, `stop()` ends it. `MAPS` lists the maps, each with its `name`.
+
+```ts
+import { Room } from '@korial29/tiny-fps/room';
+
+const room = new Room({ map: 'tranquility', lockMap: true });
+room.start();
+io.on('connection', socket => {
+  // Snapshots may be lost (the next one replaces them), the texts (join, roster) may not.
+  const conn = {
+    send: (data: string | ArrayBuffer) =>
+      typeof data === 'string' ? socket.emit('fps', data) : socket.volatile.emit('fps', data),
+  };
+  room.connect(conn);
+  socket.on('fps', data => room.receive(conn, data));
+  socket.on('disconnect', () => room.disconnect(conn));
+});
+```
+
+On the client, a `SocketLike` that relays the same events goes into `tinyFps(el, { socket })`.
+
 ### `SocketLike`
 
 The subset of `WebSocket` the client uses: `binaryType`, `onopen`, `onclose`, `onmessage`, `send(data)` and `close()`. A real `WebSocket` and `localSocket()` both fit, and so does a relay over a transport you already have. Text frames are JSON, and binary frames (inputs, snapshots) must arrive as an `ArrayBuffer` of exactly their bytes.
 
 ### Rules
 
-| Rule         | Default | Description                                                                       |
-| ------------ | ------- | --------------------------------------------------------------------------------- |
-| `maxPlayers` | `16`    | Players in a room; the next ones are told the room is full.                       |
-| `scoreLimit` | `3`     | Captures that end a match at once.                                                |
-| `timeLimit`  | `480`   | Seconds a match lasts. The team with more captures wins, a level score is a draw. |
+| Rule         | Default      | Description                                                                       |
+| ------------ | ------------ | --------------------------------------------------------------------------------- |
+| `maxPlayers` | `16`         | Players in a room; the next ones are told the room is full.                       |
+| `scoreLimit` | `3`          | Captures that end a match at once.                                                |
+| `timeLimit`  | `480`        | Seconds a match lasts. The team with more captures wins, a level score is a draw. |
+| `map`        | `'highline'` | The map's key: `highline`, `tranquility` or `landfall`.                           |
+| `lockMap`    | `false`      | The room plays `map` for its whole life: the host's picks are ignored.            |
 
 ---
 
@@ -222,7 +250,7 @@ The game is the movement and a capture the flag on top of it, with a tackle, a g
 - **The others**: drawn 100 ms in the past, interpolated between snapshots, as runners with one continuous skinned body, a face that blinks and grimaces, a combat stance, a natural gait and every parkour move (leaning well out on a wall-run, the feet on it), in their team colour, with the weapon in their hands.
 - **The city**: the street lies far below the roofs, with roads, their markings and traffic out into the haze, and a fog that thickens toward it; parks of tall branched trees in some blocks, and a skyline of towers around the map.
 - **Sound**: a synthesiser and a mixer that places sounds left or right by where they come from, and an airy music loop of slow pads and soft bells. Steps, jumps, the deep plasma shot, the katana's draw, swish and zap, the guns' reloads and power-up, hits, pickups and the flag events all have their sound. The sound starts with the click that locks the pointer.
-- **Announcer**: a calm voice tells the match starting and its last minute, the flags and the captures from your team's side, two or three takedowns in quick succession, five and ten in a row, a run of plasma shots that mostly hit, and the result. Its 16 lines are generated offline by `scripts/voice.py` and loaded after the first click, apart from the game: about 44 KB in Ogg Opus, or 74 KB in MP3 where the browser cannot decode Opus.
+- **Announcer**: a calm voice tells the match starting and its last minute, the flags and the captures from your team's side, two or three takedowns in quick succession, five and ten in a row, a run of plasma shots that mostly hit, and the result. Its 16 lines are generated offline by `scripts/voice.py` and loaded after the first click, apart from the game: about 41 KB in Ogg Opus at 12 kbps, or 74 KB in MP3 where the browser cannot decode Opus.
 
 ---
 

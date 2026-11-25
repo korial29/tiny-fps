@@ -474,6 +474,11 @@ export interface Rules {
   timeLimit: number;
   /** The map's key in MAPS (maps.ts); an unknown one plays 'highline'. */
   map?: string;
+  /**
+   * The map stays rules.map for the room's life: the host's { t: 'map' } picks are ignored. For a
+   * page that picks the map itself (an embedding app's admin), not the players.
+   */
+  lockMap?: boolean;
   /** Bots fill the room up to this many players while a human is in it (bot.ts). Absent, none. */
   bots?: number;
   /** The bots' skill, 0 (novice) to 7 (godlike) as in UT2004 (bot.ts's SKILL when absent). */

@@ -20,6 +20,10 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   textures. Keep game and 3D libraries, WASM, images and fonts out of the game.
   Reimplement ideas from the GPL-3.0 `carlini/js13k2019-yet-another-doom-clone`
   without copying its code into this Apache-2.0 project.
+- Encode every spoken or recorded sound in Ogg Opus at 12 kbps mono
+  (`opusenc --speech --bitrate 12`), as `scripts/voice.py` and
+  `scripts/cast.py` do. Keep the MP3 fallback as those scripts make it. Load
+  each sprite lazily with `import()`, never in the main bundle.
 - Check gzip budgets with `npm run build` and `npm run size`. The active limits
   live in [scripts/size.mjs](scripts/size.mjs). Raise a budget only with the
   user's agreement.

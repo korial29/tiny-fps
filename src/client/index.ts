@@ -87,6 +87,12 @@ export interface TinyFpsOptions {
    * Start is pressed, with the character picked there. Without it, the room is joined at once.
    */
   cast?: boolean;
+  /**
+   * false: no spoken voice, neither the announcer's nor the players' (taunts, cries, radio). Their
+   * sprites (about 190 KB of Opus, or 465 KB of MP3) are then never downloaded. The synth's sounds,
+   * the music and the announcer's words on screen stay.
+   */
+  voices?: boolean;
 }
 
 /**
@@ -180,7 +186,16 @@ export const tinyFps = (container: HTMLElement, opts: TinyFpsOptions): TinyFps =
       if (live) {
         return;
       }
-      live = play(container, key, p, () => emit('quit'), loader.step, period, !!opts.cast);
+      live = play(
+        container,
+        key,
+        p,
+        () => emit('quit'),
+        loader.step,
+        period,
+        !!opts.cast,
+        opts.voices !== false,
+      );
       // The game first in its container, the loading screen over it.
       container.append(loader.el);
       if (up) {
@@ -271,6 +286,7 @@ const play = (
   progress: (step: number) => void = () => {},
   period?: number,
   cast = false,
+  voices = true,
 ): { destroy(): void } => {
   const wrap = document.createElement('div');
   const root = wrap.attachShadow({ mode: 'open' });
@@ -322,7 +338,14 @@ const play = (
       .catch(() => {});
   }
   const predictor = createPredictor(world);
-  const audio = createAudio(undefined, undefined, SONGS[key], undefined, undefined, AIRS[key]);
+  const audio = createAudio(
+    undefined,
+    voices ? undefined : [],
+    SONGS[key],
+    voices ? undefined : [],
+    undefined,
+    AIRS[key],
+  );
   audio.mute(savedMute());
   hud.mute(audio.muted);
   hud.frags(0);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, ENGINES, FIRES, FLAME, ZED } from './beach';
-import { FIRE_HP, FIRE_TICKS, HP_MAX, PLAYER_R } from './constants';
+import { BEACH, FIRES, FLAME, LAYOUT, ZED, walked } from './beach';
+import { FIRE_HP, FIRE_TICKS, HP_MAX, PLAYER_H, PLAYER_R } from './constants';
 import { LAGOON } from './routes';
 import { STILL } from './physics';
 import { encodeInput } from './protocol';
@@ -49,20 +49,26 @@ describe('fire', () => {
     expect(stand(1.5, 1, 0, 60).hp).toBe(HP_MAX);
   });
 
-  it("keeps Landfall's flames off the ways across: the nacelle's roof and run-through, the lagoon's legs", () => {
-    // A body on the nacelle's roof (1.3 m each side of its middle, beach.ts nacelle()) or run through it has its middle within that.
-    const roof = ENGINES[0][0] + 1.3;
+  it("keeps Landfall's flames off the ways across: only the burning engines' backs and the lagoon's legs clear", () => {
+    const kind = new Map(LAYOUT.pieces.map(p => [`${p.min}|${p.max}`, p.kind]));
     const legs = LAGOON.out.concat(LAGOON.in);
     const points = legs.flatMap(l => (l.k === 'leap' ? [l.at, l.to] : [l.to]));
-    for (const [x, y, z, fr] of BEACH.fires!) {
-      if (y < 5) {
-        if (x > 50) {
-          expect(x - fr - PLAYER_R).toBeGreaterThan(roof);
+    for (const [x, y, z, r, h] of BEACH.fires!) {
+      // Every top a body standing in the flames would stand on: the fallen engine's, which
+      // burns, or the lagoon engine's south corner; never the sand, a deck or the back.
+      expect(walked(x, z) + PLAYER_H <= y || walked(x, z) >= y + h).toBe(true);
+      for (const b of BEACH.brushes) {
+        const [dx, dz] = [
+          Math.max(b.min[0] - x, 0, x - b.max[0]),
+          Math.max(b.min[2] - z, 0, z - b.max[2]),
+        ];
+        if (Math.hypot(dx, dz) < r + PLAYER_R && b.max[1] < y + h && b.max[1] + PLAYER_H > y) {
+          expect(['fallen', 'engine']).toContain(kind.get(`${b.min}|${b.max}`));
         }
-        for (const [px, pz] of points) {
-          for (const side of [pz, ZED - pz]) {
-            expect(Math.hypot(px - x, side - z)).toBeGreaterThan(fr + PLAYER_R);
-          }
+      }
+      for (const [px, pz] of points) {
+        for (const side of [pz, ZED - pz]) {
+          expect(Math.hypot(px - x, side - z)).toBeGreaterThan(r + PLAYER_R);
         }
       }
     }

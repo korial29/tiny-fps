@@ -223,31 +223,6 @@ export const ENGINES = [
   [4.5, 112, 2.5, 9],
 ];
 
-/**
- * Where it burns, both halves: the foot of each column of smoke (x, y, z), how high it rises, and
- * its radius at the foot and at the top (client/smoke.ts draws them). Their flames burn (FLAME), so
- * none stands on a way across (the user, 2026-11-25): on the sand east of the rear of each nacelle,
- * clear of its roof and of the way through it; on the south-west corner of each engine in the
- * lagoon, clear of the jumps over its north half (routes.ts LAGOON); and high against each of the
- * hull's four broken ends, thinner, over the heads of those who cross the gaps.
- */
-export const FIRES: number[][] = [
-  ...[
-    [ENGINES[0][0] + 4, 1.7, ENGINES[0][1] + 3],
-    [ENGINES[1][0] - 1.5, 1.3, ENGINES[1][1] + 3.5],
-  ].flatMap(([x, y, z]) => [
-    [x, y, z, 42, 1.3, 7],
-    [x, y, ZED - z, 42, 1.3, 7],
-  ]),
-  ...HULL.sections.flatMap(([x0, x1], n) =>
-    [n && x0 - 0.6, n < 2 && x1 + 0.6]
-      .filter(x => x)
-      .map(x => [+x, HULL.axis[n] + 3, ZED / 2, 28, 0.9, 4]),
-  ),
-];
-/** Metres the flames at a fire's foot reach out from its middle and up from it: smoke.ts stands three balls of 0.55 m within 0.6 of the foot's radius, up to 2.3 m. */
-export const FLAME = [0.55, 2.3];
-
 /** Red's camp: the escape pod its flag stands by (x, z, radius). */
 export const POD = [60, 174, 4];
 /** The camp's ground, level. */
@@ -616,6 +591,28 @@ const FALLEN = Array.from({ length: 6 }, (_, k) => {
     k ? undefined : ORANGE,
   );
 });
+
+/**
+ * Where it burns, both halves: the foot of each column of smoke (x, y, z), how high it rises, and
+ * its radius at the foot and at the top (client/smoke.ts draws them). Their flames burn (FLAME), so
+ * none stands on a way across (the user, 2026-11-25): on the back of the fallen engine, which
+ * burns; on the south-west corner of each engine in the lagoon, clear of the jumps over its north
+ * half (routes.ts LAGOON); and against each of the hull's four broken ends, thinner, 4.2 m over
+ * its axis: over the heads of those on the upper deck (DECKS) and under the back.
+ */
+export const FIRES: number[][] = [
+  ...[on(FALLEN[3]), [ENGINES[1][0] - 1.5, 1.3, ENGINES[1][1] + 3.5]].flatMap(([x, y, z]) => [
+    [x, y, z, 42, 1.3, 7],
+    [x, y, ZED - z, 42, 1.3, 7],
+  ]),
+  ...HULL.sections.flatMap(([x0, x1], n) =>
+    [n && x0 - 0.6, n < 2 && x1 + 0.6]
+      .filter(x => x)
+      .map(x => [+x, HULL.axis[n] + 4.2, ZED / 2, 28, 0.9, 4]),
+  ),
+];
+/** Metres the flames at a fire's foot reach out from its middle and up from it: smoke.ts stands three balls of 0.55 m within 0.6 of the foot's radius, up to 2.3 m. */
+export const FLAME = [0.55, 2.3];
 
 /** The engine in the lagoon off the tail's end, awash: its back 1.4 m over the water. */
 const ENGINE = (() => {

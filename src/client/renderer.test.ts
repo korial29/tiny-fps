@@ -321,12 +321,20 @@ describe('createRenderer', () => {
       expect(units.map(c => (c[1] as number) - K('TEXTURE0'))).toEqual([3, 2, 1, 0]);
     });
 
-    it('allocates the targets at the backing size, 16-bit float with the extension', () => {
+    it('allocates the targets at the backing size, in 11-11-10 bit floats with the extension', () => {
       createRenderer(canvas, ROOM);
       expect(named('getExtension').map(c => c[1])).toContain('EXT_color_buffer_float');
-      expect(named('texStorage2D')[0]).toEqual(['texStorage2D', FLAT, 1, K('RGBA16F'), 320, 200]);
+      // Half the bytes of RGBA16F a sample: nothing reads the scene's alpha back.
+      expect(named('texStorage2D')[0]).toEqual([
+        'texStorage2D',
+        FLAT,
+        1,
+        K('R11F_G11F_B10F'),
+        320,
+        200,
+      ]);
       expect(named('renderbufferStorageMultisample').map(c => c.slice(2))).toEqual([
-        [4, K('RGBA16F'), 320, 200],
+        [4, K('R11F_G11F_B10F'), 320, 200],
         [4, K('DEPTH_COMPONENT24'), 320, 200],
       ]);
     });

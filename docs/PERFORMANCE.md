@@ -219,6 +219,23 @@ same to the byte:
 | Tranquility, three astronauts at 3 m   | 20.2 to 20.9 | 18.7 to 19.7 |
 | Tranquility, three xenomorphs at 3 m   | 16.9 to 17.7 | 16.4 to 17.1 |
 
+### The scene's target in 11-11-10 bit floats (2026-11-25)
+
+The scene drew into a 4x MSAA target in RGBA16F, 8 bytes a sample, resolved into a texture of the
+same format. Nothing reads its alpha back (alpha to coverage and the blend take the shader's), so
+both are now `R11F_G11F_B10F`, 4 bytes a sample. The globe keeps RGBA16F (the crater fades into it by
+its alpha) and so do the bloom's blurs: at 11 and 10 bits their sums moved the halos by up to 15
+levels of 255. On the M2 at 1600 by 900, a frame's GPU (median, base then after):
+
+| Scene                                  | Before       | After        |
+| -------------------------------------- | ------------ | ------------ |
+| Highline, a marine, a ninja and a xeno | 14.5 to 14.6 | 13.1 to 13.4 |
+| Tranquility, three astronauts at 3 m   | 18.8 to 18.9 | 17.9 to 18.0 |
+
+A pixel changes by about one level of 255 (the blue, with a 5-bit mantissa, a little more), 9 at
+most, on the brightest surfaces. Everything in the 11-11-10 format would save 0.5 ms more, with the
+halos changed by up to 15 levels.
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by

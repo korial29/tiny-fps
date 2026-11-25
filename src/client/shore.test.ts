@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, FRAME, ZED } from '../shared/beach';
+import { BEACH, FRAME, HULL, ZED } from '../shared/beach';
 import { HIGHLINE } from '../shared/map';
 import { MAPS } from '../shared/maps';
 import { ground, noise } from '../shared/relief';
@@ -7,7 +7,7 @@ import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { STRIDE } from './mesh';
 import { FRAG, fragOf, scenery } from './render';
-import { LIFT, SAND, SEA, lagoon, shore } from './shore';
+import { LIFT, LUMPS, SAND, SEA, STREWN, lagoon, shore } from './shore';
 
 /** The beach of docs/BEACH.md as a relief: the bed 3 m down at the sea's edge, the sand 2.5 m up at the trees, a little rough. */
 const at = (x: number, z: number) =>
@@ -118,6 +118,30 @@ describe('the shore', () => {
     expect(shore(SLOPED)).toBe(shore(SLOPED));
   });
 
+  it('strews charred lumps along the track of the landing, on the sand, none under the hull', () => {
+    const world = build(BEACH);
+    const v = shore(BEACH);
+    const lumps: number[][] = [];
+    for (let i = 0; i < v.length; i += STRIDE) {
+      // Lit paint darker than the far island's.
+      if (v[i + 8] === -1 && v[i + 6] < 0.08) {
+        lumps.push(v.slice(i, i + 3));
+      }
+    }
+    expect(lumps.length).toBeGreaterThan(500);
+    expect(lumps.flat().every(Number.isFinite)).toBe(true);
+    expect(lumps.length).toBeLessThanOrEqual(LUMPS * 24);
+    for (const [x, y, z] of lumps) {
+      const d = Math.abs(z - ZED / 2);
+      expect(d).toBeLessThan(STREWN + 1);
+      expect(x).toBeGreaterThan(FRAME.shore);
+      expect(x).toBeLessThan(HULL.sections[2][1] + 1);
+      expect(Math.abs(y - ground(world, x, z))).toBeLessThan(0.6);
+      // A lump by a section's broken end may reach a hand under it.
+      expect(d < HULL.r && HULL.sections.some(([a, b]) => x > a + 1 && x < b - 1)).toBe(false);
+    }
+  });
+
   it('ends the scenery with the sea, which the renderer draws apart', () => {
     const v = scenery(build(SLOPED));
     const sea = lagoon(SLOPED);
@@ -143,11 +167,20 @@ describe("the beach's shader", () => {
 
   it('keeps every line of it under BEACH', () => {
     const rest = FRAG.replace(/#ifdef BEACH\n[\s\S]*?#endif\n/g, '');
-    for (const word of ['T*.55', 'bw', 'Z>1.5', 'L<-4.5', `${SAND}`]) {
+    for (const word of ['T*.55', 'bw', 'Z>1.5', 'L<-4.5', `${SAND}`, 'cz<40.']) {
       expect(rest).not.toContain(word);
     }
     // The sea is told from the rest by its layer, which the depth passes leave out.
     expect(SEA).toBeLessThan(-4.5);
     expect(FRAG).toContain(`abs(L-(${SAND}))`);
+    // The burnt track runs along the hull's line, hottest under the middle section and at the nose's end.
+    expect(FRAG).toContain(`cz=abs(q.y-${ZED / 2}.)`);
+    expect(FRAG).toContain(`abs(q.x-${(HULL.sections[1][0] + HULL.sections[1][1]) / 2}.)`);
+    expect(FRAG).toContain(`abs(q.x-${HULL.sections[2][1] - 2}.)`);
+    // Its ash is another ground: plates between cracks, which take the sand's bump and mirror away.
+    for (const word of ['h3(vec3(o,3))', 'h=cb*mix(h,', 'bw=mix(bw,gl,a)']) {
+      expect(fragOf(BEACH, 'LAND')).toContain(word);
+      expect(rest).not.toContain(word);
+    }
   });
 });

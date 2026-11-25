@@ -43,7 +43,7 @@ import { jungle } from './jungle';
 import { HEAVENS, heavens, moonscape } from './moonscape';
 import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
 import { PLUME, SMOKE, plumes } from './smoke';
-import { hulk } from './hulk';
+import { GLOSS as SHEEN, HULL, PANEL, hulk } from './hulk';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, rackWeapon, vest, vestMesh } from './props';
@@ -490,12 +490,14 @@ ac*=max(1.-vh*(smoothstep(ln-.03,ln,al)+step(1.5,kd)*(1.-smoothstep(0.,.1,al))),
 c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 #ifdef BEACH
-float bw=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
+float bw=0.,hk=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
+if(abs(L-(${HULL}))<.005)${PANEL}
 #endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
 #ifdef BEACH
 if(bs)R=mix(vec2(.05,10.),vec2(.8,140.),bw);
+if(hk>0.)R=vec2(1.6*hk,260.);
 #endif
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
@@ -528,6 +530,7 @@ vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 #ifdef BEACH
 ${WET}
+${SHEEN}
 #endif
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-.85*kr));

@@ -1,14 +1,14 @@
 // The bots' map of a world: a navigation mesh of the floor a body's middle may stand on, made from
 // the brushes alone (their tops less what stands on them, docs/BOTS.md) and the relief, joined by
-// portals where a body walks, steps or drops from one to the next. HIGHLINE's routes, the moon's
-// crossings and Landfall's way round the tail (routes.ts) add their jumps as links, flown as the
-// tests fly them. A way is A* over the rectangles, then the funnel pulls it straight through the
+// portals where a body walks, steps or drops from one to the next, and by a link where it jumps
+// and pulls itself up (a crate, a ledge). HIGHLINE's routes, the moon's crossings and Landfall's
+// way round the tail (routes.ts) add their jumps as links, flown as the tests fly them. A way is A* over the rectangles, then the funnel pulls it straight through the
 // portals.
 import { BEACH, HULL, ZED } from './beach';
 import { FALL_SAFE, PLAYER_H, PLAYER_R, STEP_H } from './constants';
 import { HIGHLINE } from './map';
 import { MOON } from './moon';
-import { gravity } from './physics';
+import { floorAt, gravity } from './physics';
 import { ground } from './relief';
 import { HIGH, LAGOON, LOW, MID, UP, flip, leap, mirror } from './routes';
 import type { Leg } from './routes';
@@ -76,6 +76,19 @@ const HOP_COST = 1;
 /** The highest box a body jumps onto standing (a standing jump lands on 1.7 m), and the floor it wants behind the edge. */
 const HOP = 1.6;
 const HOP_DEPTH = 2.5;
+/**
+ * The highest edge a body pulls itself up onto from a jump (Landfall's crates under the holes of
+ * its decks: 2.75 m), how far past the edge it comes to stand, the metres short of the edge it
+ * jumps from (its head clear of the floor it climbs to) and the seconds it takes.
+ */
+const PULL = 2.8;
+const ONTO = 0.75;
+const RUN_UP = 0.9;
+const PULL_COST = 2;
+/** Metres past an edge a drop's point is, on the lower floor. */
+const OVER = 0.6;
+/** Metres inside a lower floor's edge where what is over it is looked at. */
+const INSIDE = 0.3;
 /** The most a body drops onto any floor; past it, it wants SPAN metres of floor ahead to come down on at a run. */
 const DROP = 2;
 const SPAN = 4;
@@ -97,6 +110,9 @@ const MERGE = 8;
 const CELL = 4;
 /** A link of a route the bot does not prefer costs this many times more, one of its own as many times less. */
 const OTHER = 3;
+
+/** Landfall's floors on the wreck's line higher than this are the high road's: the deck over the hold, the gallery, the backs. */
+const HIGH_ROAD = 4;
 
 /** The routes, fastest first: the Spine, Midtown, the Lowline. */
 export const ROUTES = [HIGH, MID, LOW];
@@ -360,8 +376,10 @@ const portals = (w: World, polys: Poly[], grid: Map<number, number[]>): Edge[][]
           : [Math.max(a[0], b[0]), Math.min(a[2], b[2])];
         const m = (s0 + s1) / 2;
         const at = (s: number): [number, number] => (alongZ ? [c, s] : [s, c]);
+        const at2 = (v: number): [number, number] => (alongZ ? [v, m] : [m, v]);
         const [mx, mz] = at(m);
-        const dy = heightAt(w, polys[j], mx, mz) - heightAt(w, pa, mx, mz);
+        const [ha, hb] = [pa, polys[j]].map(p => heightAt(w, p, mx, mz));
+        const dy = hb - ha;
         const [pa0, pa1] = [at(s0), at(s1)];
         const join = (from: number, to: number, pass: number) =>
           out[from].push({ to, a: pa0, b: pa1, pass, cost: 0 });
@@ -370,16 +388,43 @@ const portals = (w: World, polys: Poly[], grid: Map<number, number[]>): Edge[][]
           join(j, i, PASS.WALK);
         } else {
           const [up, down] = dy > 0 ? [j, i] : [i, j];
+          const [hi, lo] = dy > 0 ? [hb, ha] : [ha, hb];
+          const h = hi - lo;
+          const [u, d] = [polys[up].q, polys[down].q];
+          // A floor between the two, over the lower one at its edge, or a step up from the higher
+          // (a deck over a deck, the next row of a wing over the sand): no way.
+          const [lx, lz] = [0, 1].map(n =>
+            Math.min(Math.max(n ? mz : mx, d[n] + INSIDE), d[n + 2] - INSIDE),
+          );
+          if (floorAt(w, lx, lz, hi + STEP_H + 0.1) > lo + STEP_H) {
+            continue;
+          }
           // How far a body goes on over each floor past the portal.
-          const depth = (k: number) => {
-            const q = polys[k].q;
-            return alongZ ? q[2] - q[0] : q[3] - q[1];
-          };
-          if (Math.abs(dy) <= DROP || (Math.abs(dy) <= deep && depth(down) >= SPAN)) {
+          const n = alongZ ? 0 : 1;
+          const depth = (q: Rect) => q[n + 2] - q[n];
+          const hop = h <= HOP && depth(u) >= HOP_DEPTH;
+          // A jump and a pull up, where there is no hop, onto a top with floor and room to stand
+          // ONTO past its edge (a rectangle may be a sliver of it): what is climbed is dropped off.
+          const s = u[n] > d[n] ? 1 : -1;
+          const e = u[s > 0 ? n : n + 2];
+          const [f, t] = [-RUN_UP, ONTO].map(k => at2(e + s * k));
+          const pull =
+            !hop && h <= PULL && Math.abs(floorAt(w, t[0], t[1], hi + PLAYER_H) - hi) < 0.1;
+          if (pull || h <= DROP || (h <= deep && depth(d) >= SPAN)) {
             join(up, down, PASS.DROP);
           }
-          if (Math.abs(dy) <= HOP && depth(up) >= HOP_DEPTH) {
+          if (hop) {
             join(down, up, PASS.HOP);
+          } else if (pull) {
+            // Flown as a leg: from RUN_UP short of the edge to past it.
+            out[down].push({
+              to: up,
+              from: [f[0], lo, f[1]],
+              end: [t[0], hi, t[1]],
+              legs: [leap(f, t, hi, { sprint: false })],
+              route: -1,
+              cost: PULL_COST,
+            });
           }
         }
       }
@@ -544,14 +589,16 @@ const build = (w: World): Nav => {
     }
   }
   if (w.def === BEACH) {
-    // Landfall's five ways across the wreck's line, a route each: over the hull's back by the
-    // wings, through the hold, through the west and the east gap, and round the tail by the lagoon.
-    const [[, tail], [west, east]] = HULL.sections;
+    // Landfall's five ways across the wreck's line, a route each: the high road (up a wing and
+    // through the gallery, or any floor over the hold), the hold, the west gap with the tail's
+    // inside, the east gap with the nose's, and round the tail by the lagoon. Five, an odd number:
+    // ids alternate between the teams, and an even count would give each team half the ways.
+    const [[tail], [west, east]] = HULL.sections;
     nav.ways = 5;
     polys.forEach(({ q, y, r }, i) => {
       if (q[1] <= ZED / 2 && q[3] >= ZED / 2) {
         const x = (q[0] + q[2]) / 2;
-        route[i] = !r && y > HULL.r ? 0 : x < tail ? 4 : x < west ? 2 : x < east ? 1 : 3;
+        route[i] = !r && y > HIGH_ROAD ? 0 : x < tail ? 4 : x < west ? 2 : x < east ? 1 : 3;
       }
     });
     const [x, z] = LAGOON.start;
@@ -732,12 +779,11 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Step[] 
         p = [e.end![0], e.end![2]];
       } else {
         p = nearest(e.a!, e.b!, x, z);
-        const r = nav.route[e.to];
-        c =
-          flat(x, z, p[0], p[1]) / PACE +
-          (e.pass === PASS.HOP ? HOP_COST : e.pass ? DOWN : 0) +
-          (r >= 0 && prefer >= 0 && r !== prefer && nav.route[i] !== r ? AREA : 0);
+        c = flat(x, z, p[0], p[1]) / PACE + (e.pass === PASS.HOP ? HOP_COST : e.pass ? DOWN : 0);
       }
+      // Onto a crossing of another route than its own, by a portal or a link.
+      const r = nav.route[e.to];
+      c += r >= 0 && prefer >= 0 && r !== prefer && nav.route[i] !== r ? AREA : 0;
       if (g[i] + c < g[e.to]) {
         g[e.to] = g[i] + c;
         prev[e.to] = e;
@@ -814,8 +860,10 @@ export const path = (nav: Nav, w: World, a: Vec3, b: Vec3, prefer = -1): Step[] 
       // Left and right as the body goes from the middle of one rectangle to the next.
       const [p, q] = [nav.polys[polyAt].q, nav.polys[e.to].q];
       const [dx, dz] = [(q[0] + q[2] - p[0] - p[2]) / 2, (q[1] + q[3] - p[1] - p[3]) / 2];
-      const [ax, az] = e.a!;
-      const [bx, bz] = e.b!;
+      // A drop's point is past the edge, on the lower floor: a body there is off the edge.
+      const c = (v: number, n: number) =>
+        e.pass === PASS.DROP ? Math.min(Math.max(v, q[n] + OVER), q[n + 2] - OVER) : v;
+      const [ax, az, bx, bz] = [...e.a!, ...e.b!].map((v, n) => c(v, n % 2));
       // Each end drawn in, so the line pulled through keeps off the edge of a roof at a run.
       const len = flat(ax, az, bx, bz);
       const k = Math.min(EDGE, len * 0.4) / (len || 1);

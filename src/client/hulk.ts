@@ -1,9 +1,21 @@
 // Landfall's scenery (docs/BEACH.md): the crashed ship and its debris, drawn once on the map's
-// boxes (LAYOUT of shared/beach.ts), which are ghosts: what is drawn here is what stops a runner.
-// The hull's section is the stacked boxes of RINGS with their corners cut and filled, not the
-// circle through them: a circle of 7 m would stand 1.5 m off the ledges a runner walks.
-// Painted panels (TEX.PAINT, dimmed where it burnt), flat lit paint (layer -1), a few glows (-2).
-import { HOLD, LAYOUT, ZED } from '../shared/beach';
+// boxes (shared/beach.ts), which are ghosts: what is drawn here is what stops a runner.
+// The hull is a smooth loft through the map's own section(), each row of collision a chord of it;
+// its holes are the map's tears, cut along the loft's lines. Gloss-white paint (HULL, a layer the
+// shader mirrors the sky in, compiled only into Landfall's program), textures inside, a few glows.
+import {
+  DECKS,
+  ENGINES,
+  HULL as SHAPE,
+  LAYOUT,
+  LINES,
+  SHIP,
+  WING,
+  ZED,
+  edge,
+  section,
+  thick,
+} from '../shared/beach';
 import type { Piece } from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
 import { ground, hash, noise, raise } from '../shared/relief';
@@ -23,57 +35,37 @@ interface Mat {
 const tex = (l: number, k = 1, s = 1): Mat => ({ l, c: [k], s });
 const ink = (c: V, k = 1, l = -1): Mat => ({ l, c: c.map(v => v * k), s: 1 });
 
+/**
+ * The hull paint's layer: lit paint (its colour in c.x, c.y, c.w) that the shader rules with panel
+ * lines and mirrors the sky in, the more the brighter its red is: soot is matt. No other
+ * material's band holds it.
+ */
+export const HULL = -1.05;
+/**
+ * The hull paint's pixel, in main(), before the light: `c` its colour, `n` its normal, `pw` the
+ * pixel's size on it. Panel lines every 2 m along the hull and round it, gone where a pixel no
+ * longer holds them. `hk` is its gloss.
+ */
+export const PANEL = `{vec2 q=vec2(P.x,abs(n.y)>.7?P.z:P.y*1.3)*.5,d=abs(fract(q)-.5);hk=smoothstep(.25,.55,C.x);
+c*=1.-.4*hk*smoothstep(.006+pw,.006,min(d.x,d.y))*(1.-smoothstep(.02,.09,pw));}`;
+/** Its mirror, in main(), after the light: `k` the sky its normal `m` reflects (the lit sand under the horizon), `fr` the fresnel term; and the sand's light thrown back up under it. */
+export const GLOSS = `c+=hk*(mix(vec3(.8,.72,.56),k,smoothstep(-.3,.05,r.y))*(.15+.6*fr)+vec3(.3,.27,.21)*clamp(.5-m.y,0.,1.));`;
+
 const MID = ZED / 2;
-/** The hull's paint in the light; its panels are 2 m. */
-const PALE = 0.52;
-const SKIN = tex(TEX.PAINT, PALE, 0.5);
+const WHITE = ink([0.68, 0.69, 0.71], 1, HULL);
+const SKIN = WHITE;
 const GIRDER = tex(TEX.STEEL, 0.45);
 const PLATE = tex(TEX.METAL, 0.7);
 const SOOT = ink([0.03, 0.03, 0.035]);
 const IRON = ink([0.13, 0.135, 0.15]);
 const STRIPE = [0.8, 0.3, 0.04];
+const BELT = ink([1, 0.36, 0.05], 1, HULL);
 const GLASS = ink([0.03, 0.06, 0.09], 1, SHINE);
 /** Dry sand, as shore.ts paints it. */
 const DUNE = ink([0.64, 0.59, 0.48], 1, SAND);
 /** An emergency lamp's glow. */
 const LAMP = ink([1, 0.62, 0.25], 1, -2);
 const DOWN = [0, -99, 0];
-
-/**
- * Half the hull's section, from the keel up to the edge of its back: half width, height over the
- * axis. RINGS' boxes with each outer corner cut 0.4 m and each inner one filled as much, the flank
- * leaning out to the belt over a runner's head.
- */
-const HALF = [
-  [5.8, -9],
-  [5.8, -5],
-  [5.8, -2.6],
-  [6.5, -1.7],
-  [6.5, 2.1],
-  [6.1, 2.5],
-  [5.25, 2.5],
-  [4.9, 2.85],
-  [4.9, 4.6],
-  [4.5, 5],
-  [2.85, 5],
-  [2.5, 5.35],
-  [2.5, 6.7],
-  [2.2, 7],
-];
-/** The whole section: up red's side, down blue's. */
-const LOOP = [...HALF, ...HALF.map(([h, y]) => [-h, y]).reverse()];
-const LAST = LOOP.length - 1;
-/** The seven segments of a figure in a cell 1 by 2 (x0, y0, x1, y1), and the hull number's figures as bits of them. */
-const SEG = [
-  [0, 1.75, 1, 2],
-  [0.75, 1, 1, 2],
-  [0.75, 0, 1, 1],
-  [0, 0, 1, 0.25],
-  [0, 0, 0.25, 1],
-  [0, 1, 0.25, 2],
-  [0, 0.875, 1, 1.125],
-];
-const NUMBER = [63, 102, 91, 7];
 
 const sm = (t: number) => {
   t = Math.min(Math.max(t, 0), 1);
@@ -263,6 +255,237 @@ const stand = (src: number[], at: V, f: V, k: V = [1, 1, 1]) =>
 // ---------------------------------------------------------------------------------------------
 // The hull.
 
+/** A smooth sheet through a grid of points, its normals from the grid: `m` each square's material, or none; `k` a point's light; `inv` turns it over. */
+const sheet = (
+  g: V[][],
+  m: (i: number, j: number) => Mat | undefined,
+  k: (p: V) => number = () => 1,
+  inv = false,
+) => {
+  const at = (i: number, j: number) =>
+    g[Math.min(Math.max(i, 0), g.length - 1)][Math.min(Math.max(j, 0), g[0].length - 1)];
+  const nrm = g.map((row, i) =>
+    row.map((_, j) => {
+      const n = cross(sub(at(i + 1, j), at(i - 1, j)), sub(at(i, j + 1), at(i, j - 1)));
+      const l = Math.hypot(n[0], n[1], n[2]) * (inv ? -1 : 1);
+      return l ? [n[0] / l, n[1] / l, n[2] / l] : [0, 1, 0];
+    }),
+  );
+  for (let i = 0; i < g.length - 1; i++) {
+    for (let j = 0; j < g[0].length - 1; j++) {
+      const mat = m(i, j);
+      if (mat) {
+        for (const e of [0, 1, 3, 0, 3, 2]) {
+          const [a, b] = [i + (e & 1), j + (e >> 1)];
+          put(g[a][b], nrm[a][b], mat, k(g[a][b]));
+        }
+      }
+    }
+  }
+};
+
+/** smooth()'s vertices in a material, each lit by `k` of where it is. */
+const coat = (v: number[], m: Mat, k: (p: V) => number = () => 1) => {
+  const keep = o;
+  o = [];
+  for (let i = 0; i < v.length; i += 6) {
+    put(v.slice(i, i + 3), v.slice(i + 3, i + 6), m, k(v.slice(i, i + 3)));
+  }
+  const made = o;
+  o = keep;
+  return made;
+};
+
+/** The heights over the axis the loft's rows run at, up a flank; then the edge of the back, the edge of a hole in it and its middle: half width, height. */
+const ROWS = [
+  -7, -6.6, -6, -5, -4, -3, -2.05, -1.75, -0.9, 0, 1, 1.95, 2.25, 2.9, 3.6, 4.3, 5, 5.5, 6, 6.5,
+];
+const BACK = [
+  [2.75, 6.72],
+  [2.5, 6.93],
+  [2.3, 7],
+  [0, 7],
+  [0, 7],
+];
+const HALF = ROWS.length + BACK.length;
+/** The loft's squares round the hull: twice a flank's. */
+const ROUND = 2 * HALF - 2;
+/** The square `q` round the hull, counted up its own flank. */
+const up = (q: number) => (q < HALF - 1 ? q : ROUND - 1 - q);
+/** The height a flank's point `j` is at. */
+const high = (j: number) => ROWS[j] ?? BACK[j - ROWS.length][1];
+
+/** The nose, x: where its canopy's rear arch stands, where the windscreen's foot is, its sensor's tip; and how far the tip droops. */
+const [ARCH, FOOT, TIP, DROOP] = [92, 104, 114, 2.4];
+/** The canopy's sill over the axis: the upper deck's line. */
+const SILL = DECKS[1];
+
+/**
+ * A section's form at x: its width's share (the map's `cut`, each step eased over 2 m), how far
+ * the nose has turned from the round section to the chined one, its scale and how far its axis
+ * has sunk (the nose tapers straight from the windscreen to its tip).
+ */
+const form = (n: number, x: number) => {
+  const c = SHIP[n].cut;
+  let s = c[0][2];
+  for (let i = 1; i < c.length; i++) {
+    s += (c[i][2] - c[i - 1][2]) * sm((x - c[i][0] + 1) / 2);
+  }
+  const t = n > 1 ? Math.max(x - 99, 0) / (TIP - 99) : 0;
+  return [s, n > 1 ? sm((x - 94) / 5) : 0, 1 - 0.85 * t, DROOP * t];
+};
+/** The nose's chined section after Tranquility's ship: a flat top, a slope to the shoulder, another to the chine at the belt, a V keel. */
+const chine = (h: number) =>
+  h < 0
+    ? Math.max(0, 7 + 2 * h)
+    : h >= 5.6
+      ? 2.38
+      : h >= 3.15
+        ? 4.34 - 0.8 * (h - 3.15)
+        : 7 - 0.844 * h;
+/** The drawn hull's half width at x and a height over the axis. */
+const wide = (n: number, x: number, h: number) => {
+  const [s, k, q] = form(n, x);
+  return (section(h) + (chine(h) - section(h)) * k) * s * q;
+};
+/** A point of section `n` at x: `w` from the line on the side `sg`, at the height `h` over the axis as the round section counts it. */
+const spot = (n: number, x: number, w: number, h: number, sg: number): V => {
+  const [, k, q, d] = form(n, x);
+  return [
+    x,
+    SHAPE.axis[n] - d + (h > 0 ? h * (1 - 0.2 * k) : Math.max(h, 3.5 * k - 7)) * q,
+    MID + sg * w,
+  ];
+};
+/** The hull's skin at x and a height, on a flank. */
+const shell = (n: number, x: number, h: number, sg: number) => spot(n, x, wide(n, x, h), h, sg);
+/** The loft's ring at the station x: up red's flank, across the back, down blue's. The nose's lines lean aft over the sill, so the windscreen's edge is one of them. */
+const ring = (n: number, x: number): V[] => {
+  const rake = n > 1 && x > ARCH ? (x < FOOT ? (5 * (x - ARCH)) / 12 : (5 * (TIP - x)) / 10) : 0;
+  const half = Array.from({ length: HALF }, (_, j) => {
+    const h = high(j);
+    const xr = x - rake * Math.min(Math.max((h - SILL) / (7 - SILL), 0), 1);
+    const [s, k, q] = form(n, xr);
+    const b = BACK[j - ROWS.length];
+    // The back's edge, then the edge of a hole in it: as far in as the map leaves a rim.
+    const w = !b
+      ? wide(n, xr, h)
+      : (j == HALF - 2 ? 2.5 * s - SHAPE.skin : Math.min(b[0], b[0] + (2.38 - b[0]) * k) * s) * q;
+    return (sg: number) => spot(n, xr, w, h, sg);
+  });
+  return [
+    ...half.map(f => f(1)),
+    ...half
+      .slice(0, -1)
+      .reverse()
+      .map(f => f(-1)),
+  ];
+};
+
+/** The stations a section is lofted at: its ends, every edge of a hole, the eased steps of its width, and no two over 2 m apart. */
+const stations = (n: number, x0: number, x1: number) => {
+  const { cut, tears, holes } = SHIP[n];
+  const marks = [
+    x0,
+    x1,
+    ...tears.flatMap(t => [t[0], t[1]]),
+    ...holes.filter(e => e[0] == 2).flatMap(e => [e[1], e[2]]),
+    ...cut.slice(1).flatMap(c => [-1, -0.33, 0.33, 1].map(d => c[0] + d)),
+  ]
+    .filter(x => x >= x0 && x <= x1)
+    .sort((a, b) => a - b);
+  const out: number[] = [];
+  marks.forEach((x, i) => {
+    const gap = x - (marks[i - 1] ?? x);
+    if (i && gap < 0.05) {
+      return;
+    }
+    const k = Math.ceil(gap / 2);
+    for (let e = 1; e < k; e++) {
+      out.push(x - (gap * (k - e)) / k);
+    }
+    out.push(x);
+  });
+  return out;
+};
+/** The nose's stations past the arch: narrow ones are the canopy's frame. */
+const AHEAD = [93.5, 95, 95.3, 98, 98.3, 101, 101.3, FOOT, 106.5, 109, 111.5, 113, TIP];
+
+/** The floors' lines of a section, from its floor up to under its back. */
+const lines = (n: number) => [
+  SHIP[n].floor,
+  ...LINES.filter(h => h > SHIP[n].floor + 0.5 && h < 7),
+];
+/** The inner face of the skin at x on the line `i` of lines(): the inner lower corner of the map's row there, plumb from each floor up to the belt. */
+const inner = (n: number, x: number, i: number) => {
+  const l = lines(n);
+  const a = l[Math.min(i, l.length - 2)];
+  const b = l[Math.min(i, l.length - 2) + 1];
+  const low = a < DECKS[0] ? l[0] : a < DECKS[1] ? DECKS[0] : DECKS[1];
+  return Math.max(Math.min(section(b), section(low)) * form(n, x)[0] - SHAPE.skin, 0.05);
+};
+const lining = (n: number, x: number, i: number, sg: number): V => [
+  x,
+  SHAPE.axis[n] + lines(n)[i],
+  MID + sg * inner(n, x, i),
+];
+
+/** Whether the map leaves the skin open between two heights of a flank, from one station to the next. */
+const open = (n: number, xa: number, xb: number, ha: number, hb: number) =>
+  SHIP[n].tears.some(
+    ([p, q, a, b]) => xa >= p - 0.01 && xb <= q + 0.01 && ha >= a - 0.01 && hb <= b + 0.01,
+  );
+/** Whether the back is holed there. */
+const holed = (n: number, xa: number, xb: number) =>
+  SHIP[n].holes.some(([d, p, q]) => d == 2 && xa >= p - 0.01 && xb <= q + 0.01);
+
+/** The broken ends of a section: the tail's east, both of the middle, the nose's west. */
+const ends = (n: number) => [
+  ...(n ? [[SHAPE.sections[n][0], -1]] : []),
+  ...(n < 2 ? [[SHAPE.sections[n][1], 1]] : []),
+];
+/**
+ * How much of its paint a point of section n's skin has left: burnt black at a broken end and
+ * round a tear or a hole, stained along the belly, clean elsewhere.
+ */
+const paint = (n: number) => {
+  const c = SHAPE.axis[n];
+  const torn = ends(n).map(e => e[0]);
+  const { tears, holes } = SHIP[n];
+  return (p: V) => {
+    const [x, h, z] = [p[0], p[1] - c, Math.abs(p[2] - MID)];
+    const f = 0.9 * noise(x / 1.7, p[1] / 1.7 + p[2] / 2.3, 9);
+    let d = Math.min(9, ...torn.map(t => Math.abs(x - t)));
+    for (const [x0, x1, a, b] of tears) {
+      if (z > 2.4) {
+        d = Math.min(d, Math.hypot(Math.max(x0 - x, x - x1, 0), Math.max(a - h, h - b, 0)));
+      }
+    }
+    for (const [deck, x0, x1] of holes) {
+      if (deck == 2 && h > 5) {
+        d = Math.min(d, Math.hypot(Math.max(x0 - x, x - x1, 0), 0.5 * z) * 1.4);
+      }
+    }
+    return (
+      (0.1 + 0.9 * sm((d - f) / 1.1)) *
+      (0.5 + 0.5 * sm((h + 6.3 + 0.5 * f) / 2.4)) *
+      (0.93 + 0.07 * noise(x / 5, (p[1] + p[2]) / 4, 4 + n))
+    );
+  };
+};
+
+/** The seven segments of a figure in a cell 1 by 2 (x0, y0, x1, y1), and the hull number's figures as bits of them. */
+const SEG = [
+  [0, 1.75, 1, 2],
+  [0.75, 1, 1, 2],
+  [0.75, 0, 1, 1],
+  [0, 0, 1, 0.25],
+  [0, 0, 0.25, 1],
+  [0, 1, 0.25, 2],
+  [0, 0.875, 1, 1.125],
+];
+const NUMBER = [63, 102, 91, 7];
+
 /** An engine bell, its throat at the origin, 1.8 m long and 1.7 m at the lip, dark inside. */
 const BELL = dress(
   smooth(
@@ -281,311 +504,492 @@ const BELL = dress(
   [0.15, 0.14, 0.14],
 );
 
-/** The hull's three sections: their skin, their torn ends, the stern and its bells, the fins, the nose in the trees. */
-const hull = () => {
-  LAYOUT.hull.forEach(([x0, x1, c], n) => {
-    /** The section at x, scaled by s round a point that sinks as it narrows; `jag` tears it along x. */
-    const ring = (x: number, s = 1, jag = 0) =>
-      LOOP.map(([h, y], i) => [
-        x + jag * (0.15 + 1.1 * hash(i, n, 3)),
-        c + y * s - 2.5 * (1 - s),
-        MID + h * s,
-      ]);
-    /** The broken ends: the tail's east, both of the middle, the nose's west. */
-    const torn = [n ? x0 : -99, n < 2 ? x1 : 999];
-    /** How much of its paint a point of the skin has left: burnt black at a broken end, stained in patches. */
-    const lit = (p: V) =>
-      (0.16 +
-        0.84 *
-          sm(
-            (Math.min(...torn.map(t => Math.abs(p[0] - t))) -
-              4 * noise(p[0] / 2, p[1] / 2 + p[2], 9)) /
-              3,
-          )) *
-      (0.62 + 0.5 * noise(p[0] / 6, (p[1] + p[2]) / 5, 4 + n)) *
-      // Smoke has come out of the hold's doors.
-      (n == 1 ? 0.3 + 0.7 * sm((Math.hypot(p[0] - 59, p[1] - HOLD.floor - 1) - 2) / 3) : 1);
-    const axis = (x: number) => [x, c, MID];
-    const cut = n == 1 ? HOLD.door : [0, 0];
-    for (let x = x0; x < x1; x += 1.5) {
-      const [a, b] = [ring(x), ring(x + 1.5)];
-      // The hold's side doors are holes in the middle section's flanks.
-      const open = x >= cut[0] && x < cut[1];
-      loft(
-        a,
-        b,
-        j => (open && (j == 1 || j == LAST - 2) ? undefined : SKIN),
-        axis(x),
-        a.map(lit),
-        b.map(lit),
-      );
-      for (const s of [-1, 1]) {
-        const q = (xa: number, xb: number, ya: number, yb: number) =>
-          QUAD.map(i => [i & 1 ? xb : xa, c + (i & 2 ? yb : ya), MID + s * 6.53]);
-        // The stripe along the belt.
-        const band = q(x, x + 1.5, -1.45, -1);
-        face(band, ink(STRIPE), axis(x), band.map(lit));
-        // A row of windows on the middle and the nose, some blown, none where it burnt.
-        const w = q(x + 0.3, x + 1.2, 0.6, 1.25);
-        if (n && lit(w[0]) > 0.3) {
-          face(w, hash(x, s, 8) < 0.25 ? SOOT : GLASS, axis(x));
-        }
+/** A fin's outline, chord by height from its root's trailing end; and the one that snapped half way up. */
+const FIN = [
+  [0, 0],
+  [11, 0],
+  [12.5, 1.2],
+  [10.5, 8.5],
+  [9.2, 10],
+  [6.4, 10],
+  [5.2, 8.8],
+];
+const SNAPPED = [
+  ...FIN.slice(0, 3),
+  [11.6, 4.4],
+  [10.2, 3.5],
+  [9, 5.2],
+  [7.4, 4],
+  [5.9, 5.6],
+  [3.3, 5.5],
+];
+
+/** Torn metal round an opening of the skin: teeth on each edge of the line `l`, reaching `d` into it. */
+const ragged = (l: V[], d: V, c: V) =>
+  l.slice(1).forEach((b, i) => teeth(l[i], b, d, 2, SKIN, 0.14, c));
+
+/** A section's outer skin: one loft, holed where the map is; its torn ends, the edges of its holes in the skin's thickness. */
+const skin = (n: number) => {
+  const [x0, x1] = SHAPE.sections[n];
+  const c = SHAPE.axis[n];
+  const xs = n > 1 ? [...stations(n, x0, ARCH), ...AHEAD] : stations(n, x0, x1);
+  const lit = paint(n);
+  const axis = (x: number) => [x, c, MID];
+  sheet(
+    xs.map(x => ring(n, x)),
+    (i, q) => {
+      const j = up(q);
+      const [xa, xb, ha, hb] = [xs[i], xs[i + 1], high(j), high(j + 1)];
+      if (j == HALF - 2 ? holed(n, xa, xb) : open(n, xa, xb, ha, hb)) {
+        return undefined;
       }
-    }
-    for (const [x, d] of [
-      [x0, -1],
-      [x1, 1],
-    ]) {
-      const [rim, in0, in1] = [ring(x), ring(x, 0.93), ring(x - 0.3 * d, 0.93)];
-      const far = axis(x - 9 * d);
-      if (torn.includes(x)) {
-        // A broken end: the skin torn past it, a frame, and 0.3 m in the dark behind it the decks, the ribs and what hangs from them.
+      // The canopy: the skin's own squares over the sill, from the arch to the windscreen's foot, glazed; the narrow ones and the back's edge are its frame.
+      if (
+        xa >= ARCH &&
+        xb <= FOOT &&
+        xb - xa > 0.5 &&
+        ha >= SILL &&
+        (hb <= 6.5 || (j > HALF - 4 && xa >= 98))
+      ) {
+        return GLASS;
+      }
+      return ha == -0.9 ? BELT : SKIN;
+    },
+    lit,
+  );
+  const l = lines(n);
+  for (const sg of [-1, 1]) {
+    // The tears, in the thickness: frames and stringers between the skin and its lining, bent teeth outside.
+    for (const [p, q, a, b] of SHIP[n].tears) {
+      const hs = l.map((h, i) => [h, i]).filter(([h]) => h >= a && h <= b);
+      const mid = [(p + q) / 2, c + (a + b) / 2, MID + sg * 6];
+      for (const [x, d] of [
+        [p, 0.4],
+        [q, -0.4],
+      ]) {
+        const out = hs.map(([h]) => shell(n, x, h, sg));
         loft(
-          rim,
-          ring(x, 1, d),
-          () => SKIN,
-          axis(x),
-          rim.map(() => 0.1),
+          out,
+          hs.map(([, i]) => lining(n, x, i, sg)),
+          j => (j & 1 ? GIRDER : IRON),
+          mid,
+          undefined,
+          undefined,
+          true,
         );
-        loft(rim, in0, () => IRON, far);
-        loft(in0, in1, () => IRON, axis(x), undefined, undefined, true);
-        in1.slice(0, -1).forEach((p, j) => face([axis(x - 0.3 * d), p, in1[j + 1]], SOOT, far));
-        const xb = x - 0.14 * d;
-        [
-          [-2, 5.4],
-          [2.5, 4.55],
-        ].forEach(([y, h], e) => {
-          bar([xb, c + y, MID - h], [xb, c + y, MID + h], 0.3, GIRDER, 0.24);
-          for (let i = 0; i < 6; i++) {
-            const z = MID + (2 * hash(i, x, 21 + e) - 1) * h;
-            const l = 0.5 + 2.4 * hash(i, x, 23 + e);
-            bar(
-              [x, c + y, z],
-              [x + d * 0.25, c + y - l, z + 0.3 * l * (hash(i, x, 25) - 0.5)],
-              0.06,
-              SOOT,
-            );
-          }
-        });
-        for (const z of [-3.8, -1.4, 1.4, 3.8]) {
-          bar([xb, c - 9, MID + z], [xb, c + 4.6, MID + z], 0.3, GIRDER, 0.24);
-        }
-        // Embers in there.
-        for (let i = 0; i < 6; i++) {
-          const e = [x - 0.27 * d, c - 4 + 8 * hash(i, x, 31), MID + 9 * (hash(i, x, 32) - 0.5)];
-          face(
-            [e, off(e, [0, 0.1, 0.06]), off(e, [0, 0, 0.14])],
-            ink([1, 0.35, 0.05], 0.5 + hash(i, x, 33), -2),
-            far,
-          );
-        }
-      } else if (n) {
-        // The nose, crumpled into the trees: it narrows and sinks to a point, glazed round its upper half.
-        let [a, s0] = [rim, 1];
-        for (const [xn, s] of [
-          [109, 0.86],
-          [111.5, 0.6],
-          [113, 0.3],
-          [113.6, 0.02],
-        ]) {
-          const b = ring(xn, s);
-          const glazed = s0 > 0.5;
-          loft(
-            a,
-            b,
-            j => (glazed && j > 7 && j < LAST - 8 ? GLASS : SKIN),
-            axis(xn - 3),
-            a.map(() => 0.55 + 0.45 * s),
-          );
-          [a, s0] = [b, s];
-        }
-      } else {
-        // The stern: a plate and three engine bells over the water.
-        rim.slice(0, -1).forEach((p, j) => face([axis(x), p, rim[j + 1]], IRON, far, 0.8));
-        for (const [y, z] of [
-          [4.2, 0],
-          [0.7, -3.3],
-          [0.7, 3.3],
-        ]) {
-          stand(BELL, [x, c + y, MID + z], [-1, 0, 0]);
-        }
+        ragged(out, [d, 0, sg * 0.12], axis(x));
+      }
+      const along = xs.filter(x => x >= p && x <= q);
+      for (const [[h, i], d] of [
+        [hs[0], 0.35],
+        [hs[hs.length - 1], -0.35],
+      ] as [number[], number][]) {
+        const out = along.map(x => shell(n, x, h, sg));
+        loft(
+          out,
+          along.map(x => lining(n, x, i, sg)),
+          j => (j & 1 ? GIRDER : IRON),
+          mid,
+          undefined,
+          undefined,
+          true,
+        );
+        ragged(out, [0, d, sg * 0.12], axis(p));
       }
     }
-    if (!n) {
-      for (const s of [-1, 1]) {
-        // The number on the tail's belt, read from each side.
-        NUMBER.forEach((bits, i) =>
-          SEG.forEach(([u0, v0, u1, v1], b) => {
-            if ((bits >> b) & 1) {
-              face(
-                QUAD.map(e => [
-                  17.5 + s * ((i - 2) * 1.7 + (e & 1 ? u1 : u0) * 1.2),
-                  c - 0.55 + (e & 2 ? v1 : v0) * 1.2,
-                  MID + s * 6.54,
-                ]),
-                ink([0.05, 0.08, 0.16]),
-                axis(17),
-              );
-            }
-          }),
-        );
-        // A fin leaning out from the belt's edge, raked aft past the stern, a stripe across it: nothing a runner on the ledge touches.
-        const lean = [0, 5.6, s * 3.6];
-        const fin = [[9], [19], [8.5, 1], [3, 1]].map(([x, up]) =>
-          off([x, c + 2.5, MID + s * 6.5], lean, up ?? 0),
-        );
-        const side = unit(cross(lean, [1, 0, 0]));
-        const band = [0.45, 0.6].flatMap(t =>
-          [0, 1].map(j => off(fin[j], sub(fin[3 - j], fin[j]), t)),
-        );
-        const [p, q] = [-0.17, 0.17].map(t => {
-          const f = fin.map(v => off(v, side, t));
-          face(f, SKIN, off(f[0], side, -t), 0.9);
-          face(
-            [band[0], band[1], band[3], band[2]].map(v => off(v, side, t * 1.1)),
-            ink(STRIPE),
-            fin[0],
-          );
-          return f;
-        });
-        loft([...p, p[0]], [...q, q[0]], () => IRON, mid(fin[0], fin[2]));
+  }
+  for (const [x, d] of ends(n)) {
+    // A broken end: the skin torn past it, and the ring of its thickness.
+    const rim = ring(n, x);
+    loft(
+      rim,
+      rim.map((p, i) => off(p, [d * (0.15 + 1.1 * hash(i, n, 3 + d)), 0, 0])),
+      () => SKIN,
+      axis(x),
+      rim.map(() => 0.1),
+    );
+    for (const sg of [-1, 1]) {
+      loft(
+        l.map(h => shell(n, x, h, sg)),
+        l.map((_, i) => lining(n, x, i, sg)),
+        j => (j & 1 ? GIRDER : IRON),
+        axis(x - 9 * d),
+      );
+    }
+  }
+};
+
+/** The tail's stern, its bell, the stubs of its two engines' pylons, the fins on its shoulders and the number on its flanks. */
+const tail = () => {
+  const [x0] = SHAPE.sections[0];
+  const c = SHAPE.axis[0];
+  const rim = ring(0, x0);
+  rim.slice(1).forEach((p, j) => face([[x0, c, MID], rim[j], p], IRON, [x0 + 9, c, MID], 0.8));
+  stand(BELL, [x0 + 0.2, c + 1.6, MID], [-1, 0, 0], [1.75, 1.75, 1.75]);
+  for (const sg of [-1, 1]) {
+    // A pylon's root, faired into the flank, torn where the engine left.
+    const at = [10.5, c + 0.4, MID + sg * (wide(0, 15, 0.4) - 0.5)];
+    stand(
+      coat(
+        smooth(
+          [
+            [0, 0],
+            [1, 0.4],
+            [1.5, 3],
+            [1.5, 8],
+            [0.9, 10],
+            [0, 10.3],
+          ],
+          10,
+        ),
+        SKIN,
+        p => 0.25 + 0.75 * sm((-p[2] - 2) / 5) * sm(1.6 - sg * p[0]),
+      ),
+      at,
+      [1, 0, 0],
+    );
+    const stub = [3, 7.5].map(u => [at[0] + u, at[1], at[2] + sg * 1.45]);
+    loft(
+      stub,
+      stub.map(p => off(p, [0, 0.5, 0])),
+      () => IRON,
+      at,
+    );
+    teeth(stub[0], stub[1], [0, 0.2, sg * 1.1], 7, SKIN, 0.16, at);
+    teeth(off(stub[0], [0, 0.5, 0]), off(stub[1], [0, 0.5, 0]), [0, 0.1, sg * 0.8], 5, SKIN, 0.2);
+    // A fin, canted out from the shoulder and swept aft; blue's snapped half way up.
+    const cant = 0.45;
+    const fin = (t: number) =>
+      (sg > 0 ? FIN : SNAPPED).map(([u, v]) => {
+        const x = x0 + 14 - u;
+        const w = wide(0, Math.max(x, x0), 5.3) - 0.3 + v * Math.sin(cant);
+        const e = t * (0.35 - 0.017 * v);
+        return [
+          x,
+          c + 5.3 + v * Math.cos(cant) - e * Math.sin(cant),
+          MID + sg * (w + e * Math.cos(cant)),
+        ];
+      });
+    const [p, q] = [-1, 1].map(t => {
+      const f = fin(t);
+      face(
+        f,
+        SKIN,
+        fin(-t)[3],
+        f.map((_, i) => (sg < 0 && i > 2 ? 0.2 : i > 2 ? 0.95 : 0.8)),
+      );
+      return f;
+    });
+    loft([...p, p[0]], [...q, q[0]], () => IRON, mid(p[0], p[3]));
+    // The number, read from each side.
+    NUMBER.forEach((bits, i) =>
+      SEG.forEach(([u0, v0, u1, v1], b) => {
+        if ((bits >> b) & 1) {
+          const q4 = QUAD.map(e => {
+            const [x, h] = [
+              16.6 + sg * ((i - 2) * 1.5 + (e & 1 ? u1 : u0) * 1.05),
+              2.5 + (e & 2 ? v1 : v0) * 1.05,
+            ];
+            return spot(0, x, wide(0, x, h) + 0.03, h, sg);
+          });
+          face(q4, ink([0.05, 0.08, 0.16], 1, HULL), [17, c, MID]);
+        }
+      }),
+    );
+  }
+};
+
+/** The nose's blunt tip and its probe. */
+const tip = () => {
+  const tip = ring(2, TIP);
+  const c = mid(tip[0], tip[HALF - 1]);
+  tip.slice(1).forEach((p, j) => face([off(c, [0.5, 0, 0]), tip[j], p], IRON, [0, c[1], MID]));
+  stand(
+    dress(
+      smooth(
+        [
+          [0, 0],
+          [0.22, 0],
+          [0.08, 2.4],
+          [0, 2.4],
+        ],
+        6,
+      ),
+      [0.2, 0.2, 0.22],
+    ),
+    off(c, [0.3, -0.1, 0]),
+    [1, 0, 0],
+  );
+};
+
+/** The fairings along the flanks, whose tops are ledges. */
+const fairings = () => {
+  SHIP.forEach(({ fair }, n) => {
+    const lit = paint(n);
+    for (const [p, q, e] of fair) {
+      // The nose's last fairing runs out along the chine.
+      const far = n > 1 && q > ARCH ? FOOT : q;
+      const steps = Math.ceil((far - p) / 2);
+      const xs = Array.from({ length: steps + 1 }, (_, i) => p + (i * (far - p)) / steps);
+      for (const sg of [-1, 1]) {
+        const cut = (x: number) => {
+          const b = wide(n, x, 0);
+          const out =
+            x > q
+              ? (SHAPE.r + e - wide(n, q, 0)) * (1 - (x - q) / (far - q)) + 0.05
+              : SHAPE.r + e - b;
+          return [
+            [wide(n, x, SILL) - 0.15, SILL],
+            [b + out - 0.3, SILL],
+            [b + out - 0.08, SILL - 0.08],
+            [b + out, SILL - 0.3],
+            [b + out - 0.06, SILL - 0.75],
+            [b + 0.6 * out, 0.2],
+            [b + 0.25 * out, -0.8],
+            [wide(n, x, -1.7) - 0.15, -1.7],
+          ].map(([w, h]) => spot(n, x, w, h, sg));
+        };
+        sheet(xs.map(cut), () => SKIN, lit, sg > 0);
+        for (const [x, d] of [
+          [p, -1],
+          [q, 1],
+        ]) {
+          if (x == far || x == p) {
+            const end = cut(x);
+            face(end, IRON, [x - 9 * d, 0, MID + sg * 8]);
+            ragged(end.slice(0, 6), [d * 0.5, 0, 0], [x, SHAPE.axis[n], MID]);
+          }
+        }
       }
     }
   });
 };
 
 // ---------------------------------------------------------------------------------------------
-// The hold.
+// The inside.
 
-/** The inside of the middle section: the floor, the walls and their ribs, the ceiling, the two bulkheads, the passages of the side doors. */
-const hold = () => {
-  const { floor, ceil, half, x, door, lintel, walls, way } = HOLD;
-  const [x0, x1] = x;
-  const top = floor + lintel;
-  const UP = [0, 99, 0];
-  /** A level rectangle. */
-  const flat = (xa: number, xb: number, y: number, za: number, zb: number) =>
-    QUAD.map(i => [i & 1 ? xb : xa, y, i & 2 ? zb : za]);
-  /** An upright one across the hull. */
-  const wall = (xw: number, ya: number, yb: number, za: number, zb: number) =>
-    QUAD.map(i => [xw, i & 2 ? yb : ya, i & 1 ? zb : za]);
-  face(flat(x0, x1, floor, MID - half, MID + half), tex(TEX.GRATE), DOWN);
-  face(flat(x0, x1, ceil, MID - half, MID + half), tex(TEX.METAL, 0.5), UP);
-  for (const s of [-1, 1]) {
-    const [zi, zo] = [MID + s * half, MID + s * 5.8];
-    const out = [0, 0, MID + s * 99];
-    for (const [xa, xb, ya] of [
-      [x0, door[0], floor],
-      [door[1], x1, floor],
-      [door[0], door[1], top],
-    ]) {
-      face(
-        QUAD.map(i => [i & 1 ? xb : xa, i & 2 ? ceil : ya, zi]),
-        PLATE,
-        out,
-      );
+const UP = [0, 99, 0];
+/** A level rectangle. */
+const flat = (xa: number, xb: number, y: number, za: number, zb: number) =>
+  QUAD.map(i => [i & 1 ? xb : xa, y, i & 2 ? zb : za]);
+
+/** What one sees from inside a section: the skin's lining with its ribs, the decks with the twisted edges of their holes, lamps and cables under them. */
+const inside = (n: number) => {
+  const [x0, x1] = SHAPE.sections[n];
+  const c = SHAPE.axis[n];
+  const { cut, tears, holes } = SHIP[n];
+  const l = lines(n);
+  // Not in the solid stern, nor under the canopy, which is its own lining.
+  const [xa, xb] = [cut[0][3] ? cut[0][1] : x0, n > 1 ? ARCH : x1];
+  const xs = stations(n, x0, xb).filter(x => x >= xa);
+  for (const sg of [-1, 1]) {
+    sheet(
+      xs.map(x => l.map((_, i) => lining(n, x, i, sg))),
+      (i, j) => (open(n, xs[i], xs[i + 1], l[j], l[j + 1]) ? undefined : PLATE),
+      () => 1,
+      sg > 0,
+    );
+    // A rib every 5 m, proud of the lining, from each floor to the next.
+    for (let x = xa + 2.5; x < xb; x += 5) {
+      l.slice(1).forEach((h, j) => {
+        if (
+          !DECKS.includes(h) &&
+          !tears.some(([p, q, a, b]) => x > p - 0.3 && x < q + 0.3 && l[j] >= a && h <= b)
+        ) {
+          const [p, q] = [j, j + 1].map(i =>
+            [
+              [-0.08, 0],
+              [-0.08, 0.2],
+              [0.08, 0.2],
+              [0.08, 0],
+            ].map(([dx, dz]) => off(lining(n, x, i, sg), [dx, 0, -sg * dz])),
+          );
+          loft(p, q, () => GIRDER, [x, c, MID + sg * 20]);
+        }
+      });
     }
-    // The door's passage through the flank, and its torn edge outside.
-    face(flat(door[0], door[1], floor, zi, zo), tex(TEX.GRATE), DOWN);
-    face(flat(door[0], door[1], top, zi, zo), GIRDER, UP);
-    face(flat(door[0] + 0.4, door[1] - 0.4, top - 0.03, zo - 0.5, zo - 0.38), LAMP, UP);
-    door.forEach((xd, i) => {
-      face(wall(xd, floor, top, zi, zo), GIRDER, [xd + (i ? 9 : -9), 0, 0]);
-      teeth([xd, floor, zo], [xd, top, zo], [i ? -0.3 : 0.3, 0, 0], 6, SKIN, 0.16, [0, 0, MID]);
-    });
-    teeth([door[0], top, zo], [door[1], top, zo], [0, -0.25, 0], 7, SKIN, 0.16, [0, 0, MID]);
-    // The end walls' halves, and a rib every 2 m up each wall and half across the ceiling.
-    for (const [xe, d] of [
-      [x0, -9],
-      [x1, 9],
-    ]) {
-      face(wall(xe, floor, ceil, MID, zi), PLATE, [xe + d, 0, 0]);
+  }
+  if (xa > x0) {
+    // The stern's bulkhead.
+    const wall = [1, -1].flatMap(sg =>
+      (sg > 0 ? l : [...l].reverse()).map(h => lining(n, xa, l.indexOf(h), sg)),
+    );
+    face(wall, PLATE, [xa - 9, c, MID]);
+  }
+  // The decks, on the map's boxes, kept inside the drawn skin.
+  for (const { kind, min: a, max: b } of LAYOUT.pieces) {
+    if (kind != 'deck' || a[0] < x0 || b[0] > x1) {
+      continue;
     }
-    for (let xr = x0 + 1; xr < x1; xr += 2) {
-      const [za, zb] = [Math.min(MID, zi), Math.max(MID, zi)];
-      if (xr < door[0] || xr > door[1]) {
-        box(
-          [xr - 0.1, floor, s > 0 ? zb - 0.14 : za],
-          [xr + 0.1, ceil, s > 0 ? zb : za + 0.14],
-          GIRDER,
-        );
+    const back = b[1] > c + 6.9;
+    const [p, q] = [a.slice(), b.slice()];
+    if (back && n > 1) {
+      q[0] = Math.min(q[0], ARCH);
+    }
+    const w =
+      Math.min(...[p[0], (p[0] + q[0]) / 2, q[0]].map(x => wide(n, x, Math.min(b[1] - c, 6.4)))) -
+      0.3;
+    [p[2], q[2]] = [Math.max(p[2], MID - w), Math.min(q[2], MID + w)];
+    if (q[0] > p[0] && q[2] > p[2]) {
+      // The back's top is the skin's; a floor that goes down to the keel shows its top only.
+      box(p, q, back ? PLATE : GIRDER, tex(TEX.GRATE), back ? 8 : a[1] < c - 6.9 ? 52 : 0);
+    }
+  }
+  for (const [deck, p, q, half] of holes) {
+    const y = c + DECKS[deck];
+    const w = Math.min(
+      half,
+      (deck > 1 ? 2.5 : section(DECKS[deck])) * form(n, (p + q) / 2)[0] - SHAPE.skin,
+    );
+    const m = deck > 1 ? SKIN : PLATE;
+    const k = deck > 1 ? 0.14 : 0.5;
+    for (const [x, d] of [
+      [p, 0.4],
+      [q, -0.4],
+    ]) {
+      teeth([x, y, MID - w], [x, y, MID + w], [d, -0.3, 0], 6, m, k);
+    }
+    if (half < 9) {
+      for (const sg of [-1, 1]) {
+        teeth([p, y, MID + sg * w], [q, y, MID + sg * w], [0, -0.3, -sg * 0.4], 6, m, k);
       }
-      box([xr - 0.1, ceil - 0.14, za], [xr + 0.1, ceil, zb], GIRDER, GIRDER, 8);
     }
   }
-  const steel = tex(TEX.STEEL, 0.8);
-  for (const [a, b] of walls) {
-    box([a, floor, MID - half], [b, ceil, MID - way / 2], steel);
-    box([a, floor, MID + way / 2], [b, ceil, MID + half], steel);
-    box([a, top, MID - way / 2], [b, ceil, MID + way / 2], steel, steel, 0);
-  }
-  // Emergency lamps along the ceiling, and a few cables down from it, over a runner's head.
-  for (let xl = x0 + 2; xl < x1; xl += 4) {
-    face(flat(xl - 0.6, xl + 0.6, ceil - 0.16, MID - 0.08, MID + 0.08), LAMP, UP);
-    const z = MID + 7 * (hash(xl, 1, 41) - 0.5);
-    bar([xl + 1, ceil, z], [xl + 1.2, ceil - 0.3 - 0.6 * hash(xl, 2, 41), z + 0.2], 0.05, SOOT);
-  }
+  // Emergency lamps under each deck and the back, and cables down from them, over a runner's head.
+  [...DECKS.slice(0, 2), 6.5 + 0.3].forEach((h, d) => {
+    const y = c + h - 0.33;
+    for (let x = xa + 2; x < xb; x += 5) {
+      const z = MID + (d > 1 ? 2.1 : 3.9) * form(n, x)[0] * (hash(x, d, 43) < 0.5 ? -1 : 1);
+      if (!holes.some(([e, p, q, half]) => e == d && x > p - 0.8 && x < q + 0.8 && half > 3.5)) {
+        face(flat(x - 0.5, x + 0.5, y, z - 0.07, z + 0.07), LAMP, UP);
+        const at = [x + 1.6, y + 0.03, MID + 4 * (hash(x, d, 41) - 0.5)];
+        bar(at, off(at, [0.2, -0.3 - 0.8 * hash(x, d, 42), 0.25]), 0.05, SOOT);
+      }
+    }
+  });
 };
 
 // ---------------------------------------------------------------------------------------------
 // The wings.
 
-/** How far under the line of the steps' edges the wing's underside is drawn: its 0.8 m, and a step. */
-const DEEP = 1.27;
+/** The aerofoil along the chord, from the trailing edge to the leading one: the chord's share, and how much of the wing's thickness is under the top there. Both edges are sharp. */
+const FOIL = [
+  [0, 0],
+  [0.08, 0.3],
+  [0.3, 0.8],
+  [0.55, 1],
+  [0.8, 0.75],
+  [0.95, 0.3],
+  [1, 0],
+];
 
-/** A wing (red's with s = 1): one slab from its ragged tip in the sand to the hull's back, its top the plane through its steps' upper edges. */
+/** A wing (red's with s = 1): three thin slabs, each a plane through the tops of its rows of the map, torn at the breaks. */
 const wing = (s: number) => {
-  const steps = LAYOUT.pieces.filter(p => p.kind == 'wing' && p.min[2] > MID == s > 0);
-  const end = steps[steps.length - 1];
-  /** Each step's upper edge on the tip's side, west and east; then the last one's other edge. */
-  const edge = [
-    ...steps.map(p => [p.min[0], p.max[0]].map(x => [x, p.max[1], s > 0 ? p.max[2] : p.min[2]])),
-    [end.min[0], end.max[0]].map(x => [x, end.max[1], s > 0 ? end.min[2] : end.max[2]]),
-  ];
-  const [L, R] = [0, 1].map(i => edge.map(e => e[i]));
-  const c = mid(L[0], R[steps.length]);
-  const [over, below] = [off(c, [0, 9, 0]), off(c, [0, -9, 0])];
-  const under = (p: V) => off(p, [0, -DEEP, 0]);
-  const lit = (p: V) =>
-    0.5 + 0.6 * noise(p[0] / 5, p[2] / 5, 17) - 0.3 * sm((Math.abs(p[2] - MID) - 44) / 5);
-  loft(L, R, () => SKIN, below, L.map(lit), R.map(lit));
-  /** Where it stands clear of the sand: before that it is solid to the ground. */
-  const clear = steps.findIndex(p => p.min[1] > p.max[1] - 1.5);
-  const low = steps[0].min[1];
-  const foot = (p: V, j: number) => (j < clear ? [p[0], low, p[2]] : under(p));
-  for (const side of [L, R]) {
-    loft(side, side.map(foot), () => GIRDER, c);
-  }
-  loft(L.slice(clear).map(under), R.slice(clear).map(under), () => PLATE, over);
-  face([under(L[clear]), under(R[clear]), foot(R[clear], 0), foot(L[clear], 0)], GIRDER, c);
-  face([L[0], R[0], foot(R[0], 0), foot(L[0], 0)], GIRDER, c);
-  // The ragged tip, going on down into the sand, and three spars under the slab that stick out of it.
-  const run = sub(L[0], L[1]);
-  teeth(L[0], R[0], off(run, [0, -0.3, 0]), 9, SKIN, 0.3);
-  for (const t of [0.2, 0.5, 0.8]) {
-    const at = (i: number, k: number) => off(under(off(L[i], sub(R[i], L[i]), t)), run, k);
-    bar(at(0, 0.7 + t), at(steps.length - 1, 0), 0.35, GIRDER, 0.5);
-  }
-  // Skin gone over two bays: the ribs under it, drawn flush.
-  for (const i of [8, 17]) {
-    const bay = (u0: number, u1: number, m: Mat) =>
-      face(
-        QUAD.map(e =>
-          off(
-            off(
-              off(L[i], sub(R[i], L[i]), e & 1 ? u1 : u0),
-              sub(L[i + 1], L[i]),
-              e & 2 ? 0.92 : 0.08,
-            ),
-            [0, 0.03, 0],
-          ),
-        ),
-        m,
-        below,
+  const flip = (p: V) => [p[0], p[1], MID + s * (p[2] - MID)];
+  const rows = LAYOUT.pieces.filter(p => p.kind == 'wingpiece' && p.min[2] > MID);
+  const z0 = MID + SHAPE.r + SHIP[1].fair[1][2];
+  WING.pieces.forEach(([v0, v1, push, , , shear], n) => {
+    const zv = (v: number) => z0 + WING.span * v + push;
+    const mine = rows
+      .filter(p => p.min[2] > zv(v0) - 0.01 && p.max[2] < zv(v1) + 0.01)
+      .sort((a, b) => a.min[2] - b.min[2]);
+    const [a, b] = [mine[0], mine[mine.length - 1]];
+    const zm = (p: Piece) => (p.min[2] + p.max[2]) / 2;
+    /** The top at a span: the line through the middles of the first and the last row's tops. */
+    const top = (v: number) =>
+      a.max[1] + ((b.max[1] - a.max[1]) * (zv(v) - zm(a))) / (zm(b) - zm(a));
+    const coarse = Math.ceil((WING.span * (v1 - v0)) / 1.4);
+    const at = (v: number, u: number, t: number): V => {
+      const e = Math.min(v, 47.49);
+      const [xa, xb] = [edge(WING.trail, e), edge(WING.lead, e)];
+      return flip([
+        xa + (xb - xa) * u + shear * coarse * ((v - v0) / (v1 - v0) - 0.5),
+        top(v) - t * thick(v),
+        zv(v),
+      ]);
+    };
+    // Each corner of the outline in the piece is a line of the sheet, the notches twice.
+    const marks = [
+      v0,
+      ...[...WING.lead, ...WING.trail]
+        .map(p => p[1])
+        .filter(v => v > v0 + 0.01 && v < v1 - 0.01)
+        .flatMap(v => [v - 0.01, v + 0.01]),
+      v1,
+    ].sort((p, q) => p - q);
+    const vs = marks.flatMap((v, i) =>
+      i && v - marks[i - 1] > 3.4 ? [(v + marks[i - 1]) / 2, v] : [v],
+    );
+    const lit = (p: V) => {
+      const d = Math.min(
+        n ? Math.abs(Math.abs(p[2] - MID) + MID - zv(v0)) : 9,
+        n < 2 ? Math.abs(Math.abs(p[2] - MID) + MID - zv(v1)) : 9,
       );
-    bay(0.3, 0.72, SOOT);
-    [0.4, 0.51, 0.62].forEach(u => bay(u, u + 0.02, IRON));
-  }
+      return 0.12 + 0.88 * sm((d - 0.7 * noise(p[0] / 1.3, p[2] / 1.3, 17)) / 0.9);
+    };
+    sheet(
+      vs.map(v => FOIL.map(([u]) => at(v, u, 0))),
+      () => SKIN,
+      lit,
+      s < 0,
+    );
+    sheet(
+      vs.map(v => FOIL.map(([u, t]) => at(v, u, t))),
+      () => SKIN,
+      p => 0.75 * lit(p),
+      s > 0,
+    );
+    // The breaks: the thin section open, a spar or two between the skins, the top skin torn.
+    for (const [v, d] of [...(n ? [[v0, -1]] : []), ...(n < 2 ? [[v1, 1]] : [])]) {
+      const [p, q] = [0, 1].map(e => FOIL.map(([u, t]) => at(v, u, e * t)));
+      const c = at(v - 3 * d, 0.5, 0.5);
+      loft(p, q, () => SOOT, c);
+      ragged(p, [0, 0.06, s * d * 0.3], off(c, [0, -9, 0]));
+      for (const u of [0.3, 0.62]) {
+        bar(
+          at(v - 0.4 * d, u, 0.5),
+          at(v + 0.45 * d, u + 0.01 * d, 0.6),
+          0.14,
+          GIRDER,
+          0.6 * thick(v),
+        );
+      }
+    }
+    // Where the map is solid to the sand under it (a body would not fit): the sand it ploughed, banked up under it.
+    const solid = mine.filter(p => p.max[1] - p.min[1] > 0.7);
+    if (solid.length) {
+      const vOf = (z: number) => (z - z0 - push) / WING.span;
+      const [va, vb] = [vOf(solid[0].min[2]), vOf(solid[solid.length - 1].max[2])];
+      const span = [va, ...vs.filter(v => v > va && v < vb), vb];
+      /** The bank's foot: out from under the wing by as much as it is high. */
+      const foot = (v: number, u: number, dv = 0) => {
+        const p = at(v, u, 1);
+        const q = at(v + dv, u + (u - 0.5) * 0.1, 1);
+        const h = Math.max(p[1] - gy(p[0], p[2]), 0) + 0.2;
+        const d = unit([q[0] - p[0], 0, q[2] - p[2]]);
+        const e = off(p, d, h);
+        return [e[0], gy(e[0], e[2]) - 0.1, e[2]];
+      };
+      const c = at((va + vb) / 2, 0.5, 9);
+      for (const u of [0.04, 0.96]) {
+        loft(
+          span.map(v => at(v, u, 1)),
+          span.map(v => foot(v, u)),
+          () => DUNE,
+          c,
+        );
+      }
+      if (va > v0 + 0.5 || n) {
+        const us = [0.04, 0.3, 0.6, 0.96];
+        loft(
+          us.map(u => at(va, u, 1)),
+          us.map(u => foot(va, u, -1)),
+          () => DUNE,
+          c,
+        );
+      }
+    }
+  });
 };
 
 // ---------------------------------------------------------------------------------------------
@@ -611,6 +1015,32 @@ const WHEEL = dress(
   [0.05, 0.05, 0.055],
 );
 
+/** The fallen engine's nacelle, its tail at the origin: 19 m to the intake's lip, dark inside it and scorched toward the bell. */
+const POD = coat(
+  smooth(
+    [
+      [0, 0],
+      [1.5, 0],
+      [2.1, 2.5],
+      [2.2, 4],
+      [2.7, 6.5],
+      [2.75, 12.5],
+      [2.45, 17.5],
+      [2.1, 19],
+      [1.75, 19.1],
+      [1.5, 17.6],
+      [0, 17.4],
+    ],
+    16,
+  ),
+  SKIN,
+  p =>
+    Math.hypot(p[0], p[1]) < 1.7 && p[2] < -16
+      ? 0.05
+      : (0.12 + 0.88 * sm((-p[2] - 5 - 3 * noise(p[0], p[1] * 2 - p[2] / 2, 61)) / 5)) *
+        (0.55 + 0.45 * sm((p[1] + 2.2) / 1.6)),
+);
+
 /** A line of points [across, up] carried to (x + across, y + up, z), then its mirror across x. */
 const arch = (pts: number[][], x: number, y: number, z: number) =>
   [...pts, ...pts.map(([h, v]) => [-h, v]).reverse()].map(([h, v]) => [x + h, y + v, z]);
@@ -620,7 +1050,7 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
   // Skin lying flat or afloat, its edge torn; or a slab of it standing in the sand, its stringers on one face.
   panel: ({ min: a, max: b }, _t, s) => {
     const k = 0.55 + 0.45 * hash(a[0], a[2], 51);
-    const paint = tex(TEX.PAINT, PALE * k, 0.5);
+    const paint = ink(WHITE.c, k, HULL);
     const thin = b[0] - a[0] < 1 ? 0 : b[2] - a[2] < 1 ? 2 : -1;
     if (thin >= 0) {
       box(a, b, paint, IRON);
@@ -668,6 +1098,15 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
   },
   // A supply case: planks, two straps, the lid in the team's colour on those that carry its long guns.
   crate: ({ min: a, max: b }, t) => {
+    if (b[1] - a[1] > 1.2) {
+      // A locker fallen from a bulkhead, its doors' seams.
+      box(a, b, tex(TEX.STEEL, 0.75));
+      for (const u of [0.33, 0.66]) {
+        const x = a[0] + (b[0] - a[0]) * u;
+        box([x - 0.02, a[1] + 0.1, a[2] - 0.01], [x + 0.02, b[1] - 0.1, b[2] + 0.01], SOOT);
+      }
+      return;
+    }
     box(a, b, tex(TEX.WOOD), t && ink(t, 0.75));
     for (const u of [0.25, 0.75]) {
       const z = a[2] + (b[2] - a[2]) * u;
@@ -723,49 +1162,37 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
     }
     box([a[0] + 0.3, b[1] - 0.8, z - 0.2], [b[0] - 0.3, b[1] - 0.4, z + 0.2], GIRDER);
   },
-  // The nacelle on the sand, drawn whole on its roof's box: a cowling round the passage, its lips, its rear torn.
-  nacelle: ({ min: a, max: b }, t, s) => {
+  // The engine torn off its pylon, lying askew on the sand: a faired nacelle, its intake's lip, its bell, the pylon's stub on its back, scorched. Drawn whole from its first strip.
+  fallen: ({ max: b }, t, s) => {
     if (!t) {
       return;
     }
-    const [x, y] = [(a[0] + b[0]) / 2, b[1] - 3.6];
-    const shell = (z: number) =>
-      arch(
-        [
-          [2.5, -1],
-          [2.5, 2.7],
-          [2.2, 3],
-          [1.3, 3],
-          [1.3, 3.3],
-          [1, 3.6],
-        ],
-        x,
-        y,
-        z,
-      );
-    const bore = (z: number) =>
-      arch(
-        [
-          [1.3, -1],
-          [1.3, 2.1],
-          [1.3, 2.1],
-          [1.3, 2.1],
-          [1.05, 2.4],
-          [1.05, 2.4],
-        ],
-        x,
-        y,
-        z,
-      );
-    const c = [x, y + 1, (a[2] + b[2]) / 2];
-    const k = shell(0).map((_, j) => 0.5 + 0.5 * hash(j, s, 61));
-    loft(shell(a[2]), shell(b[2]), j => (j > 2 && j < 8 ? ink(t, 0.7) : SKIN), c, k);
-    loft(bore(a[2]), bore(b[2]), () => GIRDER, c, undefined, undefined, true);
-    for (const z of [a[2], b[2]]) {
-      loft(shell(z), bore(z), () => IRON, c);
+    const [x, z, , l, skew] = ENGINES[0];
+    const f = unit([1, 0, s * skew]);
+    const at = [x, b[1] - 2.2, MID + s * (z - MID)];
+    stand(POD, off(at, f, -l / 2), f, [0.84, 0.8, 1]);
+    stand(
+      BELL,
+      off(at, f, -l / 2 + 0.3),
+      f.map(v => -v),
+      [1.15, 1.15, 1.15],
+    );
+    const stub = [-1, 3.5].map(u => off(off(at, f, u), [0, 2.1, 0]));
+    const lean = [-f[2] * 0.5, 1.1, f[0] * 0.5];
+    loft(
+      stub,
+      stub.map(p => off(p, lean)),
+      () => IRON,
+      at,
+    );
+    teeth(off(stub[0], lean), off(stub[1], lean), lean, 6, SKIN, 0.16, at);
+  },
+  // A rail through a break of a wing: a beam deeper than the wing it carries, its flanges proud.
+  rail: ({ min: a, max: b }) => {
+    box([a[0] + 0.14, a[1], a[2]], [b[0] - 0.14, b[1], b[2]], GIRDER);
+    for (const y of [a[1], b[1] - 0.07]) {
+      box([a[0], y, a[2]], [b[0], y + 0.07, b[2]], GIRDER, GIRDER, 0);
     }
-    const rear = shell(s > 0 ? b[2] : a[2]);
-    rear.slice(1).forEach((q, j) => teeth(rear[j], q, [0, 0, s * 0.9], 2, SKIN, 0.25, c));
   },
   // The engine in the lagoon, awash: its housing, and at each end its fan.
   engine: ({ min: a, max: b }, t = STRIPE) => {
@@ -822,7 +1249,7 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
     const g = a[1] + 0.5;
     const c = mid(a, b);
     const [x, z] = [c[0], (s > 0 ? a[2] : b[2]) - s * 0.04];
-    prism(a, b, 0.42, SKIN, tex(TEX.PAINT, PALE * 0.8, 0.5), 0, [0.5, 1]);
+    prism(a, b, 0.42, SKIN, ink(WHITE.c, 0.8, HULL), 0, [0.5, 1]);
     prism(a, [b[0], g + 0.8, b[2]], 0.42, SOOT, undefined, 0.04);
     prism([a[0], g + 2, a[2]], [b[0], g + 2.4, b[2]], 0.42, ink(team, 0.8), undefined, 0.03);
     face(
@@ -878,12 +1305,12 @@ KIND.float = KIND.raft = KIND.panel;
 
 /** The kinds of the camps: the rest is debris. */
 const CAMP = ['pod', 'dais', 'crate', 'shelter'];
-/** The kinds no sand lies against: afloat, or cloth, or the flag's step. */
-const BARE = ['shelter', 'float', 'raft', 'engine', 'dais'];
+/** The kinds no sand lies against: afloat, or cloth, or the flag's step, or drawn off their boxes. */
+const BARE = ['shelter', 'float', 'raft', 'engine', 'dais', 'fallen', 'rail'];
 
 /**
- * The wreck by part, each its vertices in the renderer's format: the hull's three sections, the
- * hold inside the middle one, the two wings, the debris, the camps. Read from the map at the call.
+ * The wreck by part, each its vertices in the renderer's format: the hull's skin and fairings,
+ * the tail's and the nose's ends, what is inside the hull, the two wings, the debris (the engines, the rails), the camps. Read from the map at the call.
  */
 export const parts = (def: WorldDef) => {
   const w = def.relief && ({ relief: raise(def.relief) } as World);
@@ -898,7 +1325,9 @@ export const parts = (def: WorldDef) => {
   };
   const scrap = (camp: boolean) => () => {
     for (const p of LAYOUT.pieces) {
-      if (KIND[p.kind] && CAMP.includes(p.kind) == camp) {
+      // The crates inside the hull are the wreck's.
+      const home = CAMP.includes(p.kind) && Math.abs((p.min[2] + p.max[2]) / 2 - MID) > 1;
+      if (KIND[p.kind] && home == camp) {
         const b = def.brushes.find(e =>
           e.min.every((v, i) => v == p.min[i] && e.max[i] == p.max[i]),
         );
@@ -910,8 +1339,15 @@ export const parts = (def: WorldDef) => {
     }
   };
   return {
-    hull: made(hull),
-    hold: made(hold),
+    hull: made(() => {
+      SHIP.forEach((_, n) => skin(n));
+      fairings();
+    }),
+    ends: made(() => {
+      tail();
+      tip();
+    }),
+    inside: made(() => SHIP.forEach((_, n) => inside(n))),
     wings: made(() => [1, -1].forEach(wing)),
     debris: made(scrap(false)),
     camps: made(scrap(true)),

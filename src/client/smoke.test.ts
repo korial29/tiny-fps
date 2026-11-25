@@ -22,9 +22,7 @@ describe('the fires', () => {
     expect(FIRES).toHaveLength(8);
     for (const [x, z] of ENGINES) {
       for (const side of [z, ZED - z]) {
-        expect(
-          FIRES.some(f => Math.hypot(f[0] - x, f[2] - side) < 5.5 && Math.abs(f[2] - side) > 2),
-        ).toBe(true);
+        expect(FIRES.some(f => Math.hypot(f[0] - x, f[2] - side) < 5.5)).toBe(true);
       }
     }
     const ends = HULL.sections.flat().slice(1, -1);

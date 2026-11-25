@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, FRAME, ROCKS, TRUNKS, ZED } from '../shared/beach';
+import { BEACH, FRAME, ROCKS, TRUNKS, ZED, walked } from '../shared/beach';
 import { rockMid, rockOf } from '../shared/moon';
 import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
@@ -56,7 +56,7 @@ describe('jungle', () => {
     for (const r of ROCKS) {
       for (const twin of [RED, BLUE]) {
         // A sphere of 320 triangles at least, each corner written with its triangle, less what is under the sand.
-        expect(onForm(rocks, r, 0, twin)).toBeGreaterThan(500);
+        expect(onForm(rocks, r, walked(r[0], r[1]), twin)).toBeGreaterThan(500);
       }
     }
   });
@@ -65,9 +65,11 @@ describe('jungle', () => {
     const palms = verts(made.palms);
     for (const [x, z0, r] of TRUNKS) {
       for (const z of [z0, ZED - z0]) {
-        const near = palms.filter(v => Math.hypot(v[0] - x, v[2] - z) < 1 && v[1] < 1.9);
+        // Each foot is on its own ground: the sand rises to the trees.
+        const g = walked(x, z);
+        const near = palms.filter(v => Math.hypot(v[0] - x, v[2] - z) < 1 && v[1] < g + 1.9);
         const off = near.map(v => Math.hypot(v[0] - x, v[2] - z));
-        const foot = near.filter(v => v[1] < 0.02).map(v => Math.hypot(v[0] - x, v[2] - z));
+        const foot = near.filter(v => v[1] < g + 0.02).map(v => Math.hypot(v[0] - x, v[2] - z));
         expect(foot.length).toBeGreaterThanOrEqual(5);
         // Its foot is the map's circle, a little inside it; no part of the trunk a body meets is far out of it.
         expect(Math.min(...foot)).toBeGreaterThan(0.85 * r);
@@ -76,7 +78,7 @@ describe('jungle', () => {
         // And it goes up: a crown over ten times a runner's reach.
         expect(
           Math.max(...palms.filter(v => Math.hypot(v[0] - x, v[2] - z) < 6).map(v => v[1])),
-        ).toBeGreaterThan(8);
+        ).toBeGreaterThan(g + 8);
       }
     }
   });
@@ -124,7 +126,10 @@ describe('jungle', () => {
     try {
       const [, z] = TRUNKS[0];
       const foot = verts(parts(BEACH).palms).filter(
-        v => v[1] < 0.02 && Math.abs(v[2] - z) < 0.5 && Math.abs(v[0] - was - 1.5) < 0.5,
+        v =>
+          v[1] < walked(was + 1.5, z) + 0.02 &&
+          Math.abs(v[2] - z) < 0.5 &&
+          Math.abs(v[0] - was - 1.5) < 0.5,
       );
       expect(foot.length).toBeGreaterThanOrEqual(5);
     } finally {

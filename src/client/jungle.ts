@@ -285,12 +285,13 @@ const rock = (o: number[], gy: Ground, [x, z, R, H, s]: number[], lod: number) =
  * Red's headland: the rocks of ROCKS, then what is only drawn. Behind them two rows, taller and
  * coarser the further, so the cape rises away from the beach; small ones in the gaps; and a reef
  * running out into the sea past x = FRAME.sea, lower and lower. `k` is 0 for red and 1 for blue,
- * whose jumble is its own.
+ * whose jumble is its own. The rocks of ROCKS stand on `red`, red's ground, for both: the map's
+ * boxes for blue's are the twins of red's, and the lattice's triangles are not mirrored.
  */
-const cape = (gy: Ground, k: number): number[] => {
+const cape = (gy: Ground, k: number, red: Ground): number[] => {
   const o: number[] = [];
   const h = (i: number, j: number) => hash(i, j, 90 + k);
-  ROCKS.forEach(r => rock(o, gy, r, r[2] < 8 ? 4 : 5));
+  ROCKS.forEach(r => rock(o, red, r, r[2] < 8 ? 4 : 5));
   for (let i = 0; i < 12; i++) {
     const at = [-16 + 11 * i + 5 * h(i, 1), ZED + 5 + 4 * h(i, 2)];
     rock(o, gy, [...at, 7 + 3 * h(i, 3), 12 + 7 * h(i, 4), 100 + i + 50 * k], 3);
@@ -416,7 +417,7 @@ export const parts = (def: WorldDef) => {
     const g = w ? ground(w, x, z) : 0;
     return g > -1e9 ? g : 0;
   };
-  const rocks = cape(gy, 0).concat(mirror(cape((x, z) => gy(x, ZED - z), 1)));
+  const rocks = cape(gy, 0, gy).concat(mirror(cape((x, z) => gy(x, ZED - z), 1, gy)));
 
   // A palm on each solid trunk, leaning toward the sea, each its own.
   const palms: number[] = [];

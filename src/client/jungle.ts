@@ -10,7 +10,7 @@ import { ground, hash, noise, raise } from '../shared/relief';
 import type { World, WorldDef } from '../shared/world';
 import { STRIDE, dress, place, segment, smooth } from './mesh';
 import type { Vec3 } from './mesh';
-import { stone } from './moonscape';
+import { stone } from './stone';
 
 type Ground = (x: number, z: number) => number;
 

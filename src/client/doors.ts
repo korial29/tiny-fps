@@ -4,7 +4,7 @@
 // or to shut. No GL.
 import type { Door, World } from '../shared/world';
 import type { Vec3 } from './mesh';
-import { box, face, lit } from './moonbase';
+import { box, face, lit } from './brick';
 import { SOUND } from './sfx';
 import type { Out } from './verts';
 

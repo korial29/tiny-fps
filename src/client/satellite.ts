@@ -9,8 +9,6 @@ import { HULL, PARTS } from '../shared/station';
 import type { StationDef } from '../shared/station';
 import { GILT, SHINE, aim, dress, place, segment, smooth } from './mesh';
 import type { Vec3 } from './mesh';
-import { LIGHT } from './lights';
-import type { Light } from './lights';
 
 type Out = number[];
 
@@ -23,9 +21,6 @@ const COPPER = [0.75, 0.42, 0.2];
 /** The lens: bright and unlit, so the bloom makes it glow. */
 const LENS = [3.2, 0.35, 0.15];
 const TAU = 2 * Math.PI;
-/** Metres from the station within which its lamps light anything. */
-const NEAR = 160;
-
 const vert = (o: Out, p: Vec3, n: Vec3, rgb: number[], layer: number) =>
   o.push(...p, ...n, rgb[0], rgb[1], layer, rgb[2]);
 
@@ -471,35 +466,4 @@ export const hangar = ({ hall: [lo], post, hull: [cx, , cz] }: StationDef): numb
   }
   slab(o, [x1 + 17.94, Y + 1.2, cz - 4], [x1 + 18, Y + 3.4, cz + 4], SCREEN, -2);
   return o;
-};
-
-/**
- * The station's lamps as lights, while the eye is near it: three under the hangar's roof and one in
- * the command room, cold white; red and pulsing while a strike counts down (`alarm`).
- */
-export const lamps = (
-  { hall: [lo], post, hull: [cx, , cz] }: StationDef,
-  eye: Vec3,
-  alarm: boolean,
-  t: number,
-): Light[] => {
-  if (Math.hypot(eye[0] - cx, eye[1] - post[0][1], eye[2] - cz) > NEAR) {
-    return [];
-  }
-  const k = alarm ? 0.6 + 0.4 * Math.sin(t * 6) : 1;
-  const color = (alarm ? [2.4, 0.25, 0.15] : [1.5, 1.55, 1.7]).map(c => c * k) as Vec3;
-  const Y = post[0][1];
-  const at = (x: number, y: number, z: number, range: number): Light => ({
-    kind: LIGHT.POINT,
-    p: [x, y, z],
-    d: [0, -1, 0],
-    cone: 0,
-    range,
-    color,
-    shadow: false,
-  });
-  return [
-    ...[-28, 0, 28].map(dz => at(cx, Y + 12.5, cz + dz, 30)),
-    at(lo[0] + 55, Y + 3.5, cz, 14),
-  ];
 };

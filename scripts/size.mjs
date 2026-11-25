@@ -1,6 +1,6 @@
 // Fails when a gzipped browser entry, shared chunks included, grows past its budget.
 import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 const BUDGETS = [
@@ -95,7 +95,8 @@ const BUDGETS = [
   // 298,000 B until Highline's own music (the user, 2026-11-25: 299,000 B).
   // 299,000 B until Landfall's ship drawn smooth and gloss white on a hollow hull, and the ash under it
   // (the user, 2026-11-25: 5,000 B more, agreed as 303,000 B before the music's 1,000 B landed).
-  { file: 'dist/index.js', max: 304_000 },
+  // 278,400 B: Tranquility's and Landfall's scenery loaded in their own chunks (the user, 2026-11-25: lower it, then 278,400 B after Landfall's reworked ship).
+  { file: 'dist/index.js', max: 278_400 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -109,25 +110,68 @@ const BUDGETS = [
   { file: 'dist/local.js', max: 58_700 },
 ];
 
-// An entry plus every chunk it statically imports, concatenated.
-const collect = (file, seen = new Set()) => {
+// The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
+// with the chunks it imports statically that its entry has not loaded already. A chunk with no
+// budget fails, and so does a budget whose chunk is no longer built.
+const LAZY = {
+  // The announcer's sprite, Ogg Opus then MP3 (audio.ts).
+  opus: 41_216,
+  mp3: 98_560,
+  // The players' voices, the same two ways.
+  'cast-opus': 148_992,
+  'cast-mp3': 365_824,
+  // The ships' predictive targeting (index.ts).
+  targeting: 1_792,
+  // Tranquility's and Landfall's scenery (render.ts decor()), the rounded stones that both draw
+  // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
+  tranquility: 18_688,
+  landfall: 12_416,
+};
+
+const imports = src => [
+  ...src.matchAll(/from\s*["'](\.\/[^"']+)["']|import\s*["'](\.\/[^"']+)["']/g),
+];
+const dynamic = src => [...src.matchAll(/import\(\s*[`"'](\.\/[^`"']+)[`"']\s*\)/g)];
+
+// A chunk plus every chunk it statically imports that is not in `seen`, concatenated. `lazy`
+// gathers the chunks they load on demand.
+const collect = (file, seen = new Set(), lazy = new Set()) => {
   if (seen.has(file)) {
     return '';
   }
   seen.add(file);
   const src = readFileSync(file, 'utf8');
-  const deps = [...src.matchAll(/from\s*["'](\.\/[^"']+)["']|import\s*["'](\.\/[^"']+)["']/g)];
-  return src + deps.map(m => collect(join(dirname(file), m[1] ?? m[2]), seen)).join('');
+  dynamic(src).forEach(m => lazy.add(join(dirname(file), m[1])));
+  return (
+    src +
+    imports(src)
+      .map(m => collect(join(dirname(file), m[1] ?? m[2]), seen, lazy))
+      .join('')
+  );
 };
 
 let failed = false;
-for (const { file, max } of BUDGETS) {
-  const raw = collect(file);
+const report = (file, raw, max) => {
   const gz = gzipSync(raw, { level: 9 }).length;
-  const ok = gz <= max;
+  const ok = max !== undefined && gz <= max;
   failed ||= !ok;
   console.log(
-    `${ok ? 'ok  ' : 'FAIL'} ${file}: ${raw.length} B raw, ${gz} B gzip (budget ${max} B)`,
+    `${ok ? 'ok  ' : 'FAIL'} ${file}: ${raw.length} B raw, ${gz} B gzip (${max === undefined ? 'no budget' : `budget ${max} B`})`,
   );
+};
+const built = new Set();
+for (const { file, max } of BUDGETS) {
+  const [seen, lazy] = [new Set(), new Set()];
+  report(file, collect(file, seen, lazy), max);
+  // A chunk loaded on demand may load others: the entry's static chunks are there already.
+  for (const chunk of lazy) {
+    const name = basename(chunk).replace(/-[\w-]{8}\.js$/, '');
+    built.add(name);
+    report(chunk, collect(chunk, new Set(seen), lazy), LAZY[name]);
+  }
+}
+for (const name of Object.keys(LAZY).filter(n => !built.has(n))) {
+  failed = true;
+  console.log(`FAIL ${name}: budgeted, but no entry loads such a chunk`);
 }
 process.exit(failed ? 1 : 0);

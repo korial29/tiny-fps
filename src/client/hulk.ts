@@ -23,6 +23,7 @@ import { TEX } from '../shared/types';
 import type { World, WorldDef } from '../shared/world';
 import { SHINE, dress, place, smooth } from './mesh';
 import type { Vec3 } from './mesh';
+import { HULL } from './paint';
 import { SAND } from './shore';
 
 type V = number[];
@@ -34,22 +35,6 @@ interface Mat {
 }
 const tex = (l: number, k = 1, s = 1): Mat => ({ l, c: [k], s });
 const ink = (c: V, k = 1, l = -1): Mat => ({ l, c: c.map(v => v * k), s: 1 });
-
-/**
- * The hull paint's layer: lit paint (its colour in c.x, c.y, c.w) that the shader rules with panel
- * lines and mirrors the sky in, the more the brighter its red is: soot is matt. No other
- * material's band holds it.
- */
-export const HULL = -1.05;
-/**
- * The hull paint's pixel, in main(), before the light: `c` its colour, `n` its normal, `pw` the
- * pixel's size on it. Panel lines every 2 m along the hull and round it, gone where a pixel no
- * longer holds them. `hk` is its gloss.
- */
-export const PANEL = `{vec2 q=vec2(P.x,abs(n.y)>.7?P.z:P.y*1.3)*.5,d=abs(fract(q)-.5);hk=smoothstep(.25,.55,C.x);
-c*=1.-.4*hk*smoothstep(.006+pw,.006,min(d.x,d.y))*(1.-smoothstep(.02,.09,pw));}`;
-/** Its mirror, in main(), after the light: `k` the sky its normal `m` reflects (the lit sand under the horizon), `fr` the fresnel term; and the sand's light thrown back up under it. */
-export const GLOSS = `c+=hk*(mix(vec3(.8,.72,.56),k,smoothstep(-.3,.05,r.y))*(.15+.6*fr)+vec3(.3,.27,.21)*clamp(.5-m.y,0.,1.));`;
 
 const MID = ZED / 2;
 const WHITE = ink([0.68, 0.69, 0.71], 1, HULL);

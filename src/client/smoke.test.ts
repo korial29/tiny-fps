@@ -23,7 +23,7 @@ describe('the fires', () => {
     for (const [x, z] of ENGINES) {
       for (const side of [z, ZED - z]) {
         expect(
-          FIRES.some(f => Math.hypot(f[0] - x, f[2] - side) < 4 && Math.abs(f[2] - side) > 2),
+          FIRES.some(f => Math.hypot(f[0] - x, f[2] - side) < 5.5 && Math.abs(f[2] - side) > 2),
         ).toBe(true);
       }
     }

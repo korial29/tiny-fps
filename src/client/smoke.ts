@@ -2,8 +2,10 @@
 // broken end of the hull, small fires at their feet. Built once: every column is a stack of soft
 // balls that never move, and the shader makes them smoke (PLUME below, compiled only into
 // Landfall's program): a noise that climbs through them by the time alone. No DOM.
-import { ENGINES, HULL, ZED } from '../shared/beach';
+import { FIRES } from '../shared/beach';
 import type { WorldDef } from '../shared/world';
+
+export { FIRES };
 
 /**
  * The smoke's layer: under -2.5 it casts no shadow, and the shader draws all of it. c.x is how far
@@ -16,27 +18,6 @@ export const SMOKE = -6;
 export const [BANDS, SLICES] = [4, 5];
 /** Metres the top of a column has drifted inland for each metre it rose: the sea breeze. */
 const LEAN = 0.45;
-
-/**
- * Where it burns: the foot of each column (x, y, z), how high it rises, and its radius at the
- * foot and at the top. On the rear of each nacelle's back and on the far end of each engine in
- * the lagoon, both halves; and high against each of the hull's four broken ends, thinner, so the way
- * through the gaps and over the back stays in sight.
- */
-export const FIRES: number[][] = [
-  ...[
-    [ENGINES[0][0], 5.3, ENGINES[0][1] + 3],
-    [ENGINES[1][0] - 1.2, 1.3, ENGINES[1][1] - 3],
-  ].flatMap(([x, y, z]) => [
-    [x, y, z, 42, 1.3, 7],
-    [x, y, ZED - z, 42, 1.3, 7],
-  ]),
-  ...HULL.sections.flatMap(([x0, x1], n) =>
-    [n && x0 - 0.6, n < 2 && x1 + 0.6]
-      .filter(x => x)
-      .map(x => [+x, HULL.axis[n] + 3, ZED / 2, 28, 0.9, 4]),
-  ),
-];
 
 /** A ball of radii `rx`, `ry` round `c`, as SMOKE: `at` gives c.x from a vertex's height, `id` is c.y, `w` c.w. */
 const ball = (
@@ -118,10 +99,13 @@ export const plumes = (def: WorldDef): number[] => {
  * is a noise in the world, the same through every ball, that climbs and drifts with the wind. The
  * smoke thins as it rises, is lit on the sun's side and from under by its fire, and fades out
  * within three metres of the eye. A flame is the same noise, faster, cut ever narrower up its
- * height (C.x), white-yellow at its heart and bright enough to bloom.
+ * height (C.x), white-yellow at its heart and bright enough to bloom. C.x is clamped to [0, 1]:
+ * where a small ball's face only grazes a pixel's samples it is extrapolated far out, and
+ * exp(-h * 22) overflowed to infinity; the NaN it made came out as white squares in the bloom
+ * (the user, 2026-11-25), as the fog's did on Tranquility (render.ts).
  */
 export const PLUME = (fog: string) => `{vec3 V=E-P,n=normalize(N),q=P*.27-T*vec3(.2,.45,0);
-float ds=length(V),a=abs(dot(n,V/ds)),h=C.x,l=.5+.5*dot(n,O),f;
+float ds=max(length(V),1e-3),a=abs(dot(n,V/ds)),h=clamp(C.x,0.,1.),l=.5+.5*dot(n,O),f;
 if(C.w>.5){q=P*vec3(1.6,.7,1.6)-vec3(0,T*2.6,0);f=a*a*smoothstep(h,h+.5,vn3(q+C.y)+.5*vn3(q*2.1)-.1);
 o=vec4(mix(vec3(2.4,.4,.04),vec3(3.4,2.2,.7),f*(1.-h))*f*(1.-(${fog})),0);return;}
 f=vn3(q+C.y)+.5*vn3(q*2.4+7.);

@@ -90,6 +90,8 @@ export interface WorldDef {
   doors?: Door[];
   /** The height of the edge of space (ORBIT.SEAM): a shot that crosses it either way bursts there. Absent: none. */
   seam?: number;
+  /** Flames that burn whoever's body is in them (FIRE_HP each FIRE_TICKS): the foot's middle x, y, z, their radius and height, a cylinder. Absent: none. */
+  fires?: [x: number, y: number, z: number, r: number, h: number][];
   /** The orbital station's command post and inside (station.ts), its brushes among the others. Absent: none. */
   station?: StationDef;
 }

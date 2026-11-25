@@ -29,7 +29,10 @@ import {
   PACK_HP,
   PACK_R,
   PLASMA_MAX,
+  PLAYER_H,
   PLAYER_R,
+  FIRE_HP,
+  FIRE_TICKS,
   RAIL_CELL,
   RAIL_DRAIN,
   RAIL_TICKS,
@@ -152,6 +155,8 @@ interface Player {
   run: number;
   /** Ticks drained by the rail gun's bolt since its first touch, while `slow` runs. */
   burn?: number;
+  /** Ticks in a map's flames without a break (WorldDef.fires). */
+  scorch?: number;
   /** The laser rifle's hits on him toward the next hp: every RIFLE_HITS take one. */
   graze?: number;
   /** The balls his katana sent back (deflect()), u8: they name the new ones. */
@@ -517,6 +522,7 @@ export class Room {
       if (slow && !(p.burn % RAIL_DRAIN)) {
         this.fry(p);
       }
+      this.scorch(p);
       this.duel(p);
       p.ack = input.seq;
       this.seats();
@@ -1397,6 +1403,22 @@ export class Room {
   }
 
   /** 1 hp of the bolt's drain to `foe`, as his railer deals it; if it puts him down he is disintegrated (`fried`). */
+  /** The map's flames (WorldDef.fires) burn a body in them: FIRE_HP on the first tick, then each FIRE_TICKS, nobody's hit. */
+  private scorch(p: Player): void {
+    const { x, y, z, hp } = p.state;
+    const fires = this.world.def.fires;
+    const lit =
+      hp > 0 &&
+      fires?.some(
+        ([fx, fy, fz, r, h]) =>
+          Math.hypot(x - fx, z - fz) < r + PLAYER_R && y < fy + h && y + PLAYER_H > fy,
+      );
+    p.scorch = lit ? (p.scorch ?? 0) + 1 : 0;
+    if (p.scorch % FIRE_TICKS === 1) {
+      this.harm(p, FIRE_HP);
+    }
+  }
+
   private fry(foe: Player): void {
     const r = foe.railer?.state ?? foe.state;
     foe.state.fried = this.shot(

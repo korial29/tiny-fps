@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FIRES } from '../shared/beach';
 import {
   AIRS,
   LAYERS,
@@ -967,16 +968,8 @@ describe('Landfall\u2019s ambience', () => {
   });
 
   it('crackles by each torn engine and each broken end of the hull, in both halves, not at a camp', () => {
-    for (const [x, z] of [
-      [70, 138.5],
-      [70, 61.5],
-      [4.5, 112],
-      [4.5, 88],
-      [36, 100],
-      [44, 100],
-      [74, 100],
-      [82, 100],
-    ]) {
+    expect(FIRES).toHaveLength(8);
+    for (const [x, , z] of FIRES) {
       expect(heard(x + 2, z)[3]).toBeGreaterThan(0.8);
     }
     expect(heard(60, 174)[3]).toBe(0);

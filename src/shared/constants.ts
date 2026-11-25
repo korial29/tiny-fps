@@ -570,6 +570,12 @@ export const RAIL_DRAIN = 60;
 export const SLOW_SPEED = 3;
 
 /**
+ * Landfall's fires (WorldDef.fires, the user, 2026-11-25): a body in the flames takes FIRE_HP at
+ * once, then again each FIRE_TICKS while it stays in them. Nobody's hit, as a hard landing.
+ */
+export const [FIRE_HP, FIRE_TICKS] = [1, 20];
+
+/**
  * The laser rifle (the user, 2026-11-08), held in both hands, after Halo's assault rifle: taken at
  * the team's fourth rack with RIFLE_MAX rounds, it fires while FIRE is held, one round each
  * RIFLE_COOL ticks (20 a second) from a power cell of RIFLE_CLIP (RIFLE_RELOAD to swap). Each shot

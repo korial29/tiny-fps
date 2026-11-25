@@ -39,9 +39,10 @@ export const EDGE = { east: FRAME.trees + 5, cape: FRAME.cape / 2 };
 /**
  * The wreck, a hull along x on the centre line, broken in three: each section's x0 and x1. The
  * tail is in the water, the middle on the sand, the nose in the trees; the two gaps are crossed on
- * foot. `r` is the hull's radius and `sunk` how deep its axis sits under r, so its back is at
- * 2 r - sunk over the sand. `axis` is the height of each section's axis: each lies level, 2 m in
- * the ground it came to rest on.
+ * foot. `r` is the hull's half width at the belt and `sunk` how deep its axis sits under r, so its
+ * back is at 2 r - sunk over the sand. `axis` is the height of each section's axis: each lies level,
+ * 2 m in the ground it came to rest on. The back is flat for `spine` either side of the line and
+ * the skin is `skin` thick: the hull is hollow.
  */
 export const HULL = {
   r: 7,
@@ -52,50 +53,173 @@ export const HULL = {
     [82, 106],
   ],
   axis: [4, 6.25, 7.5],
+  spine: 2.5,
+  skin: 0.85,
 };
 /**
- * The hull's cross-section as stacked boxes: each a height over the axis and the half width from
- * there up to the next. A wall under the axis, the widest at it, two shoulders and the back, flat
- * and 5 m wide.
+ * The hull's section: its half width at the height h over a section's axis. Round, 7 m at the
+ * belt, a keel 7 m under it and a flat back 7 m over it. Only + - * / and Math.sqrt: the host and
+ * the clients build the same boxes from it.
  */
-export const RINGS = [
-  [-HULL.r - 2, 5.8],
-  [-2, 6.5],
-  [2.5, 4.9],
-  [5, 2.5],
-  [HULL.r, 0],
+export const section = (h: number): number => {
+  const q = Math.max(1 - (h * h) / (HULL.r * HULL.r), 0);
+  return Math.max(HULL.r * Math.sqrt(Math.sqrt(q * Math.sqrt(q))), h > 0 ? HULL.spine : 0);
+};
+/**
+ * The heights over the axis the skin is cut at, above a section's floor: a box of skin on each
+ * flank from one to the next, as wide as the section half way up it. Where a line is one of DECKS
+ * the row under it is a floor across the hull instead.
+ */
+export const LINES = [-4, -2.05, -1.75, 0, 1.95, 2.25, 3.6, 5, 5.5, 6, 6.5, 7];
+/** The floors over the axis: the lower deck, the upper one (the middle section's gallery) and the back. */
+export const DECKS = [-1.75, 2.25, HULL.r];
+/** The section as a table, each line and the half width there. */
+export const RINGS = LINES.map(h => [h, section(h)]);
+/**
+ * The three sections, tail first. `cut`: the lengths it is built in (x0, x1, the share of the
+ * section's width there, and a skin so thick that it is solid: the stern). `floor`: the lowest
+ * floor over the axis, solid down to the keel (the tail's is awash, the middle's is the hold).
+ * `holes`: in the floors, each the index in DECKS, x0, x1 and the half width (9: from skin to
+ * skin). `tears`: in both flanks, x0, x1 and the heights over the axis, from one of LINES to
+ * another. `fair`: the fairing along each flank from the belt up to the upper deck, x0, x1 and how
+ * far out past r; its top is a ledge. `crates`: a crate under the edge of a hole, to climb to the
+ * floor above: its x0 and the index of the deck it stands on (-1: the floor). It is 1 m high on
+ * the floor, 1.4 m on the lower deck and 2 m on the upper one: the hands reach the edge from it
+ * before the head is under the floor above, and the hanging body clears it.
+ */
+export const SHIP = [
+  {
+    cut: [
+      [6, 7, 0.7, 9],
+      [7, 13, 0.76],
+      [13, 20, 0.9],
+      [20, 36, 1],
+    ],
+    floor: -4.75,
+    holes: [
+      [0, 14, 20, 3],
+      [1, 24, 29, 9],
+      [2, 13, 18.5, 2.3],
+    ],
+    tears: [
+      [21, 30, -1.75, 1.95],
+      [31, 36, 2.25, 5],
+    ],
+    fair: [[30, 36, 3]],
+    crates: [
+      [18.3, -1],
+      [24.2, 0],
+      [16.8, 1],
+    ],
+  },
+  {
+    cut: [[44, 74, 1]],
+    floor: -5,
+    holes: [
+      [0, 51.5, 56, 3.2],
+      [0, 67, 70.5, 9],
+      [1, 44, 48, 9],
+      [1, 60.5, 65.5, 3],
+      [2, 44, 47, 9],
+      [2, 53, 58, 2.2],
+    ],
+    tears: [
+      [57.5, 60.5, -5, -2.05],
+      [47.5, 55, -1.75, 1.95],
+      [64, 71, 2.25, 5],
+    ],
+    fair: [
+      [44, 47.5, 3.2],
+      [55, 71, 4.4],
+      [71, 74, 3],
+    ],
+    crates: [
+      [54.3, -1],
+      [60.7, 0],
+      [56.3, 1],
+    ],
+  },
+  {
+    cut: [
+      [82, 90, 1],
+      [90, 97, 0.85],
+    ],
+    floor: -5,
+    holes: [
+      [0, 86.5, 90, 3],
+      [1, 82, 85, 9],
+      [2, 87.5, 91.5, 2],
+    ],
+    tears: [[84.5, 91, -1.75, 1.95]],
+    fair: [
+      [82, 84.5, 2.7],
+      [91, 95, 1.5],
+    ],
+    crates: [
+      [88.3, -1],
+      [83.3, 0],
+      [87.7, 1],
+    ],
+  },
 ];
-/** The middle section's hold: its floor and ceiling, the half width inside, the ends inside, the doors' x0 and x1 and their height. */
+/** The middle section's hold: its floor and ceiling, the half width inside, its ends, the doors' x0 and x1 and their height. No bulkhead is left in it. */
 export const HOLD = {
-  floor: HULL.axis[1] - 5,
-  ceil: HULL.axis[1] - 2,
-  half: 4.5,
-  x: [47, 71],
-  door: [57.5, 60.5],
-  lintel: 2.4,
-  /** The two bulkheads across it (x0, x1), each with a doorway `way` wide on the centre line. */
-  walls: [
-    [54.5, 55],
-    [63, 63.5],
-  ],
+  floor: HULL.axis[1] + SHIP[1].floor,
+  ceil: HULL.axis[1] + LINES[1],
+  half: 4.525,
+  x: HULL.sections[1],
+  door: SHIP[1].tears[0],
+  lintel: LINES[1] - SHIP[1].floor,
+  walls: [] as number[][],
   way: 2.4,
 };
 
 /**
- * Red's wing, torn at the root and lying as a ramp from the sand up to the hull's back: its root
- * on the middle section (x0, x1 at z = ZED / 2 + HULL.r) and its tip on the sand (x0, x1, z).
- * Blue's is its twin.
+ * Red's wing, lying from the fairing's ledge down to the sand, broken in three. `lead` and `trail`
+ * are its outline, x by span from the root (swept, notched, a raked tip); a metre of span is `span`
+ * metres on the ground. `root` is x0 and x1 at the hull. `pieces`: the span each runs from and to,
+ * how far it was pushed out, its top at its inner and its outer end, and how far its outline is
+ * sheared along x from one row to the next (it lies turned in the wing's plane). The first is
+ * still attached; the breaks are 3.6 m wide. `rails`: the x of the two beams that run through the
+ * breaks and hold the pieces, 0.45 m wide. Blue's is its twin.
  */
-export const WING = { root: [50, 68], tip: [56, 66, 150] };
-/** The wing's steps, each under what a runner walks up, and how thick it is where one walks under it. */
-const [STEPS, THICK] = [26, 0.8];
+export const WING = {
+  root: [45, 71],
+  lead: [
+    [71, 0],
+    [69, 8],
+    [64, 18],
+    [61.5, 26],
+    [60, 26],
+    [59, 38],
+    [60.5, 38],
+    [59, 42],
+    [57.5, 46.5],
+    [54, 47.5],
+  ],
+  trail: [
+    [45, 0],
+    [46.5, 10],
+    [50, 30],
+    [52.5, 44],
+    [54, 47.5],
+  ],
+  span: 0.78,
+  pieces: [
+    [0, 14, 0, 8.5, 6.4, 0],
+    [16, 30, 2, 6.8, 3.6, 0.17],
+    [32, 47.5, 4, 3.3, 1.6, -0.2],
+  ],
+  rails: [53.5, 58],
+};
 
 /**
- * Red's engines, torn off: the middle of each nacelle (x, z), its radius and length, lying along z.
- * One on the sand by the wing, run through; one in the lagoon off the tail's end, stood on.
+ * Red's engines, torn off: the middle of each (x, z), its radius and length. The first lies on the
+ * sand beside the wreck near the waterline, askew (z by x along it), burning: nobody walks through
+ * it. The second lies along z in the lagoon off the tail's end, awash, stood on.
  */
 export const ENGINES = [
-  [70, 138.5, 2.5, 9],
+  [38.5, 125.3, 2.7, 19, 0.78],
   [4.5, 112, 2.5, 9],
 ];
 
@@ -170,12 +294,12 @@ const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
 export const CELL = 4;
 /**
  * Where the ground is level, x0, z0, x1, z1 (z in red's half) and the height: the way in to the
- * hold's door through the bank, the tip of the wing, the camp. Level for 6 m round each, so that
+ * hold's door through the bank, the sand under the tip of the wing, the camp. Level for 6 m round each, so that
  * the lattice's triangles are, and back to the sand 6 m further; none within 12 m of the next.
  */
 export const FLATS = [
   [57, 107, 61, 113, HOLD.floor - 0.25],
-  [WING.tip[0], WING.tip[2] - 4, WING.tip[1], WING.tip[2], 1.3],
+  [56, 146, 66, 150, 1.3],
   [44, 164, 76, 184, CAMP],
 ];
 /** The furrow the hull ploughed: how deep on its line, and how high the bank of sand thrown up on each side, 12 m off it. */
@@ -246,12 +370,12 @@ export interface Piece {
   min: Vec3;
   max: Vec3;
 }
-/** Red's pieces and the centre line's, as they are made: ghosts, collided with and drawn by the scenery (client/hulk.ts). */
+/** Red's pieces and the centre line's, as they are made: the level draws them as grey boxes until the ship is drawn on them (client/hulk.ts). */
 const mine: Piece[] = [];
 const line: Piece[] = [];
 const note = (l: Piece[], kind: string, b: Brush): Brush => {
   l.push({ kind, min: b.min, max: b.max });
-  return ghost(b);
+  return b;
 };
 
 /** The highest and the lowest ground under a rectangle. */
@@ -284,43 +408,114 @@ const on = (b: Brush): Vec3 => [(b.min[0] + b.max[0]) / 2, b.max[1], (b.min[2] +
 // ---------------------------------------------------------------------------------------------
 // The wreck, on the line.
 
-/** A solid section: its rings from x0 to x1, the first `skip` left out. */
-const rings = (n: number, skip = 0): Brush[] => {
-  const [x0, x1] = HULL.sections[n];
-  const c = HULL.axis[n];
-  return RINGS.slice(skip, -1).map(([y, half], k) =>
-    note(
-      line,
-      'hull',
-      box(x0, c + y, MID - half, x1, c + RINGS[k + skip + 1][0], MID + half, METAL),
-    ),
-  );
+/**
+ * A row of the hull from x0 to x1 between two heights: a slab `w` either side of the line, less
+ * its `holes` (x0, x1 and the half width left open, in order along x) and, between them, less
+ * `inner` either side of the line: a floor with its holes, or a box of skin on each flank with its
+ * tears.
+ */
+const slab = (
+  kind: string,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+  w: number,
+  holes: number[][],
+  inner = 0,
+): Brush[] => {
+  const out: Brush[] = [];
+  let x = x0;
+  const cut = (a: number, b: number, half: number) => {
+    const [p, q] = [Math.max(a, x0), Math.min(b, x1)];
+    if (q > p && half < w) {
+      for (const [u, v] of half > 0
+        ? [
+            [-w, -half],
+            [half, w],
+          ]
+        : [[-w, w]]) {
+        out.push(
+          note(line, kind, box(p, y0, MID + u, q, y1, MID + v, kind == 'deck' ? GRATE : METAL)),
+        );
+      }
+    }
+  };
+  for (const [a, b, half] of [...holes, [x1, x1, 0]]) {
+    cut(x, a, inner);
+    cut(a, b, half);
+    x = Math.max(x, b);
+  }
+  return out;
 };
+/** The hull: each section's floor down to the keel, then a row from each line to the next (a floor under a deck's line, skin elsewhere), the fairings and the crates. */
+const hull = (): Brush[] =>
+  SHIP.flatMap(({ cut, floor, holes, tears, fair, crates }, n) => {
+    const c = HULL.axis[n];
+    const lines = [floor, ...LINES.filter(h => h > floor + 0.5)];
+    return [
+      ...cut.flatMap(([x0, x1, s, t = HULL.skin]) => {
+        const w = (h: number) => Math.round(16 * s * section(h)) / 16;
+        return [
+          ...slab('deck', x0, x1, c - HULL.r, c + floor, w(floor), []),
+          ...lines.slice(1).flatMap((b, k) => {
+            const a = lines[k];
+            const deck = DECKS.indexOf(b);
+            const out = b < HULL.r ? w(deck < 0 ? (a + b) / 2 : b) : s * HULL.spine;
+            // The level's floor: a flank is plumb inside from there up to the belt, and a vault over it.
+            const low = a < DECKS[0] ? floor : a < DECKS[1] ? DECKS[0] : DECKS[1];
+            return [
+              ...(deck < 0
+                ? slab(
+                    'skin',
+                    x0,
+                    x1,
+                    c + a,
+                    c + b,
+                    out,
+                    tears.filter(e => e[2] <= a && e[3] >= b).map(([p, q]) => [p, q, 99]),
+                    Math.min(w(b), w(low)) - t,
+                  )
+                : slab(
+                    'deck',
+                    x0,
+                    x1,
+                    c + a,
+                    c + b,
+                    out,
+                    holes
+                      .filter(e => e[0] == deck)
+                      .map(([, p, q, half]) => [p, q, Math.min(half, out - t)]),
+                  )),
+              ...(a >= 0 && b <= DECKS[1]
+                ? fair.flatMap(([p, q, e]) =>
+                    slab(
+                      'fairing',
+                      Math.max(p, x0),
+                      Math.min(q, x1),
+                      c + a,
+                      c + b,
+                      HULL.r + e,
+                      [],
+                      out,
+                    ),
+                  )
+                : []),
+            ];
+          }),
+        ];
+      }),
+      ...crates.map(([x, deck]) => {
+        const y = c + (DECKS[deck] ?? floor);
+        return note(
+          line,
+          'crate',
+          box(x, y, MID - 0.75, x + 1.5, y + [1, 1.4, 2][deck + 1], MID + 0.75, WOOD),
+        );
+      }),
+    ];
+  });
 const BACK = HULL.axis.map(c => c + HULL.r);
-
-/** The middle section, hollow under its axis: the hold's floor, its ends, its flanks with a door each, two bulkheads. */
-const hold = (): Brush[] => {
-  const [x0, x1] = HULL.sections[1];
-  const { floor, ceil, half, x, door, lintel, walls, way } = HOLD;
-  const out = RINGS[0][1];
-  const wall = (z0: number, z1: number): Brush[] => [
-    box(x[0], floor, z0, door[0], ceil, z1, METAL),
-    box(door[1], floor, z0, x[1], ceil, z1, METAL),
-    box(door[0], floor + lintel, z0, door[1], ceil, z1, STEEL),
-  ];
-  return [
-    box(x0, HULL.axis[1] + RINGS[0][0], MID - out, x1, floor, MID + out, GRATE),
-    box(x0, floor, MID - out, x[0], ceil, MID + out, METAL),
-    box(x[1], floor, MID - out, x1, ceil, MID + out, METAL),
-    ...wall(MID + half, MID + out),
-    ...wall(MID - out, MID - half),
-    ...walls.flatMap(([a, b]) => [
-      box(a, floor, MID - half, b, ceil, MID - way / 2, STEEL),
-      box(a, floor, MID + way / 2, b, ceil, MID + half, STEEL),
-      box(a, floor + lintel, MID - way / 2, b, ceil, MID + way / 2, STEEL),
-    ]),
-  ].map(b => note(line, 'hold', b));
-};
 
 /** A heap of ribs in the middle of each gap, a pack on it, and a fallen frame leaning on each broken end. */
 const GAPS = [40, 78].map(x => {
@@ -342,10 +537,7 @@ const FRAMES = [36, 74].flatMap(x => {
 const RAFT = box(0.5, -0.3, MID - 4, 5, 0.4, MID + 4, METAL);
 
 const centre: Brush[] = [
-  ...rings(0),
-  ...hold(),
-  ...rings(1, 1),
-  ...rings(2),
+  ...hull(),
   ...GAPS.map(g => note(line, 'heap', g.heap)),
   ...FRAMES.map(b => note(line, 'frame', b)),
   note(line, 'raft', RAFT),
@@ -356,51 +548,82 @@ const centre: Brush[] = [
 // ---------------------------------------------------------------------------------------------
 // Red's half.
 
-/** The wing: steps from its tip on the sand to the hull's back, solid where a runner would not fit under it. */
-const wing = (): Brush[] => {
-  const [tx0, tx1, tz] = WING.tip;
-  const end = MID + RINGS[3][1];
-  const deep = (tz - end) / STEPS;
-  const span = (z: number) => {
-    const t = c1((tz - z) / (tz - MID - HULL.r));
-    return [tx0 + (WING.root[0] - tx0) * t, tx1 + (WING.root[1] - tx1) * t];
-  };
-  const y0 = under(tx0, tz - deep, tx1, tz)[0] + 0.3;
-  return Array.from({ length: STEPS }, (_, k) => {
-    const [z1, z0] = [tz - k * deep, tz - (k + 1) * deep];
-    const [x0, x1] = span((z0 + z1) / 2);
-    const y = y0 + ((BACK[1] - y0) * k) / (STEPS - 1);
-    const [hi, lo] = under(x0, z0, x1, z1);
-    // Over the hull's first shoulder it is a slab whatever is under it, and it lies on the second: no slot under it there.
-    const slab = z1 <= MID + HULL.r || y - THICK - hi >= 2.2;
-    const y1 = z1 <= MID + RINGS[2][1] ? HULL.axis[1] + RINGS[3][0] : slab ? y - THICK : lo - 0.5;
-    return note(mine, 'wing', box(x0, y1, z0, x1, y, z1, METAL));
+/** An edge of the wing's outline at a span. */
+const edge = (l: number[][], v: number): number => {
+  const k = l.findIndex(p => p[1] > v);
+  const [a, b] = [l[k - 1], l[k]];
+  return a[0] + ((b[0] - a[0]) * (v - a[1])) / (b[1] - a[1]);
+};
+/**
+ * The wing: each piece in rows across the span, a step down from one to the next, as wide as the
+ * outline there; solid to the sand where a runner would not fit under it. Then the two rails
+ * across the break before it, level with the lower of its two lips.
+ */
+const wing = (): Brush[] =>
+  WING.pieces.flatMap(([v0, v1, push, y0, y1, shear], n) => {
+    // From the lip of the fairing it lies against.
+    const z = (v: number, out = push) => MID + HULL.r + SHIP[1].fair[1][2] + WING.span * v + out;
+    const rows = Math.ceil((z(v1) - z(v0)) / 1.4);
+    const last = WING.pieces[n - 1];
+    return [
+      ...Array.from({ length: rows }, (_, k) => {
+        const v = v0 + ((v1 - v0) * (k + 0.5)) / rows;
+        const dx = shear * (k + 0.5 - rows / 2);
+        const [xa, xb] = [WING.trail, WING.lead].map(l => Math.round(8 * (edge(l, v) + dx)) / 8);
+        const [za, zb] = [k, k + 1].map(i => z(v0 + ((v1 - v0) * i) / rows));
+        const y = y0 + ((y1 - y0) * k) / (rows - 1);
+        const low = y - 1.5 + v / 41;
+        const [hi, lo] = under(xa, za, xb, zb);
+        return note(
+          mine,
+          'wingpiece',
+          box(xa, low - hi < 2.2 ? lo - 0.5 : low, za, xb, y, zb, METAL),
+        );
+      }),
+      ...(last
+        ? WING.rails.map(x => {
+            const y = Math.min(last[4], y0);
+            return note(
+              mine,
+              'rail',
+              box(x - 0.225, y - 0.45, z(last[1], last[2]), x + 0.225, y, z(v0), STEEL),
+            );
+          })
+        : []),
+    ];
   });
-};
 
-/** The nacelle on the sand, lying along z and run through: two flanks, a roof between them. */
-const nacelle = (): Brush[] => {
-  const [x, z, r, l] = ENGINES[0];
-  const [z0, z1] = [z - l / 2, z + l / 2];
-  const [hi, lo] = under(x - r, z0, x + r, z1);
-  const y = Math.round(hi * 32) / 32;
-  return [
-    box(x - r, lo - 0.5, z0, x - 1.3, y + 3, z1, METAL),
-    box(x + 1.3, lo - 0.5, z0, x + r, y + 3, z1, METAL),
-    box(x - 1.3, y + 2.4, z0, x + 1.3, y + 3.6, z1, METAL, ORANGE),
-  ].map(b => note(mine, 'nacelle', b));
-};
-const NACELLE = nacelle();
+/** The engine on the sand, askew: strips across x, each as long as its body is wide there. */
+const FALLEN = Array.from({ length: 6 }, (_, k) => {
+  const [x, z, r, , skew] = ENGINES[0];
+  const x0 = x - 7.5 + 2.5 * k;
+  const mid = z + skew * (x0 + 1.25 - x);
+  return lay(
+    'fallen',
+    x0,
+    mid - r - 0.2,
+    x0 + 2.5,
+    mid + r + 0.2,
+    3.5,
+    METAL,
+    k ? undefined : ORANGE,
+  );
+});
 
 /** The engine in the lagoon off the tail's end, awash: its back 1.4 m over the water. */
 const ENGINE = (() => {
   const [x, z, r, l] = ENGINES[1];
   return note(mine, 'engine', box(x - r, -5, z - l / 2, x + r, 1.4, z + l / 2, METAL, ORANGE));
 })();
-/** Skin afloat between the shallows and that engine: the first runs aground where the water is knee deep. */
+/**
+ * Skin afloat between the shallows and that engine: the first runs aground where the water is knee
+ * deep. A third lies aground under the tear in the tail's flank, 2.05 m under its lower deck: the
+ * hands reach the deck from it and the hanging body clears it.
+ */
 const FLOATS = [
   note(mine, 'float', box(16, -1.6, 116, 22, 0.35, 119, METAL)),
   note(mine, 'float', box(10, -0.2, 113, 13, 0.5, 116, METAL)),
+  note(mine, 'float', box(23, -1.6, 107.6, 26, 0.2, 110, METAL)),
 ];
 
 /** The camp: the pod, the flag's step by it, a crate under each rack with a tarpaulin over it. */
@@ -438,10 +661,12 @@ const shelter = (x: number, z: number): Brush[] =>
 const [GUNS, BLADES] = [crate(49, 176), crate(71, 176)];
 const [RIFLES, RAILS] = [crate(84, 150, 0.4, RED), crate(33, 128, 0.4, RED)];
 
-/** The debris between the camp and the wing, a line to run: a panel, a container, the landing gear, the nacelle's roof, the wing. */
+/** The debris between the camp and the wing, a line to run: a panel, a container, the landing gear, a second container, the wing. */
 const PANEL = lay('panel', 67, 159.5, 70.5, 163, 0.9, METAL);
 const CONTAINER = lay('container', 68.5, 151, 71.1, 157, 2, METAL, ORANGE);
 const GEAR = lay('gear', 68.6, 145.6, 71, 148, 2.9, STEEL, YELLOW);
+/** A second container, between the landing gear and the wing's second break. */
+const LAST = lay('container', 64, 139.5, 67.5, 143, 2.6, METAL, ORANGE);
 const BOGIE = lay('gear', 67.6, 144.6, 72, 145.6, 1.2, STEEL);
 
 /** What else lies about red's half, most with a pack on it. */
@@ -450,9 +675,11 @@ const SCRAP = {
   west: [
     lay('panel', 44.5, 156.5, 47.5, 159.5, 0.5, METAL),
     lay('container', 33, 148.7, 39, 151.3, 2.2, METAL, ORANGE),
-    lay('panel', 46.5, 138.5, 49.5, 141.5, 0.4, METAL),
+    lay('panel', 41, 138.5, 44, 141.5, 0.4, METAL),
     lay('panel', 25.5, 134.5, 28.5, 137.5, 0.5, METAL),
     lay('panel', 50.5, 114.5, 53.5, 117.5, 0.4, METAL),
+    // Against the flank under the tear of the lower deck: the way up to it.
+    lay('container', 49.5, 107.4, 52.5, 110, 2.6, METAL, ORANGE),
   ],
   east: [
     lay('panel', 62.5, 120.5, 65.5, 123.5, 0.4, METAL),
@@ -463,8 +690,6 @@ const SCRAP = {
   ],
   // Skin standing in the sand: cover on the open strand, nothing to stand on.
   cover: [
-    lay('panel', 43.6, 131, 44, 137, 2.6, METAL),
-    lay('panel', 48.5, 146.6, 53.5, 147, 2.4, METAL),
     lay('panel', 78, 131.6, 83, 132, 2.6, METAL),
     lay('panel', 30, 141.6, 35, 142, 2.2, METAL),
     lay('container', 76, 155, 82, 157.6, 2.6, METAL, ORANGE),
@@ -545,7 +770,7 @@ const CRAGS = ROCKS.map(([x, z, R, H, s]) => ({
 
 const half: Brush[] = [
   ...wing(),
-  ...NACELLE,
+  ...FALLEN,
   ENGINE,
   ...FLOATS,
   POD_BOX,
@@ -560,6 +785,7 @@ const half: Brush[] = [
   CONTAINER,
   GEAR,
   BOGIE,
+  LAST,
   ...Object.values(SCRAP).flat(),
   // The first palms' trunks.
   ...TRUNKS.map(([x, z, r]) => {
@@ -575,9 +801,9 @@ const half: Brush[] = [
 
 /**
  * What the scenery draws on the map's boxes, both halves, blue's mirrored: the hull's sections
- * (x0, x1, the axis' height), every piece of the wreck and of the camps by kind (hull, hold, heap,
- * frame, raft, wing, nacelle, engine, float, pod, dais, crate, shelter, panel, container, gear), and the
- * headlands' rocks where they stand.
+ * (x0, x1, the axis' height), every piece of the wreck and of the camps by kind (skin, deck,
+ * fairing, wingpiece, rail, fallen, heap, frame, raft, engine, float, pod, dais, crate, shelter,
+ * panel, container, gear), and the headlands' rocks where they stand.
  */
 export const LAYOUT = {
   hull: HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]),
@@ -620,8 +846,8 @@ const team = (red: boolean) => {
     rail: side(on(RAILS)),
   };
 };
-/** On the hull's shoulder east of the wing, red's side. */
-const SHOULDER: Vec3 = [71, HULL.axis[1] + RINGS[3][0], MID + 3.7];
+/** In the gallery, inside red's tear. */
+const GALLERY: Vec3 = [70.5, HULL.axis[1] + DECKS[1], MID + 3];
 
 export const BEACH: WorldDef = {
   // Highline's runners (docs/BEACH.md): armour in the team's colour, no helmet.
@@ -652,13 +878,13 @@ export const BEACH: WorldDef = {
     [51, HOLD.floor, MID],
     [67, HOLD.floor, MID],
   ),
-  // Cells: the camp, the nacelle's roof, the second float, the trees, the hull's shoulder; one in the hold between the doors.
+  // Cells: the camp, the second container, the second float, the trees, the gallery; one in the hold between the doors.
   cells: both(
-    [on(SCRAP.camp[1]), on(NACELLE[2]), on(FLOATS[1]), on(SCRAP.east[2]), SHOULDER],
+    [on(SCRAP.camp[1]), on(LAST), on(FLOATS[1]), on(SCRAP.east[2]), GALLERY],
     [59, HOLD.floor, MID],
   ),
-  // Armour: on the engine in the lagoon, and on the hull's back at its broken west end.
-  vests: both([on(ENGINE)], [46.5, BACK[1], MID]),
+  // Armour: on the engine in the lagoon, and on the hull's back over the wings.
+  vests: both([on(ENGINE)], [63, BACK[1], MID]),
   floor: DEPTH,
   fires: FIRES.map(([x, y, z, , r]): [number, number, number, number, number] => [
     x,

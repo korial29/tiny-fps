@@ -13,6 +13,14 @@ import type * as effects from './effects';
 import { tinyFps } from './index';
 import type { TinyFps } from './index';
 import { SOUND } from './sfx';
+import type * as Render from './render';
+
+// The renderer's builds (warmSteps()) are left out: the scene waits for none. Run for real, the
+// first test's hook spent them, over 10 s on a loaded runner.
+vi.mock('./render', async importOriginal => ({
+  ...(await importOriginal<typeof Render>()),
+  warmSteps: () => [],
+}));
 
 const spies = vi.hoisted(() => ({
   play: vi.fn(),

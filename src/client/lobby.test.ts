@@ -7,6 +7,14 @@ import type { SocketLike } from '../shared/types';
 import { tinyFps } from './index';
 import { TRAITS, createLobby } from './lobby';
 import type { Cast } from './lobby';
+import type * as Render from './render';
+
+// The renderer's builds (warmSteps()) are left out: the scene waits for none. Run for real, the
+// first test's hook spent them, over 10 s on a loaded runner.
+vi.mock('./render', async importOriginal => ({
+  ...(await importOriginal<typeof Render>()),
+  warmSteps: () => [],
+}));
 
 /** The character screen with no WebGL (jsdom has none): the tiles, the words and Start still work. */
 describe('the character screen', () => {

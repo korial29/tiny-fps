@@ -1,7 +1,7 @@
 // Sound synthesis, jsfxr style: each sound is a handful of numbers rendered once into samples.
 // No DOM, no Web Audio: audio.ts turns the samples into buffers. Music is rendered the same way.
 
-import { ENGINES, FRAME, HULL, ZED } from '../shared/beach';
+import { FIRES as BURNING, FRAME, ZED } from '../shared/beach';
 
 /**
  * One oscillator: wave (0 square, 1 saw, 2 sine, 3 noise held for one period), hz, slide in octaves
@@ -1696,17 +1696,8 @@ export const chirr = (): Float32Array =>
     return x * 0.12;
   });
 
-/** Where something burns on Landfall (x, z): the four torn engines and the hull's four broken ends. */
-const FIRES = [
-  ...ENGINES.flatMap(([x, z]) => [
-    [x, z],
-    [x, ZED - z],
-  ]),
-  ...HULL.sections
-    .flat()
-    .slice(1, -1)
-    .map(x => [x, ZED / 2]),
-];
+/** Where something burns on Landfall (x, z): by the four torn engines and at the hull's four broken ends. */
+const FIRES = BURNING.map(([x, , z]) => [x, z]);
 
 /**
  * Landfall's ambience: the surf, loudest at the waterline; the wind in the palms, in gusts, and

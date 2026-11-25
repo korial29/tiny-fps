@@ -99,6 +99,31 @@ export const ENGINES = [
   [4.5, 112, 2.5, 9],
 ];
 
+/**
+ * Where it burns, both halves: the foot of each column of smoke (x, y, z), how high it rises, and
+ * its radius at the foot and at the top (client/smoke.ts draws them). Their flames burn (FLAME), so
+ * none stands on a way across (the user, 2026-11-25): on the sand east of the rear of each nacelle,
+ * clear of its roof and of the way through it; on the south-west corner of each engine in the
+ * lagoon, clear of the jumps over its north half (routes.ts LAGOON); and high against each of the
+ * hull's four broken ends, thinner, over the heads of those who cross the gaps.
+ */
+export const FIRES: number[][] = [
+  ...[
+    [ENGINES[0][0] + 4, 1.7, ENGINES[0][1] + 3],
+    [ENGINES[1][0] - 1.5, 1.3, ENGINES[1][1] + 3.5],
+  ].flatMap(([x, y, z]) => [
+    [x, y, z, 42, 1.3, 7],
+    [x, y, ZED - z, 42, 1.3, 7],
+  ]),
+  ...HULL.sections.flatMap(([x0, x1], n) =>
+    [n && x0 - 0.6, n < 2 && x1 + 0.6]
+      .filter(x => x)
+      .map(x => [+x, HULL.axis[n] + 3, ZED / 2, 28, 0.9, 4]),
+  ),
+];
+/** Metres the flames at a fire's foot reach out from its middle and up from it: smoke.ts stands three balls of 0.55 m within 0.6 of the foot's radius, up to 2.3 m. */
+export const FLAME = [0.55, 2.3];
+
 /** Red's camp: the escape pod its flag stands by (x, z, radius). */
 export const POD = [60, 174, 4];
 /** The camp's ground, level. */
@@ -387,7 +412,8 @@ const POD_BOX = note(
 const DAIS = note(
   mine,
   'dais',
-  box(POD[0] - 2, CAMP - 0.5, POD[1] - 10, POD[0] + 2, CAMP + 0.4, POD[1] - 6, PAINT, RED),
+  // A hatch cover lying on the sand: a raised step read as a floor floating over it (the user, 2026-11-25).
+  box(POD[0] - 2, CAMP - 0.5, POD[1] - 10, POD[0] + 2, CAMP + 0.05, POD[1] - 6, PAINT, RED),
 );
 const crate = (x: number, z: number, h = 0.4, tint?: Vec3) =>
   lay('crate', x - 1.5, z - 1.5, x + 1.5, z + 1.5, h, WOOD, tint);
@@ -632,6 +658,13 @@ export const BEACH: WorldDef = {
   // Armour: on the engine in the lagoon, and on the hull's back at its broken west end.
   vests: both([on(ENGINE)], [46.5, BACK[1], MID]),
   floor: DEPTH,
+  fires: FIRES.map(([x, y, z, , r]): [number, number, number, number, number] => [
+    x,
+    y,
+    z,
+    0.6 * r + FLAME[0],
+    FLAME[1],
+  ]),
   // The sand and the bed, out to an ellipse round the beach that nobody reaches: the walls and
   // the depth close it first. No hole: every brush stands on the ground.
   relief: { hole: [0, 0, 0, 0], bound: [56, MID, 100, 160], cell: CELL, at },

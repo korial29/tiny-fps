@@ -94,5 +94,11 @@ Target: 300,000 vertices at most (Tranquility: 436,467), match-frame JavaScript 
   the centre line a bot is given by its id, the lagoon's legs as links. Over 24 matches: east gap
   1,130 crossings, west 1,053, hold 998, back 801, lagoon 516; no drowning; 113 wins for the north
   camp against 115 for the south with the camps swapped.
+- The fires burn (the user, 2026-11-25): `FIRES` in `shared/beach.ts` is where smoke.ts draws the
+  columns, sfx.ts crackles and the room burns (`WorldDef.fires`): a body in the flames takes
+  `FIRE_HP` at once, then each `FIRE_TICKS` (3 hp a second), nobody's hit. None on a way across:
+  the nacelle's fire on the sand east of it, the lagoon engine's on its south-west corner.
+- The flag's step is a hatch cover lying flush on the sand (5 cm): a 40 cm step read as a floor
+  floating over it.
 - Known: a bot can still stand on the middle section's shoulder west of x = 50 (a drop over 8 m);
   the health pack by the hold's door stands on a panel 0.59 m high, a jump.

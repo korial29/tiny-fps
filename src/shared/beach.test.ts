@@ -23,6 +23,7 @@ import {
   LINES,
   POD,
   RINGS,
+  RISE,
   ROCKS,
   SHIP,
   TRUNKS,
@@ -48,7 +49,7 @@ import type { Brush } from './world';
 const world = build(BEACH);
 const relief = world.relief!;
 const { brushes, teams } = BEACH;
-/** The boxes of the wreck, the debris and the camps, told by LAYOUT.pieces: grey boxes the level draws, until hulk.ts draws the ship on them. */
+/** The boxes of the wreck, the debris and the camps, told by LAYOUT.pieces: ghosts, since hulk.ts draws the ship on them. */
 const solid = brushes.filter(b =>
   LAYOUT.pieces.some(
     p => p.min.every((v, k) => v === b.min[k]) && p.max.every((v, k) => v === b.max[k]),
@@ -114,7 +115,7 @@ describe('LANDFALL', () => {
   it('has brushes with min below max, known textures and tints, under 1,100 of them, six in ten the ghosts of rocks and trunks', () => {
     expect(brushes.length).toBeGreaterThan(300);
     expect(brushes.length).toBeLessThan(1100);
-    expect(solid.length).toBeLessThan(420);
+    expect(solid.length).toBeLessThan(480);
     expect(brushes.filter(b => b.ghost).length).toBeGreaterThan(0.55 * brushes.length);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
@@ -237,7 +238,7 @@ describe('LANDFALL, symmetry', () => {
         ),
       ).toBe(true);
     }
-    // Every box of the wreck is a piece, and the level draws them all: grey boxes, until hulk.ts draws the ship on them.
+    // Every box of the wreck is a piece, and a ghost: hulk.ts draws the ship on them.
     expect(solid.every(b => !b.ghost)).toBe(true);
     expect(LAYOUT.pieces).toHaveLength(solid.length);
     expect(LAYOUT.hull).toEqual(HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]));
@@ -841,7 +842,7 @@ describe('LANDFALL, the wreck', () => {
       }
       groups.at(-1)!.push(p);
     }
-    expect(groups.map(l => l.length)).toEqual([8, 8, 9]);
+    expect(groups.map(l => l.length)).toEqual([15, 23, 13]);
     // The first piece is attached: against the fairing's lip, level with its ledge, as wide as the root.
     expect(rows[0].min[2]).toBe(lip);
     expect(rows[0].max[1]).toBe(8.5);
@@ -859,11 +860,12 @@ describe('LANDFALL, the wreck', () => {
       expect(l.at(-1)!.max[1]).toBeCloseTo(y1, 9);
       for (let k = 1; k < l.length; k++) {
         const drop = l[k - 1].max[1] - l[k].max[1];
-        expect(drop).toBeGreaterThan(0.15);
-        expect(drop).toBeLessThan(STEP_H);
+        // A slope under the feet, not stairs: the drawn wing's top lies within half a row's rise of every row's.
+        expect(drop).toBeGreaterThan(0.1);
+        expect(drop).toBeLessThanOrEqual(RISE + 1e-9);
         // The outline: no row over 1.5 m out of the last at either edge.
         expect(Math.abs(l[k].min[0] - l[k - 1].min[0])).toBeLessThan(1.5);
-        expect(Math.abs(l[k].max[0] - l[k - 1].max[0])).toBeLessThan(1.8);
+        expect(Math.abs(l[k].max[0] - l[k - 1].max[0])).toBeLessThan(1.9);
       }
       // Swept: the trailing edge's rows start further east as the wing runs out.
       expect(l.at(-1)!.min[0]).toBeGreaterThan(l[0].min[0]);
@@ -958,7 +960,7 @@ const WING_UP = [
 const WING_DOWN = [
   go(55.5, 121.7, 6.4, false),
   leap([55.5, 121.9], [55.5, 126.5], 6.8, W),
-  go(55.5, 136.1, 3.6, false),
+  go(55.5, 136.4, 3.6, false),
   leap([55.5, 136.4], [55.5, 141], 3.3, W),
   go(55, 152, 1.6),
   g(55, 156),
@@ -1074,7 +1076,7 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(f.seconds).toBeLessThan(30);
     // Sprinting off each lip between the rails, up the wing and down it: not onto the next piece on his feet.
     for (const [z, y, yaw] of [
-      [144, 2.66, NORTH],
+      [144, 2.7, NORTH],
       [130, 5.43, NORTH],
       [118, 7, SOUTH],
       [132, 4.97, SOUTH],

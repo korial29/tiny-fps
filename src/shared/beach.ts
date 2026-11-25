@@ -179,7 +179,7 @@ export const HOLD = {
  * are its outline, x by span from the root (swept, notched, a raked tip); a metre of span is `span`
  * metres on the ground. `root` is x0 and x1 at the hull. `pieces`: the span each runs from and to,
  * how far it was pushed out, its top at its inner and its outer end, and how far its outline is
- * sheared along x from one row to the next (it lies turned in the wing's plane). The first is
+ * sheared along x for each 1.4 m of it on the ground (it lies turned in the wing's plane). The first is
  * still attached; the breaks are 3.6 m wide. `rails`: the x of the two beams that run through the
  * breaks and hold the pieces, 0.45 m wide. Blue's is its twin.
  */
@@ -370,7 +370,7 @@ export interface Piece {
   min: Vec3;
   max: Vec3;
 }
-/** Red's pieces and the centre line's, as they are made: the level draws them as grey boxes until the ship is drawn on them (client/hulk.ts). */
+/** Red's pieces and the centre line's, as they are made: ghosts, collided with and drawn by the scenery (client/hulk.ts). */
 const mine: Piece[] = [];
 const line: Piece[] = [];
 const note = (l: Piece[], kind: string, b: Brush): Brush => {
@@ -548,31 +548,38 @@ const centre: Brush[] = [
 // ---------------------------------------------------------------------------------------------
 // Red's half.
 
+/** How much a row of the wing stands over the next at most, metres. */
+export const RISE = 0.15;
+/** How thick the wing is at a span, drawn and collided with: a thin aerofoil, 0.6 m at the root and 0.15 m at the tip. */
+export const thick = (v: number): number => 0.6 - (0.45 * v) / 47.5;
 /** An edge of the wing's outline at a span. */
-const edge = (l: number[][], v: number): number => {
+export const edge = (l: number[][], v: number): number => {
   const k = l.findIndex(p => p[1] > v);
   const [a, b] = [l[k - 1], l[k]];
   return a[0] + ((b[0] - a[0]) * (v - a[1])) / (b[1] - a[1]);
 };
 /**
  * The wing: each piece in rows across the span, a step down from one to the next, as wide as the
- * outline there; solid to the sand where a runner would not fit under it. Then the two rails
+ * outline there and as thin as the wing (thick()); solid to the sand where a runner would not fit under it. Then the two rails
  * across the break before it, level with the lower of its two lips.
  */
 const wing = (): Brush[] =>
   WING.pieces.flatMap(([v0, v1, push, y0, y1, shear], n) => {
     // From the lip of the fairing it lies against.
     const z = (v: number, out = push) => MID + HULL.r + SHIP[1].fair[1][2] + WING.span * v + out;
-    const rows = Math.ceil((z(v1) - z(v0)) / 1.4);
+    const coarse = Math.ceil((z(v1) - z(v0)) / 1.4);
+    // A row rises RISE at most over the next: a runner climbs it as a slope, and the drawn wing's
+    // top (client/hulk.ts) lies within half of that of every row's.
+    const rows = Math.max(coarse, Math.ceil((y0 - y1) / RISE - 1e-9) + 1);
     const last = WING.pieces[n - 1];
     return [
       ...Array.from({ length: rows }, (_, k) => {
         const v = v0 + ((v1 - v0) * (k + 0.5)) / rows;
-        const dx = shear * (k + 0.5 - rows / 2);
+        const dx = shear * coarse * ((k + 0.5) / rows - 0.5);
         const [xa, xb] = [WING.trail, WING.lead].map(l => Math.round(8 * (edge(l, v) + dx)) / 8);
         const [za, zb] = [k, k + 1].map(i => z(v0 + ((v1 - v0) * i) / rows));
         const y = y0 + ((y1 - y0) * k) / (rows - 1);
-        const low = y - 1.5 + v / 41;
+        const low = y - thick(v);
         const [hi, lo] = under(xa, za, xb, zb);
         return note(
           mine,

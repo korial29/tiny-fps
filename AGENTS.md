@@ -49,7 +49,13 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   menus, and `render.ts` the WebGL renderer. See [characters](docs/CHARACTERS.md)
   and [graphics](docs/GRAPHICS.md) for their specific work, and
   [design tools](docs/CHARACTERS.md#design-tools) for the turntable page and
-  Blender, which sketches shapes but never ships them. For audio start
+  Blender, which sketches shapes but never ships them. Before modelling a
+  large 3D shape whose silhouette decides how it reads (a ship, a vehicle, a
+  building, a creature, a weapon, a helmet), weigh a Blender blockout first
+  and say which way you went and why; small pieces go straight to code. When
+  briefing subagents on 3D work, name the pieces worth a blockout. One agent
+  at a time drives the live Blender: sketch before fanning out, and hand the
+  agreed numbers to the agents. For audio start
   with `audio.ts`, `voice/cast.ts`, `voice/clips.ts` (paths under
   `src/client/`) and the generators in `scripts/cast.py` and `scripts/voice.py`.
   Exclude `src/client/voice/{mp3,opus,cast-mp3,cast-opus}.ts` from general

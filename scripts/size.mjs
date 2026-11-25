@@ -91,7 +91,8 @@ const BUDGETS = [
   // 281,600 B: 256 B more for the Hunter's steadier arms and the long guns' hold in the hand (the user, 2026-11-25: raise it).
   // 282,112 B: 512 B more for the Hunter's strips and tassets hung on hinges, out of his thighs' way (the user, 2026-11-25: raise it).
   // 282,112 B until Landfall, the beach level: its sand, sea, forest and headlands (the user, 2026-11-25: 292,000 B).
-  { file: 'dist/index.js', max: 292_000 },
+  // 292,000 B until its wreck drawn on the map's boxes, its surf and its smoke (the user, 2026-11-25: 298,000 B).
+  { file: 'dist/index.js', max: 298_000 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

@@ -80,3 +80,19 @@ Target: 300,000 vertices at most (Tranquility: 436,467), match-frame JavaScript 
 - The sea is the last of the ground's vertices (`lagoon()`), drawn apart in two blended passes
   after the runners. Paint layers −5 (sea) and −1.09 (sand) are taken.
 - `LAYOUT.pieces` lists every drawn box by kind for the wreck's artist.
+
+## The wreck drawn, the mood, the bots (2026-11-25)
+
+- `hulk.ts` draws the ship on the map's boxes, which are ghosts (`LAYOUT.pieces`): 37,839 vertices.
+  The hull follows the terraces of `RINGS`, their corners cut, not a circle: a 7 m circle stood up
+  to 1.5 m off the ledges runners walk. Worst gap where a body touches: 0.28 m. A wing's top is the
+  plane through its steps' upper edges: a foot sinks 0 to 0.47 m in it.
+- `smoke.ts`: eight columns over the engines and the hull's broken ends, static balls the shader
+  turns to smoke (paint layer −6), one blended draw. `AIRS` in `sfx.ts` is a map's ambience: the
+  surf, the wind, insects, fire and gulls, scaled by where the listener stands.
+- Bots (`nav.ts`, `routes.ts`, `bot.ts`): no floor within 0.3 m of the kill floor, five routes on
+  the centre line a bot is given by its id, the lagoon's legs as links. Over 24 matches: east gap
+  1,130 crossings, west 1,053, hold 998, back 801, lagoon 516; no drowning; 113 wins for the north
+  camp against 115 for the south with the camps swapped.
+- Known: a bot can still stand on the middle section's shoulder west of x = 50 (a drop over 8 m);
+  the health pack by the hold's door stands on a panel 0.59 m high, a jump.

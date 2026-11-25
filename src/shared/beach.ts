@@ -375,7 +375,7 @@ const mine: Piece[] = [];
 const line: Piece[] = [];
 const note = (l: Piece[], kind: string, b: Brush): Brush => {
   l.push({ kind, min: b.min, max: b.max });
-  return b;
+  return ghost(b);
 };
 
 /** The highest and the lowest ground under a rectangle. */

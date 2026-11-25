@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, HOLD, HULL, LAYOUT, RINGS, ZED } from '../shared/beach';
+import { BEACH, HULL as SHAPE, LAYOUT, RISE, SHIP, ZED, thick } from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
-import { TEX } from '../shared/types';
-import { hulk, parts } from './hulk';
+import { HULL, hulk, parts } from './hulk';
 import { STRIDE } from './mesh';
 
 const MID = ZED / 2;
@@ -12,6 +11,8 @@ const count = (v: number[]) => v.length / STRIDE;
 const verts = (v: number[]) =>
   Array.from({ length: count(v) }, (_, i) => v.slice(i * STRIDE, (i + 1) * STRIDE));
 const of = (kind: string) => LAYOUT.pieces.filter(p => p.kind === kind);
+/** The section a point at x is in. */
+const sectionAt = (x: number) => SHAPE.sections.findIndex(([x0, x1]) => x >= x0 && x <= x1);
 
 /** How far a point is from the surface of the nearest of `boxes`, inside or out. */
 const gap = (p: number[], boxes: { min: number[]; max: number[] }[]) =>
@@ -22,6 +23,13 @@ const gap = (p: number[], boxes: { min: number[]; max: number[] }[]) =>
       return out > 0 ? out : -Math.max(...d);
     }),
   );
+/** The middles of a part's triangles in the hull's paint. */
+const painted = (v: number[]) => {
+  const l = verts(v);
+  return l
+    .filter((p, i) => i % 3 === 0 && p[8] === HULL)
+    .map((_, i) => [0, 1, 2].map(k => (l[3 * i][k] + l[3 * i + 1][k] + l[3 * i + 2][k]) / 3));
+};
 
 describe('hulk', () => {
   it('is the same every time: whole triangles of finite numbers, their normals unit', () => {
@@ -35,13 +43,14 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 80,000 vertices in all', () => {
-    expect(count(made.hull)).toBeLessThan(26_000);
-    expect(count(made.hold)).toBeLessThan(3_000);
-    expect(count(made.wings)).toBeLessThan(3_000);
-    expect(count(made.debris)).toBeLessThan(16_000);
-    expect(count(made.camps)).toBeLessThan(8_000);
-    expect(count(hulk(BEACH))).toBeLessThan(80_000);
+  it('keeps each part within its share: under 90,000 vertices in all', () => {
+    expect(count(made.hull)).toBeLessThan(27_000);
+    expect(count(made.ends)).toBeLessThan(2_500);
+    expect(count(made.inside)).toBeLessThan(16_000);
+    expect(count(made.wings)).toBeLessThan(7_000);
+    expect(count(made.debris)).toBeLessThan(18_000);
+    expect(count(made.camps)).toBeLessThan(6_000);
+    expect(count(hulk(BEACH))).toBeLessThan(90_000);
   });
 
   it('draws on boxes the level leaves out: every piece of the map is a ghost', () => {
@@ -53,94 +62,114 @@ describe('hulk', () => {
     }
   });
 
-  it('keeps the hull’s painted skin within 0.3 m of the boxes a body touches, clear of its ends', () => {
-    const boxes = [...of('hull'), ...of('hold')];
+  it('keeps the smooth skin within 0.3 m of the boxes where a body touches it: the flanks over each floor, the back, the ledges', () => {
+    const boxes = [...of('skin'), ...of('deck'), ...of('fairing')];
+    // Not where it is burnt (the teeth of the torn edges reach into the openings), not the nose
+    // past the wall in the trees, not under a fairing nor under the lowest floor, in the ground.
+    const skin = verts(made.hull).filter(
+      v =>
+        v[8] === HULL &&
+        v[6] > 0.3 &&
+        v[0] < 94 &&
+        !(v[4] < -0.2 && Math.abs(v[2] - MID) > 6.5 && v[1] > 3) &&
+        v[1] > SHAPE.axis[sectionAt(v[0])] - 5.01,
+    );
+    expect(skin.length).toBeGreaterThan(10_000);
     let worst = 0;
-    for (const [x0, x1] of HULL.sections) {
-      const skin = verts(made.hull).filter(
-        v =>
-          v[8] === TEX.PAINT && v[0] > x0 + 0.01 && v[0] < x1 - 0.01 && Math.abs(v[2] - MID) < 6.6,
-      );
-      expect(skin.length).toBeGreaterThan(2_000);
-      for (const v of skin) {
-        worst = Math.max(worst, Math.abs(gap(v, boxes)));
-      }
+    for (const v of skin) {
+      worst = Math.max(worst, Math.abs(gap(v, boxes)));
     }
     expect(worst).toBeLessThan(0.3);
+    // Smooth: no flat facet's normal on the flanks, each a blend of its neighbours'.
+    const flank = skin.filter(v => Math.abs(v[2] - MID) > 5 && v[0] > 46 && v[0] < 72);
+    expect(new Set(flank.map(v => v[4].toFixed(3))).size).toBeGreaterThan(12);
   });
 
   it('draws the walked back of each section where its flat top is, facing up', () => {
-    HULL.sections.forEach(([x0, x1], n) => {
-      const y = HULL.axis[n] + HULL.r;
+    SHAPE.sections.forEach(([x0], n) => {
+      const y = SHAPE.axis[n] + SHAPE.r;
       const back = verts(made.hull).filter(
-        v =>
-          v[8] === TEX.PAINT &&
-          v[4] > 0.99 &&
-          Math.abs(v[1] - y) < 1e-9 &&
-          v[0] >= x0 &&
-          v[0] <= x1,
+        v => v[8] === HULL && v[4] > 0.99 && Math.abs(v[1] - y) < 1e-9 && sectionAt(v[0]) === n,
       );
       const xs = back.map(v => v[0]);
-      const zs = back.map(v => v[2] - MID);
-      expect([Math.min(...xs), Math.max(...xs)]).toEqual([x0, x1]);
-      // 0.3 m short of the back's edge on each side, where its corner is cut.
-      expect(Math.min(...zs)).toBeCloseTo(-RINGS[3][1] + 0.3, 9);
-      expect(Math.max(...zs)).toBeCloseTo(RINGS[3][1] - 0.3, 9);
+      expect(Math.min(...xs)).toBe(x0);
+      expect(Math.max(...xs)).toBeGreaterThan(n > 1 ? 91 : SHAPE.sections[n][1] - 1e-9);
+      expect(back.some(v => v[2] === MID)).toBe(true);
     });
-  });
-
-  it('leaves the hold’s side doors open in the skin and floors the hold', () => {
-    const { door, floor, lintel, half } = HOLD;
-    const skin = verts(made.hull);
-    /** The skin's triangles on a flank between the floor and the lintel whose middle is between two x. */
-    const flank = (x0: number, x1: number) =>
-      skin.filter((v, i) => {
-        const t = skin.slice(i - (i % 3), i - (i % 3) + 3);
-        const at = [0, 1, 2].map(k => (t[0][k] + t[1][k] + t[2][k]) / 3);
-        return (
-          i % 3 === 0 &&
-          v[8] === TEX.PAINT &&
-          Math.abs(Math.abs(at[2] - MID) - RINGS[0][1]) < 1e-9 &&
-          at[0] > x0 &&
-          at[0] < x1 &&
-          at[1] > floor &&
-          at[1] < floor + lintel
-        );
-      }).length;
-    expect(flank(door[0], door[1])).toBe(0);
-    expect(flank(door[0] - 1.5, door[0])).toBe(4);
-    expect(flank(door[1], door[1] + 1.5)).toBe(4);
-    const shut = verts(made.hull).filter(
-      v => v[8] === TEX.PAINT && v[1] === floor && (v[0] === door[0] || v[0] === door[1]),
+    // The fairings' ledges on the middle section, where they are walked.
+    const ledge = verts(made.hull).filter(
+      v => v[4] > 0.9 && Math.abs(v[1] - 8.5) < 1e-9 && Math.abs(v[2] - MID) > 10,
     );
-    expect(shut.length).toBeGreaterThan(0);
-    const grate = verts(made.hold).filter(v => v[8] === TEX.GRATE && v[1] === floor);
-    expect(Math.max(...grate.map(v => Math.abs(v[2] - MID)))).toBeCloseTo(RINGS[0][1], 9);
-    expect(grate.some(v => Math.abs(v[2] - MID) === half)).toBe(true);
+    expect(ledge.length).toBeGreaterThan(40);
   });
 
-  it('lays each wing’s top on the line of its steps’ upper edges: a foot sinks a step at most and never floats', () => {
-    for (const red of [true, false]) {
-      const steps = of('wing').filter(p => p.min[2] > MID === red);
-      const top = verts(made.wings).filter(
-        v =>
-          v[8] === TEX.PAINT && v[4] > 0.9 && v[2] > MID === red && v[1] > steps[0].max[1] - 1e-9,
-      );
-      expect(top.length).toBeGreaterThanOrEqual(6 * steps.length);
-      const rise = steps[1].max[1] - steps[0].max[1];
-      expect(rise).toBeCloseTo(0.466, 2);
-      /** The drawn top's height where it crosses z: between the two edges it runs straight. */
-      const drawn = (z: number) => {
-        const d = (v: number[]) => Math.abs(v[2] - z);
-        return top.reduce((a, v) => (d(v) < d(a) ? v : a))[1];
-      };
-      for (const p of steps) {
-        const [near, far] = red ? [p.max[2], p.min[2]] : [p.min[2], p.max[2]];
-        expect(drawn(near)).toBeCloseTo(p.max[1], 9);
-        expect(drawn(far) - p.max[1]).toBeGreaterThan(-1e-9);
-        expect(drawn(far) - p.max[1]).toBeLessThan(rise + 1e-9);
+  it('opens the skin where the map is open: the tears in the flanks and the holes in the back', () => {
+    const at = painted(made.hull);
+    SHIP.forEach(({ tears, holes }, n) => {
+      const c = SHAPE.axis[n];
+      for (const [x0, x1, a, b] of tears) {
+        const inside = (p: number[], grow: number) =>
+          Math.abs(p[2] - MID) > 4 &&
+          p[0] > x0 - grow &&
+          p[0] < x1 + grow &&
+          p[1] > c + a - grow &&
+          p[1] < c + b + grow;
+        // Nothing but the teeth of its torn edge within 0.45 m of them, and skin all round it.
+        const far = (p: number[]) => inside(p, -0.45);
+        expect(at.filter(far), `tear at ${x0}`).toHaveLength(0);
+        expect(at.filter(p => inside(p, 1.5)).length).toBeGreaterThan(40);
+      }
+      for (const [deck, x0, x1] of holes.filter(e => e[0] === 2)) {
+        const hole = at.filter(
+          p => p[1] > c + 6.99 && Math.abs(p[2] - MID) < 0.8 && p[0] > x0 && p[0] < x1,
+        );
+        expect(hole, `hole ${deck} at ${x0}`).toHaveLength(0);
+        expect(
+          at.filter(p => p[1] > c + 6.99 && p[0] > x0 - 1.5 && p[0] < x1 + 1.5).length,
+        ).toBeGreaterThan(8);
+      }
+    });
+    // The lining is open there too: one sees in, and out.
+    const [x0, x1, a, b] = SHIP[1].tears[1];
+    const lining = verts(made.inside).filter(
+      (v, i) =>
+        i % 6 === 0 &&
+        Math.abs(v[3]) < 0.01 &&
+        Math.abs(v[2] - MID) > 5.9 &&
+        v[0] > x0 &&
+        v[0] < x1 - 0.5 &&
+        v[1] > SHAPE.axis[1] + a &&
+        v[1] < SHAPE.axis[1] + b - 0.5,
+    );
+    expect(lining).toHaveLength(0);
+  });
+
+  it('lays each wing as thin slabs through the tops of its rows: a foot sinks or floats half a row’s rise at most', () => {
+    const rows = of('wingpiece');
+    const skin = verts(made.wings).filter(v => v[8] === HULL);
+    const top = skin.filter(v => v[4] > 0.9);
+    expect(top.length).toBeGreaterThan(1_000);
+    let worst = 0;
+    let found = 0;
+    for (const v of top) {
+      const row = rows.find(p => v[2] >= p.min[2] - 1e-6 && v[2] <= p.max[2] + 1e-6);
+      if (row) {
+        found++;
+        worst = Math.max(worst, Math.abs(v[1] - row.max[1]));
       }
     }
+    expect(found).toBeGreaterThan(900);
+    expect(worst).toBeLessThanOrEqual(RISE / 2 + 1e-6);
+    // Thin: the underside no deeper under a row's top than the wing is thick there, 0.6 m at the root.
+    for (const v of skin.filter(p => p[4] < -0.5)) {
+      const row = rows.find(p => v[2] >= p.min[2] - 1e-6 && v[2] <= p.max[2] + 1e-6);
+      if (row) {
+        expect(row.max[1] - v[1]).toBeLessThan(thick(0) + RISE / 2 + 1e-6);
+        expect(row.max[1] - v[1]).toBeGreaterThan(-RISE / 2 - 1e-6);
+      }
+    }
+    expect(thick(0)).toBeCloseTo(0.6, 9);
+    expect(thick(47.5)).toBeCloseTo(0.15, 9);
   });
 
   it('draws every piece of debris and of the camps on its box, twins alike', () => {
@@ -151,6 +180,7 @@ describe('hulk', () => {
       'raft',
       'engine',
       'float',
+      'rail',
       'pod',
       'dais',
       'crate',
@@ -166,6 +196,17 @@ describe('hulk', () => {
             .length,
       );
       expect(Math.min(...n), kind).toBeGreaterThanOrEqual(24);
+    }
+    // The fallen engine lies on its strips, one in each half.
+    for (const red of [true, false]) {
+      const strips = of('fallen').filter(p => p.min[2] > MID === red);
+      const on = all.filter(v =>
+        strips.some(
+          ({ min, max }) =>
+            [0, 2].every(i => v[i] > min[i] && v[i] < max[i]) && v[1] < max[1] + 0.1,
+        ),
+      );
+      expect(on.length).toBeGreaterThan(600);
     }
     // Red's and blue's are twins: as many vertices on each side of the line.
     for (const part of [made.camps, made.wings]) {

@@ -239,7 +239,7 @@ describe('LANDFALL, symmetry', () => {
       ).toBe(true);
     }
     // Every box of the wreck is a piece, and a ghost: hulk.ts draws the ship on them.
-    expect(solid.every(b => !b.ghost)).toBe(true);
+    expect(solid.every(b => b.ghost)).toBe(true);
     expect(LAYOUT.pieces).toHaveLength(solid.length);
     expect(LAYOUT.hull).toEqual(HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]));
     expect(LAYOUT.crags).toHaveLength(2 * ROCKS.length);

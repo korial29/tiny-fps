@@ -10,6 +10,7 @@ import {
   anthem,
   moon,
   music,
+  sky,
   blaze,
   breeze,
   chirr,
@@ -510,9 +511,50 @@ describe('the moon\u2019s music', () => {
     expect(Math.min(...times)).toBeLessThan(1000);
   });
 
-  it('is the moon\u2019s alone: every other map plays music()', () => {
+  it('is the moon\u2019s alone: Highline has its own, the other maps play music()', () => {
     expect(SONGS.tranquility).toBe(moon);
-    expect(SONGS.highline).toBeUndefined();
+    expect(SONGS.highline).toBe(sky);
+    expect(SONGS.rooftops).toBeUndefined();
+  });
+});
+
+describe('Highline\u2019s music (the user, 2026-11-25: 8-bit, more rhythm, still airy and light)', () => {
+  // Best of three, as the moon's.
+  const times: number[] = [];
+  const m = Array.from({ length: 3 }, () => {
+    const t0 = performance.now();
+    const out = sky();
+    times.push(performance.now() - t0);
+    return out;
+  })[0];
+
+  it('is deterministic', () => {
+    expect(Buffer.from(sky().buffer).equals(Buffer.from(m.buffer))).toBe(true);
+  });
+
+  it('is thirty-two bars at 135 bpm, a whole number of samples a sixteenth', () => {
+    expect((m.length * 135 * 4) / (MUSIC_RATE * 60)).toBe(32 * 16);
+    expect((MUSIC_RATE * 15) % 135).toBe(0);
+    expect(m.length / MUSIC_RATE).toBeCloseTo(57, 0);
+  });
+
+  it('peaks as the moon\u2019s and is about as loud as the other music', () => {
+    expect(peak(m)).toBeCloseTo(0.26, 5);
+    const ratio = rms(m) / rms(music());
+    expect(ratio).toBeGreaterThan(0.6);
+    expect(ratio).toBeLessThan(1.2);
+  });
+
+  it('loops without a jump: the step from the end to the start is no bigger than any other', () => {
+    let most = 0;
+    for (let i = 1; i < m.length; i++) {
+      most = Math.max(most, Math.abs(m[i] - m[i - 1]));
+    }
+    expect(Math.abs(m[0] - m[m.length - 1])).toBeLessThanOrEqual(most);
+  });
+
+  it('renders fast', () => {
+    expect(Math.min(...times)).toBeLessThan(1000);
   });
 });
 

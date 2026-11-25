@@ -918,5 +918,13 @@ export const parts = (def: WorldDef) => {
   };
 };
 
+/**
+ * Whether the ship is drawn here. Not while the wreck is a grey box being played: parts() still
+ * draws the first hull (terraces, a wing up to its back), which the map's boxes no longer are, so
+ * the level draws the boxes themselves (shared/beach.ts) until the ship is drawn again on them.
+ */
+export const SHIP_DRAWN: boolean = false;
+
 /** Its vertices, in the renderer's format. */
-export const hulk = (def: WorldDef): number[] => Object.values(parts(def)).flat();
+export const hulk = (def: WorldDef): number[] =>
+  SHIP_DRAWN ? Object.values(parts(def)).flat() : [];

@@ -1229,6 +1229,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let post: WebGLProgram;
   let pu: Record<string, WebGLUniformLocation> = {};
   let fmt: number;
+  /** The format of the small targets: the globe's, whose alpha is read, and the bloom's blurs. */
+  let wide: number;
   // The multisampled target the scene draws into, and the texture it is resolved to.
   let msaa: WebGLFramebuffer;
   let hdr: Target;
@@ -1352,11 +1354,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     ] as const;
   };
 
-  /** A w x h texture with a framebuffer to draw into it. */
-  const target = (w: number, h: number): Target => {
+  /** A w x h texture with a framebuffer to draw into it, in `format` (the scene's by default). */
+  const target = (w: number, h: number, format = fmt): Target => {
     const t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, format, w, h);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1376,8 +1378,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     owned.splice(0).forEach(free => free());
     made = [w, h];
     hdr = target(w, h);
-    orb = !moonly(world.def) ? undefined : target((w + 1) >> 1, (h + 1) >> 1);
-    bloom = [1, 2, 3].map(i => [0, 1].map(() => target(w >> i || 1, h >> i || 1))) as typeof bloom;
+    // The globe keeps its alpha: the crater fades into it by that share (Og in FRAG).
+    orb = !moonly(world.def) ? undefined : target((w + 1) >> 1, (h + 1) >> 1, wide);
+    // The blurs keep 16-bit floats: at 11 and 10 bits their sums moved the halos by up to 15 levels.
+    bloom = [1, 2, 3].map(i =>
+      [0, 1].map(() => target(w >> i || 1, h >> i || 1, wide)),
+    ) as typeof bloom;
     const rb = (format: number) => {
       const r = gl.createRenderbuffer();
       gl.bindRenderbuffer(gl.RENDERBUFFER, r);
@@ -1421,7 +1427,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   // Everything GL owns goes with a lost context: set it all up again on restore.
   const setup = () => {
     // Without it the scene can only be 8-bit: lights above 1 clip instead of reaching the post pass.
-    fmt = gl.getExtension('EXT_color_buffer_float') ? gl.RGBA16F : gl.RGBA8;
+    // Three floats of 11, 11 and 10 bits, no alpha: half the bytes of RGBA16F for each of the 4
+    // samples a pixel the scene writes, resolves and blurs. Nothing reads the scene's alpha back.
+    const linear = !!gl.getExtension('EXT_color_buffer_float');
+    fmt = linear ? gl.R11F_G11F_B10F : gl.RGBA8;
+    wide = linear ? gl.RGBA16F : gl.RGBA8;
     owned.length = 0;
     made = [0, 0];
     asides.clear();

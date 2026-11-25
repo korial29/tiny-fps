@@ -97,7 +97,8 @@ const BUDGETS = [
   // (the user, 2026-11-25: 5,000 B more, agreed as 303,000 B before the music's 1,000 B landed).
   // 278,400 B: Tranquility's and Landfall's scenery loaded in their own chunks (the user, 2026-11-25: lower it, then 278,400 B after Landfall's reworked ship).
   // 278,528 B: the scene's targets in 11-11-10 bit floats (the user, 2026-11-25).
-  { file: 'dist/index.js', max: 278_528 },
+  // 279,168 B: the map cut into runs that each pass culls (the user, 2026-11-25).
+  { file: 'dist/index.js', max: 279_168 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

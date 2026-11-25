@@ -39,7 +39,10 @@ import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { furnishing } from './moonbase';
 import { hangar, satellite } from './satellite';
 import { mouths, rooms } from '../shared/station';
+import { jungle } from './jungle';
 import { HEAVENS, heavens, moonscape } from './moonscape';
+import { shore } from './shore';
+import { hulk } from './hulk';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, rackWeapon, vest, vestMesh } from './props';
@@ -849,13 +852,22 @@ export const scenery = (world: World): number[] =>
         ...zones(world.def),
         ...heavens(),
       ]
-    : [
-        ...level(city(world)),
-        ...street(world.def),
-        ...trees(world.def),
-        ...vision(world.def),
-        ...zones(world.def),
-      ];
+    : world.def.scenery === 'beach'
+      ? [
+          ...level(world),
+          ...shore(world.def),
+          ...jungle(world.def),
+          ...hulk(world.def),
+          ...vision(world.def),
+          ...zones(world.def),
+        ]
+      : [
+          ...level(city(world)),
+          ...street(world.def),
+          ...trees(world.def),
+          ...vision(world.def),
+          ...zones(world.def),
+        ];
 
 /** The height the fog layer is anchored at: the lowest top of the world, so that at a roof the layer is a few percent of the haze at most. */
 export const fogRef = ({ brushes }: WorldDef) => Math.min(...brushes.map(b => b.max[1]));
@@ -1066,8 +1078,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World): Rendere
     HTMLCanvasElement,
     { key: string; r: Runner; model: PlayerState; at: number }
   >();
-  // The moon has no traffic.
-  const drive = world.def.scenery === 'moon' ? () => {} : traffic(world.def);
+  // Only the city has traffic.
+  const drive = world.def.scenery ? () => {} : traffic(world.def);
   const { sun, sky } = world.def;
   const sunDir = sun.dir.map(v => v / Math.hypot(...sun.dir)) as Vec3;
   const pixels = textures();

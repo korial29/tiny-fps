@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, FRAME, ROCKS, TRUNKS, ZED, walked } from '../shared/beach';
+import { BEACH, EDGE, FRAME, HULL, ROCKS, TRUNKS, ZED, walked } from '../shared/beach';
 import { rockMid, rockOf } from '../shared/moon';
 import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
@@ -47,6 +47,7 @@ describe('jungle', () => {
     expect(count(made.forest)).toBeLessThan(33_000);
     expect(count(made.brush)).toBeLessThan(21_000);
     expect(count(made.canopy)).toBeLessThan(12_500);
+    expect(count(made.snags)).toBeLessThan(4_000);
     expect(count(jungle(BEACH))).toBeLessThan(150_000);
   });
 
@@ -98,10 +99,39 @@ describe('jungle', () => {
   });
 
   it('closes the view from the sand: a wall of leaves over a runner behind the first row, no gap along it', () => {
-    const wall = verts(made.canopy).filter(v => v[0] < FRAME.east + 12 && v[1] > 6);
+    const wall = verts(made.canopy).filter(v => v[1] > 6);
     for (let z = 4; z < ZED; z += 4) {
-      expect(wall.some(v => Math.abs(v[2] - z) < 2)).toBe(true);
+      // Round the nose the fire took the wall: the hull closes the view there, and the forest further in.
+      const back = Math.abs(z - ZED / 2) < 30 ? 30 : 12;
+      expect(wall.some(v => v[0] < FRAME.east + back && Math.abs(v[2] - z) < 2)).toBe(true);
     }
+  });
+
+  it('is broken and burnt where the ship ended: stumps past the wall, ash ahead of the nose, green again further out', () => {
+    const [tip, mid] = [HULL.sections[2][1], ZED / 2];
+    const snags = verts(made.snags);
+    expect(snags.length).toBeGreaterThan(1_500);
+    // Drawn only: past the ghost wall, round the nose, charred wood and dry fronds.
+    expect(Math.min(...snags.map(v => v[0]))).toBeGreaterThan(EDGE.east);
+    expect(snags.every(v => Math.abs(v[2] - mid) < 40 && v[0] < tip + 35)).toBe(true);
+    expect(snags.every(v => v[6] >= v[7] && v[7] < 0.14)).toBe(true);
+    // Snapped off at different heights: low stumps and trunks still standing.
+    const tops = snags.map(v => v[1] - walked(v[0], v[2]));
+    expect(Math.max(...tops)).toBeGreaterThan(4);
+    expect(tops.filter(y => y < 1.5).length).toBeGreaterThan(snags.length / 3);
+    // Before the nose nothing stands: the mass of leaves is down on the ground, the trees and the undergrowth gone.
+    for (const part of [made.forest, made.brush, made.canopy]) {
+      const left = verts(part).filter(v => Math.hypot(v[0] - tip - 4, v[2] - mid) < 8);
+      expect(left.every(v => v[1] < walked(v[0], v[2]) + 0.2)).toBe(true);
+    }
+    // Burnt there, green 60 m along the beach.
+    const leaves = (z: number) =>
+      verts(made.canopy).filter(v => Math.hypot(v[0] - tip - 4, v[2] - z) < 8);
+    expect(leaves(mid).length).toBeGreaterThan(10);
+    expect(leaves(mid).every(v => v[6] > v[7])).toBe(true);
+    expect(leaves(mid + 60).every(v => v[7] > v[6])).toBe(true);
+    // The first row is collision: every palm of it still stands (the test above), singed at most.
+    expect(count(made.palms)).toBe(29_736);
   });
 
   it('stands on the relief where there is one', () => {

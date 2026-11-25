@@ -32,6 +32,39 @@ const sm = (t: number) => {
   return t * t * (3 - 2 * t);
 };
 
+/**
+ * How burnt the forest is at (x, z), 0 to 1: a fan round the nose and ahead of it, where the ship
+ * ended, burnt out in its middle and ragged at its edge. None on the sand's side of the first
+ * trunks. `wide` is its reach: the heat browned the leaves further out than the fire felled the trees.
+ */
+const burn = (x: number, z: number, wide = 1.15) => {
+  const [u, v] = [(x - HULL.sections[2][1] + 2) / 32, (z - ZED / 2) / 26];
+  const d = u * u + v * v;
+  return d < 3
+    ? sm(2.2 * (wide - Math.sqrt(d) - 0.3 * noise(x / 7, z / 7, 6))) *
+        sm((x - FRAME.trees + 6) / 10)
+    : 0;
+};
+/** Scorched leaves, and charred wood. */
+const [DRY, CHAR] = [
+  [0.2, 0.13, 0.06],
+  [0.05, 0.045, 0.04],
+];
+/** The fire's mark on what stands in it: leaves and bark go brown, then black, by `burn` at each vertex. */
+const singe = (o: number[]) => {
+  for (let i = 0; i < o.length; i += STRIDE) {
+    const b = burn(o[i], o[i + 2], 1.3);
+    if (b > 0) {
+      // As light a brown as it was a green, so a dark mass of leaves stays one.
+      const [k, d, g] = [Math.min(2 * b, 1), 1 - Math.max(2 * b - 1.2, 0), 4 * o[i + 7]];
+      for (let m = 0; m < 3; m++) {
+        const c = i + (m < 2 ? 6 + m : 9);
+        o[c] = (o[c] + (DRY[m] * g - o[c]) * k) * d;
+      }
+    }
+  }
+};
+
 /** The line at s metres along it: x, z and the way out of the beach. Its second half is the first one's mirror. */
 const edge = (s: number): number[] => {
   if (s > LEN / 2) {
@@ -238,6 +271,42 @@ const tree = (o: number[], x: number, y: number, z: number, s: number, far: bool
   }
 };
 
+/**
+ * What the crash left of a tree whose foot is at (x, z), seed s: a black stump snapped off low or
+ * a trunk broken higher up, leaning the way the ship pushed it, forward and away from the centre
+ * line, splinters at the break. Most have their top on the ground on that side, still hinged to a
+ * low stump or lying by a high one, a few dead fronds at its end; a tall one keeps some hanging.
+ */
+const snag = (o: number[], gy: Ground, x: number, z: number, s: number) => {
+  const h = (k: number) => hash(s, k, 81);
+  const a = (z < ZED / 2 ? -1 : 1) * (0.3 + 1.1 * h(1));
+  const [c, d, y] = [Math.cos(a), Math.sin(a), gy(x, z)];
+  const [tall, r, len] = [0.5 + 6 * h(2) * h(2), 0.2 + 0.14 * h(3), 4 + 5 * h(4)];
+  const tone = CHAR.map(v => v * (0.6 + 0.9 * h(5)));
+  const top: Vec3 = [x + 0.25 * tall * c, y + tall, z + 0.25 * tall * d];
+  segment(o, BOLE[1], [x, y - r, z], top, [1, 0, 0], 1, r, tone);
+  for (let i = 0; i < 2; i++) {
+    frond(o, top, TAU * h(6 + i), 2.5, 0.5 + 0.6 * h(8 + i), 0.5 * r, 1, tone);
+  }
+  const end: Vec3 = [x + len * c, gy(x + len * c, z + len * d) + r, z + len * d];
+  const fallen = h(10) < 0.7;
+  if (fallen) {
+    segment(o, BOLE[1], tall < 2.5 ? top : [x, y + r, z], end, [0, 1, 0], 1, 0.8 * r, tone);
+  }
+  for (let i = 0; i < 2 && (fallen || tall > 3.5); i++) {
+    frond(
+      o,
+      fallen ? end : top,
+      a + 5 * h(11 + i),
+      fallen ? 0.5 : -0.2,
+      2 + h(13 + i),
+      0.5,
+      3,
+      DRY,
+    );
+  }
+};
+
 /** A rosette of feathers on the ground: a fern (`big` 0), or the broad leaves of a banana plant. */
 const fern = (o: number[], x: number, y: number, z: number, s: number, big: number) => {
   const h = (k: number) => hash(s, k, 79);
@@ -353,10 +422,14 @@ const canopy = (o: number[], tufts: number[], gy: Ground) => {
       const q = (i * m + j) * 4;
       p[q] = x + (hash(i, j, 61) - 0.5) * Math.min(d, 3);
       p[q + 2] = z + (hash(i, j, 62) - 0.5) * Math.min(d, 3);
+      // Where it burnt the mass is down on its own ground, not on the line's: ash, under the stumps' feet.
+      const b = sm(2.5 * burn(x, z));
       p[q + 1] =
-        g -
+        g +
+        (gy(x, z) - g) * b -
         0.4 +
         k *
+          (1 - b) *
           (rise(d) +
             // Hills inland, over the trees' line from the sand.
             40 * sm((d - 25) / 95) * (0.4 + 0.6 * noise(x / 70, z / 70, 5)) +
@@ -367,7 +440,7 @@ const canopy = (o: number[], tufts: number[], gy: Ground) => {
       // Darker inland: hills of forest, not of grass.
       p[q + 3] = (0.4 * (lump / 1.5 + 0.5) + 0.6 * hash(i, j, 64)) * (1 - 0.5 * sm((d - 20) / 50));
       // On the wall a player sees close up, two sprigs a point: leaves that stick out of it and break its facets.
-      for (let f = 0; k > 0.3 && j && j < 6 && f < 2; f++) {
+      for (let f = 0; k > 0.3 && b < 0.9 && j && j < 6 && f < 2; f++) {
         const r = (c: number) => hash(i * 2 + f, j, 65 + c);
         const [, , nx, nz] = edge(s);
         frond(
@@ -408,7 +481,8 @@ const canopy = (o: number[], tufts: number[], gy: Ground) => {
 /**
  * Landfall's forest and headlands by part, each its vertices in the renderer's format: the
  * headlands' rocks, the first row's palms (TRUNKS and their twins), the trees behind, the
- * undergrowth and the far canopy. The lists and the relief are read here, at the call.
+ * undergrowth and the far canopy, and what the crash broke and burnt of them round the nose, past
+ * the first trunks. The lists and the relief are read here, at the call.
  */
 export const parts = (def: WorldDef) => {
   const w = def.relief && ({ relief: raise(def.relief) } as World);
@@ -431,6 +505,7 @@ export const parts = (def: WorldDef) => {
 
   // Behind the line: rows of trees, palms in front and broadleaves further in, cheaper with the distance.
   const forest: number[] = [];
+  const snags: number[] = [];
   [2, 6, 11, 17, 24].forEach((d, row) => {
     const step = row < 2 ? 7.5 : 7;
     for (let i = 0; i * step < LEN; i++) {
@@ -441,8 +516,14 @@ export const parts = (def: WorldDef) => {
       if (h(3) > 0.85 * k) {
         continue;
       }
+      // Where the fire went through, what is left of it.
+      const b = burn(x, z);
+      if (b > 0.3) {
+        snag(snags, gy, x, z, 1000 + row * 100 + i);
+        continue;
+      }
       // Deep in the mass a tree stands in it: its crown comes out, its trunk is not seen.
-      const y = gy(x, z) + Math.max(k * rise(far) - 5, 0);
+      const y = gy(x, z) + Math.max(k * (1 - sm(2.5 * b)) * rise(far) - 5, 0);
       const [, , nx, nz] = edge(s);
       const seed = 1000 + row * 100 + i;
       if (h(4) > 0.25 + 0.15 * row) {
@@ -455,12 +536,19 @@ export const parts = (def: WorldDef) => {
     }
   });
 
+  // More of them in the clearing the nose made, on each side of it.
+  for (let i = 0; i < 18; i++) {
+    const h = (k: number) => hash(i, k, 88);
+    const d = HULL.r + 2 + 14 * h(2);
+    snag(snags, gy, EDGE + 1 + 16 * h(1), ZED / 2 + (i & 1 ? d : -d), i);
+  }
+
   // Before the line, among the first trunks: ferns, then the broad leaves and the bushes the wall of leaves stands behind.
   const brush: number[] = [];
   for (let i = 0; i * 4 < LEN; i++) {
     const h = (k: number) => hash(i, k, 86);
     const [x, z, k] = spot((i + h(1)) * 4, -0.5 - 3 * h(2) * h(2));
-    if (h(3) < k) {
+    if (h(3) < k && burn(x, z) < 0.3) {
       fern(brush, x, gy(x, z), z, i, 0);
     }
   }
@@ -468,7 +556,7 @@ export const parts = (def: WorldDef) => {
     const h = (k: number) => hash(i, k, 87);
     const [x, z, k] = spot((i + h(1)) * 2.4, 0.8 - 2.3 * h(2));
     const w = 1 + 0.8 * h(4);
-    if (h(3) > k) {
+    if (h(3) > k || burn(x, z) > 0.3) {
       continue;
     }
     if (h(5) < 0.6) {
@@ -488,7 +576,8 @@ export const parts = (def: WorldDef) => {
 
   const far: number[] = [];
   canopy(far, brush, gy);
-  return { rocks, palms, forest, brush, canopy: far };
+  [palms, forest, brush, far].forEach(singe);
+  return { rocks, palms, forest, brush, canopy: far, snags };
 };
 
 /** Its vertices, in the renderer's format. */

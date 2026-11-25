@@ -102,3 +102,39 @@ Target: 300,000 vertices at most (Tranquility: 436,467), match-frame JavaScript 
   floating over it.
 - Known: a bot can still stand on the middle section's shoulder west of x = 50 (a drop over 8 m);
   the health pack by the hold's door stands on a panel 0.59 m high, a jump.
+
+## The ship reworked (the user, 2026-11-25)
+
+The first wreck read as a pipe in terraces. Its shape was blocked out in Blender with the user
+(nothing of it ships), then written again here. What follows replaces the hull, the wings and the
+bots' routes described above.
+
+- **Hull** (`SHIP`, `LINES`, `DECKS`, `section()` in `beach.ts`): round and hollow, a shell 0.85 m
+  thick, the backs where they were (11, 13.25, 14.5 m). Each section has a floor and two decks: the
+  middle one the hold (1.25 m), a deck (4.5 m) and the gallery (8.5 m). Tears in both flanks at
+  every level, holes in the back and in the decks offset from one level to the next, the broken
+  ends open on the gaps, a crate under every hole that is climbed (a jump, then a pull up).
+- **Fairings**: a shoulder along each flank at the belt; on the middle section its top is a ledge
+  at 8.5 m, level with the gallery.
+- **Wings** (`WING`, `thick()`): from the fairing's ledge down to the sand in three pieces, two
+  breaks of 3.6 m crossed by a walking jump or on one of two rails 0.45 m wide. Thin: 0.6 m at the
+  root, 0.15 m at the tip, drawn and collided alike. Rows rise 0.15 m at most, so a foot is within
+  0.075 m of the drawn plane.
+- **Engines**: both flank engines are torn off, one on the sand in each half (`ENGINES[0]`,
+  about (38.5, 125.3) for red), burning; the tail keeps its main bell and two stubs.
+- **Drawn** (`hulk.ts`): one lofted skin a section with smoothed normals, gloss white (paint layer
+  −1.05 under `BEACH`: the sky mirrored with a fresnel, a sun glint, panel lines), soot round the
+  tears. A nose after Tranquility's ship, its canopy panes of the skin itself; two canted fins,
+  blue's snapped. 67,722 vertices. Worst gap to the collision where a body touches: 0.28 m.
+- **The ground under it** (`shore.ts`, `jungle.ts`): the furrow is cracked ash, plates of 0.3 to
+  1 m with dark sunk cracks, a few glowing, out to the banks, then scorched sand; the trees ahead
+  of the nose are snapped and burnt (`snags`), the undergrowth gone in a fan.
+- **Ways across**, a runner from red's spawn to blue's flag: west gap 21.3 s, hold 22.0 s, high
+  road (wing, ledge, gallery, wing) 23.1 s by jumps and 25.9 s on the rails, east gap 25.8 s,
+  lagoon 26.9 s. The back is also reached from the ledge by two jumps up the skin.
+- **Bots**: the nav joins no two floors with a third between them, knows a jump and pull up of at
+  most 2.8 m as a link, and keeps five ways on the line (any floor over 4 m is the high road).
+  Over 144 matches the camps score 51 % and 49 %.
+- Known: fins and stubs are drawn only; the sand banked under a wing's solid rows is a wall; the
+  wing's root is free between x 45 and 55; bots rarely go up inside the hull; no frame time was
+  measured with the new ship and the ash.

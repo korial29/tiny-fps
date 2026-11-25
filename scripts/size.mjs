@@ -93,7 +93,9 @@ const BUDGETS = [
   // 282,112 B until Landfall, the beach level: its sand, sea, forest and headlands (the user, 2026-11-25: 292,000 B).
   // 292,000 B until its wreck drawn on the map's boxes, its surf and its smoke (the user, 2026-11-25: 298,000 B).
   // 298,000 B until Highline's own music (the user, 2026-11-25: 299,000 B).
-  { file: 'dist/index.js', max: 299_000 },
+  // 299,000 B until Landfall's ship drawn smooth and gloss white on a hollow hull, and the ash under it
+  // (the user, 2026-11-25: 5,000 B more, agreed as 303,000 B before the music's 1,000 B landed).
+  { file: 'dist/index.js', max: 304_000 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -102,7 +104,8 @@ const BUDGETS = [
   // 51 KB until the bots' fair fights and team play (the user, 2026-11-20: 52 KB).
   // 52 KB + 1024 B until the bot and vehicle simulation speed-ups and the Hunter's weapons (#338, 2026-11-20).
   // 53 KB until Landfall's map, its relief, wreck and debris (the user, 2026-11-25: 58,000 B).
-  { file: 'dist/local.js', max: 58_000 },
+  // 58,000 B until Landfall's hollow hull and the bots' pull ups through its decks (the user, 2026-11-25: 58,500 B).
+  { file: 'dist/local.js', max: 58_500 },
 ];
 
 // An entry plus every chunk it statically imports, concatenated.

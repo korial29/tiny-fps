@@ -94,12 +94,13 @@ const inArea = (p: PlayerState) =>
   p.y >= DEPTH - 1e-3;
 
 describe('LANDFALL', () => {
-  it('is the beach level: full gravity, the beach scenery, no helmet, a high warm sun, a light haze', () => {
+  it("is the beach level: full gravity, the beach scenery, Highline's armour and no helmet, a high warm sun, a light haze", () => {
     expect(MAPS.landfall).toBe(BEACH);
     expect(BEACH.name).toBe('Landfall');
     expect(BEACH.gravity ?? 1).toBe(1);
     expect(BEACH.scenery).toBe('beach');
     expect(BEACH.helmets ?? false).toBe(false);
+    expect(BEACH.armor).toBe(true);
     expect(BEACH.rovers ?? []).toHaveLength(0);
     expect(Math.hypot(...BEACH.sun.dir)).toBeCloseTo(1, 2);
     expect(BEACH.sun.dir[1]).toBeGreaterThan(0.7);

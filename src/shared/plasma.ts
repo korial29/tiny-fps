@@ -183,10 +183,15 @@ export const fly = (
   const seam = w.def.seam === undefined || !d[1] ? Infinity : (w.def.seam - o[1]) / d[1];
   let t = ray(w, o, d, seam > 1e-6 ? Math.min(go, seam) : go, radius);
   let hit: PlayerState | undefined;
-  // A disc reaches bodies further than it touches the map (DISK_REACH).
-  const reach = b.arc ? ARC_R : thrown ? DISK_REACH : radius;
   for (const f of foes) {
-    const u = cylinder(o, d, f, PLAYER_R + reach, heightOf(f));
+    // A disc reaches bodies further than it touches the map (DISK_REACH).
+    const u = cylinder(
+      o,
+      d,
+      f,
+      PLAYER_R + (b.arc ? ARC_R : thrown ? DISK_REACH : radius),
+      heightOf(f),
+    );
     if (u < t) {
       [t, hit] = [u, f];
     }

@@ -3,6 +3,7 @@
 // along x on that line, which is its own plane of symmetry, and is written once.
 // No DOM, no Node API.
 import { TEAM_TINT } from './map';
+import { hash } from './relief';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
@@ -51,6 +52,35 @@ export const ENGINES = [
 
 /** Red's camp: the escape pod its flag stands by (x, z, radius). */
 export const POD = [60, 174, 4];
+
+/**
+ * Red's headland, the rocks that close the beach past z = ZED - FRAME.cape, from the sea to the
+ * trees: each x, z, radius, height and seed, a form of moon.ts rockOf(). Blue's are their twins.
+ * The map makes them solid and the scenery draws them, both from this list.
+ */
+export const ROCKS = [
+  [-4, 190, 7, 9, 1],
+  [6, 196, 8, 11, 2],
+  [18, 193, 6, 7, 3],
+  [28, 198, 9, 13, 4],
+  [40, 195, 7, 9, 5],
+  [51, 199, 8, 12, 6],
+  [62, 196, 6, 8, 7],
+  [72, 199, 9, 14, 8],
+  [83, 195, 7, 10, 9],
+  [94, 198, 8, 12, 10],
+  [105, 194, 7, 9, 11],
+];
+
+/**
+ * Red's first row of palms, the trunks a runner can touch: each x, z and radius at the foot. The
+ * map makes them solid and the scenery draws a palm on each; the forest behind is drawn only.
+ */
+export const TRUNKS = Array.from({ length: 22 }, (_, i) => [
+  FRAME.trees + 3 * hash(i, 1, 7),
+  ZED / 2 + 4 + 4 * i + 2 * hash(i, 2, 7),
+  0.22 + 0.1 * hash(i, 3, 7),
+]);
 
 const box = (
   x0: number,

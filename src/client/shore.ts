@@ -211,13 +211,14 @@ s=mix(s,vec3(1.22,1.2,1.17)*(.8+.3*max(dot(d,O),0.)),f*.9);}`;
  * distance to the eye. It is drawn twice, blended: with Z at 2 what the water lets through of
  * what is under it (red goes first, so pale sand turns turquoise, then blue), and with Z at 1 the
  * light it adds: what the water scatters, the sky mirrored on its waves (more at a grazing angle),
- * the sun's glitter, the foam along the sand and the haze.
+ * the sun's glitter, the foam along the sand and the haze. Within 18 m of the eye two short waves
+ * (39 and 20 cm) add a chop to the normal, fading out from 6 m; past 18 m they are not computed.
  */
 export const WATER = (fog: string) => `{vec2 q=P.xz;float d=C.x-(${SWASH});if(d<0.)discard;
 float ds=length(P-E),pf=length(fwidth(q)),fz=${fog},fo;vec3 V=(E-P)/ds;
 vec2 w=q+1.5*vn(q*.09+T*.04),gd=vec2(0);
-for(int i=0;i<5;i++){float k=.6*exp(.66*float(i)),a=(float(i)-2.)*.8;vec2 dr=vec2(cos(a),sin(a));
-gd+=dr*cos(k*dot(dr,w)-T*sqrt(k)*1.3+a*5.)*(1.-smoothstep(.15,.6,k*pf))*.055;}
+for(int i=0;i<(ds<18.?7:5);i++){float k=.6*exp(.66*float(i)),a=(float(i)-2.)*.8;vec2 dr=vec2(cos(a),sin(a));
+gd+=dr*cos(k*dot(dr,w)-T*sqrt(k)*1.3+a*5.)*(1.-smoothstep(.15,.6,k*pf))*(i<5?.055:.04-.04*smoothstep(6.,18.,ds));}
 gd*=.35+.65*smoothstep(0.,.6,d);
 vec3 n=normalize(vec3(-gd.x,1,-gd.y));float fr=.02+.6*pow(clamp(1.-dot(n,V),0.,1.),5.);
 float fn=vn(q*1.7+vec2(T*.12,0))*vn(q*5.-vec2(T*.2,T*.07));
@@ -266,14 +267,16 @@ bw=mix(bw,gl,a);}}`;
 
 /**
  * The sand's pixel, in main(), before its normal is taken: `c` its colour, `h` its height for the
- * bump, `pw` the pixel's size on it. Patches, dimples the size of a footprint, wind ripples and
- * grain, each faded out where a pixel no longer holds it. `bw` is how wet it is: dark and smooth
+ * bump, `pw` the pixel's size on it. Dunes (ridges some 7 m apart and broad mounds, on the dry
+ * sand only, from 0.4 m over the water), patches, dimples the size of a footprint, wind ripples and
+ * grain down to some 3.5 cm, the small ones faded out where a pixel no longer holds them. `bw` is how wet it is: dark and smooth
  * up to where the sea last ran, with the light's net on the bed under the water.
  */
 export const GRAIN = `{vec2 q=P.xz;float y=P.y-${FRAME.water}.,f1=1.-smoothstep(.3,1.,pw*9.),f2=1.-smoothstep(.3,1.,pw*2.5),f3=1.-smoothstep(.3,1.,pw*80.);
 bw=1.-smoothstep(.08,.3+.12*vn(q*.4),y);
 float rp=sin((dot(q,vec2(.95,.3))+1.2*vn(q*.3))*18.)*smoothstep(.3,.7,vn(q*.07+5.))*f1*(1.-.6*bw);
-h+=.012*rp+f2*.03*(vn(q*2.2)-.5)+f1*.008*(vn(q*6.+3.)-.5);
+float dr=dot(q,vec2(.27,.86))+2.5*vn(q*.04);
+h+=smoothstep(.4,1.6,y)*(.24*(sin(dr)+.35*sin(2.*dr))*smoothstep(.2,.7,vn(q*.025+7.))+.9*vn(q*.06))+.018*rp+f2*.04*(vn(q*2.2)-.5)+f1*.012*(vn(q*6.+3.)-.5)+(1.-smoothstep(.3,1.,pw*40.))*.006*(vn(q*28.)-.5);
 c*=(.88+.24*vn(q*.13+9.))*(1.+.05*rp+f3*.16*(vn(q*170.)-.5)+f1*.07*(vn(q*37.)-.5));
 c*=mix(vec3(1),vec3(.52,.47,.4),bw);
 if(y<0.){vec2 u=q*3.+vn(q*.8)*2.;float ca=vn(u+T*.3)-vn(u+7.-T*.25);c*=1.+.45*f2*pow(max(1.-abs(ca)*2.5,0.),6.)*smoothstep(0.,-.3,y);}

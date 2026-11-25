@@ -445,7 +445,7 @@ describe('createRenderer', () => {
         kind.set(c[1], src.get(c[2])!.split('\n')[1]);
       }
     }
-    expect([...kind.values()]).toEqual(['#define LAND', '#define FLESH']);
+    expect([...kind.values()]).toEqual(['#define LAND', '#define FLESH', '#define DEPTH']);
     // The map's program is in use when a frame starts.
     let [on, colour] = [
       kind.get(
@@ -467,6 +467,20 @@ describe('createRenderer', () => {
       }
     }
     expect(ran[0]).toEqual(['LAND', 0, FLOOR_VERTS]);
+    // The shadow maps with their own program: its fragment shader writes no colour.
+    let [inShadow, shadowOn] = [false, ''];
+    const shadowed: string[] = [];
+    for (const c of calls.slice(linked)) {
+      if (c[0] == 'useProgram') {
+        shadowOn = kind.get(c[1]) ?? '';
+      } else if (c[0] == 'viewport') {
+        inShadow = c[3] == SHADOW;
+      } else if (c[0] == 'drawArrays' && inShadow) {
+        shadowed.push(shadowOn);
+      }
+    }
+    expect(shadowed.length).toBeGreaterThan(1);
+    expect(new Set(shadowed)).toEqual(new Set(['#define DEPTH']));
     expect(ran.filter(r => r[0] == 'FLESH').length).toBeGreaterThan(1);
     expect(ran.find(r => r[0] == 'FLESH' && r[1] == FLOOR_VERTS)![2]).toBeGreaterThan(0);
     // The sky, last, with the map's.

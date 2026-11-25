@@ -264,8 +264,8 @@ const RELIEF = 0.06;
 // it, X its colour, W the matrix of its shadow layer 0) plus every other light, then eased toward 2
 // (e) so many beams on one wall do not burn it white; sp: the specular sum, added after the colour
 // is lit. A: position and range, B: direction and cone (-9 on a point: no cone), K: colour and
-// shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. Z < 0 is the depth pass:
-// no colour. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
+// shadow slot (-1: none; slot k is layer k + 1), M: the slots' matrices. DEPTH (fragOf()) is the depth passes' own
+// program: no colour, only the smoke and the layers that cast no shadow discarded. Y > 0 is the sky, from the colours in H[3] (zenith) and H[4] (horizon): a gradient, a
 // haze band, the sun's disc and glow, bright enough to bloom (K0, the sky along a direction; the glow
 // scattered by the air, so it fades with a dark horizon: the moon keeps a tenth of it). The
 // glass layer adds K0 along the reflected view r, strong at a grazing angle (Fresnel, fr), after the
@@ -300,6 +300,9 @@ precision highp float;precision highp sampler2DArray;precision highp sampler2DAr
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform int Hv;uniform float Gp;uniform sampler2D Og;out vec4 o;
+#ifdef DEPTH
+void main(){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;}
+#else
 #ifdef FLESH
 #define FL(x) x
 #else
@@ -376,7 +379,6 @@ float h3(vec3 q){uvec3 u=uvec3(ivec3(floor(q)));uint h=u.x*1597334673u^u.y*38120
 float vn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
 void main(){
-if(Z<0.){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;return;}
 #ifdef ORB
 vec3 d=normalize(P);bool t;o=vec4(mg(d,length(fwidth(d))*.5,t),t);
 #else
@@ -546,7 +548,8 @@ o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${F
 if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
 #endif
 #endif
-}`;
+}
+#endif`;
 
 /** The scene's uniforms. */
 const UNIFORMS = [
@@ -591,6 +594,23 @@ const UNIFORMS = [
   'Pl',
   'Og',
 ];
+/** The vertex shader's uniforms (VERT): all the depth passes' program reads. */
+const DEPTH_UNIFORMS = [
+  'm',
+  'Y',
+  'J',
+  'R',
+  'Sg',
+  'Sm',
+  'Sb',
+  'Sq',
+  'Sw',
+  'Sp',
+  'Sc',
+  'Hc',
+  'Ak',
+  'Hs',
+];
 
 /** A scene program (fragOf()): its uniforms' places and the arguments last sent to each. */
 interface Variant {
@@ -605,7 +625,8 @@ type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
  * orbit fade only where the map has them, the ninja's quilting, cloth, boots and brushed metal only
  * where he is offered (rolesOf()). `LAND` is the map and the sky
  * (the regolith, no skin, armour, hair or chitin), `FLESH` the runners, the vehicles and the
- * effects (no regolith), `ORB` the globe alone; with none, all of it. Left in where it never runs,
+ * effects (no regolith), `ORB` the globe alone, `DEPTH` the shadow maps' depth (a few lines: the
+ * colour's registers kept every shadow map's pixels from running as many at once); with none, all of it. Left in where it never runs,
  * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
  * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon.
  */
@@ -1167,6 +1188,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let land: Variant;
   let bodies: Variant;
   let globed: Variant | undefined;
+  /** The shadow maps' program: depth only. */
+  let shade: Variant;
   /** The scene program in use, the values given to the scene's uniforms by name (setter, arguments). */
   let live: Variant | undefined;
   const given = new Map<string, [Setter, unknown[]]>();
@@ -1404,14 +1427,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     asides.clear();
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
-    const variant = (kind: string): Variant => {
-      const [p, l] = link(VERT, fragOf(world.def, kind), UNIFORMS);
+    const variant = (kind: string, names = UNIFORMS): Variant => {
+      const [p, l] = link(VERT, fragOf(world.def, kind), names);
       return { p, u: l, sent: new Map() };
     };
-    [land, bodies, globed] = [
+    [land, bodies, globed, shade] = [
       variant('LAND'),
       variant('FLESH'),
       moonly(world.def) ? variant('ORB') : undefined,
+      // The vertex shader's uniforms alone: the depth's fragment shader reads none.
+      variant('DEPTH', DEPTH_UNIFORMS),
     ];
     live = undefined;
     use(land);
@@ -1729,6 +1754,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       gl.bindFramebuffer(gl.FRAMEBUFFER, depth);
       gl.viewport(0, 0, SHADOW, SHADOW);
       gl.enable(gl.POLYGON_OFFSET_FILL);
+      use(shade);
       for (let i = 0; i <= pk.maps; i++) {
         gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, shadows, 0, i);
         uni('uniformMatrix4fv', 'm', false, i ? pk.m.subarray(i * 16 - 16, i * 16) : sunM);
@@ -1737,6 +1763,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         place(true);
       }
       gl.disable(gl.POLYGON_OFFSET_FILL);
+      use(land);
       gl.bindTexture(gl.TEXTURE_2D_ARRAY, shadows);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);

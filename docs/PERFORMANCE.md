@@ -204,6 +204,21 @@ something in front hides (an M2's hidden surface removal). On only for what move
 4x MSAA costs 1 to 2 ms (1x instead): a filter in its place would take part of that back for less
 clean edges, so it stays.
 
+### The shadow maps' own program (2026-11-25)
+
+The shadow maps drew with the colour programs, which returned at once in the depth pass (`Z<0`):
+the colour's code still held the registers of every shadow map's pixel. They now draw with `DEPTH`,
+the same `VERT` and a fragment shader that only discards the smoke and what casts no shadow. On the
+M2 (Metal) at 1600 by 900, a frame's GPU (median, base then after, three runs each), the pixels the
+same to the byte:
+
+| Scene                                  | Before       | After        |
+| -------------------------------------- | ------------ | ------------ |
+| Highline, a marine, a ninja and a xeno | 14.3 to 14.5 | 13.9 to 14.1 |
+| Highline, no runner                    | 7.4 to 8.1   | 7.2 to 7.5   |
+| Tranquility, three astronauts at 3 m   | 20.2 to 20.9 | 18.7 to 19.7 |
+| Tranquility, three xenomorphs at 3 m   | 16.9 to 17.7 | 16.4 to 17.1 |
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by
@@ -364,7 +379,7 @@ Verts`, `verts.ts`): `out.push(...)` for a few numbers, and for many, `const a =
 13. **What a map does not have is not compiled in.** Code for one map or one class only goes under
     an `#ifdef` that `fragOf()` defines where it is needed (`MOON`, `NINJA`), not behind a uniform
     at 0: unrun, it still slows the whole program. `render.test.ts` checks that Highline's shader
-    has none of the moon's and the moon's none of the ninja's. What a part of the scene does not draw is not compiled into its program either (`LAND`, `FLESH`, `ORB`): a material's code goes under `FL()` or `LD()`, or its own `#ifdef`. A class's code goes under its own `#define`, given by `rolesOf()` of the map (`NINJA`); a scene uniform is set with `uni()`, never on the GL (a test checks it), or only one program gets it.
+    has none of the moon's and the moon's none of the ninja's. What a part of the scene does not draw is not compiled into its program either (`LAND`, `FLESH`, `ORB`, and `DEPTH` for the shadow maps, whose fragment shader only discards): a material's code goes under `FL()` or `LD()`, or its own `#ifdef`. A class's code goes under its own `#define`, given by `rolesOf()` of the map (`NINJA`); a scene uniform is set with `uni()`, never on the GL (a test checks it), or only one program gets it.
 
 14. **Look at a frame with the runners up close, on every map.** A cost that only shows when a few
     of them fill the screen (a close fight) is missed by a frame of the map alone, and that is when

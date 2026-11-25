@@ -875,7 +875,10 @@ describe('what a pixel pays for', () => {
     // guard: what main() runs for every pixel, outside any branch, calls none.
     const guards = ['if(kb>0.){', 'if(lz>0.){', 'if(kw>0.){'];
     expect(guards.reduce((s, g) => s.replace(block(s, g), ''), FRAG)).not.toContain('n3(Rp');
-    const main = block(FRAG, 'void main(){').slice('void main(){'.length);
+    // The colour's main(), after the depth passes' own.
+    const main = block(FRAG.slice(FRAG.lastIndexOf('void main(){')), 'void main(){').slice(
+      'void main(){'.length,
+    );
     let [flat, depth] = ['', 0];
     for (const ch of main) {
       depth += ch == '{' ? 1 : 0;
@@ -943,7 +946,7 @@ describe('no NaN out of the shaders', () => {
 describe('the glory kill flash', () => {
   it('blinks on the time: no local T hides the uniform in the fragment shader', () => {
     expect(FRAG).toMatch(/uniform float T\b/);
-    const main = FRAG.slice(FRAG.indexOf('void main('));
+    const main = FRAG.slice(FRAG.lastIndexOf('void main('));
     expect(main).not.toMatch(/(vec[234]|float|int)\s+T\s*=/);
     expect(main).not.toMatch(/[,(]\s*T\s*=/);
   });

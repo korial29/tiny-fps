@@ -328,20 +328,25 @@ describe('a glory kill drawn', () => {
       state(PREY_ID, { z: -1, yaw: Math.PI, down: 100 }),
     ];
     const bend: number[] = [];
+    const heads: number[][] = [];
     const ahead: number[] = [];
     const hips: number[] = [];
     for (let k = 0; k < Math.round((FEAST.FEED[0] + FEAST.LOW[1]) * 60) + 4; k++) {
       frames(book, after, 1);
-      bend.push(from(neck(), up));
+      heads.push(neck());
+      bend.push(from(heads[k], up));
       const s = stance(book.get(XENO)!).s;
       ahead.push(turn(s.rot[J.PELVIS], [0, 0, -1])[2]);
       hips.push(s.pos[J.PELVIS][1]);
     }
     const lift = Math.round((FEAST.FEED[0] - FEAST.FEED[1]) * 60);
-    // Down and chewing while the camera is out: bent, and the bend moving.
+    // Down and chewing while the camera is out: bent, and the head moving. Its movement is measured
+    // against itself, not as a change of the bend from standing: with the standing head carried
+    // low (prowl()), the chewing's turn barely changes that bend.
     const held = bend.slice(10, lift - 2);
     expect(Math.min(...held)).toBeGreaterThan(0.3);
-    expect(Math.max(...held) - Math.min(...held)).toBeGreaterThan(0.1);
+    const chewing = heads.slice(10, lift - 2).map(q => from(q, heads[10]));
+    expect(Math.max(...chewing)).toBeGreaterThan(0.1);
     ahead.slice(10, lift).forEach(z => expect(z).toBeLessThan(-0.7));
     // Done eating, its head stays low a while, then comes up the rest slowly, never at once.
     const done = Math.round(FEAST.FEED[0] * 60);

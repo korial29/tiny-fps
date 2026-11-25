@@ -9,8 +9,9 @@ import {
   hunterHarpoon,
   hunterPose,
   hunterRig,
+  stripSwing,
 } from './hunter';
-import { rest, solve, turn } from './rig';
+import { JOINT, axis, mul, rest, solve, turn } from './rig';
 import { GILT, SHINE, STRIDE, TWILL, WEAVE } from './mesh';
 
 it('keeps the front of the pectorals smooth across the Marine shoulder ring', () => {
@@ -144,8 +145,8 @@ it('hangs the belt’s front strips clear of the thighs, standing (the user, 202
   /** The vertices of `part` as points. */
   const points = (part: number[]) =>
     Array.from({ length: part.length / STRIDE }, (_, i) => part.slice(i * STRIDE, i * STRIDE + 3));
-  // The strips' weave, where they end: the lowest 8 cm of the belt's woven panels, in front.
-  const strips = points(model['Belt']).filter((_, i) => model['Belt'][i * STRIDE + 8] === WEAVE);
+  // The strips, parts of their own, numbered 0 to 15 (the tassets after them).
+  const strips = Array.from({ length: 16 }, (_, i) => points(model[`Belt strip ${i}`])).flat();
   const foot = Math.min(...strips.map(p => p[1]));
   for (const side of [-1, 1]) {
     const thigh = points(model[`Thigh net ${side}`]).filter(p => p[1] > foot && p[1] < foot + 0.08);
@@ -155,4 +156,42 @@ it('hangs the belt’s front strips clear of the thighs, standing (the user, 202
     const gap = Math.min(...thigh.map(p => p[2])) - Math.min(...ends.map(p => p[2]));
     expect(gap, `side ${side}`).toBeGreaterThan(0.07);
   }
+});
+
+it('swings the strips and the tassets under the belt out of a raised thigh’s way, each on its hinge (the user, 2026-11-25)', () => {
+  const strips = hunterRig(1).pieces.filter(piece => piece.strip);
+  // Sixteen strips and four tassets, near; far, they are one with the belt.
+  expect(strips.length).toBe(20);
+  expect(hunterRig(0).pieces.some(piece => piece.strip)).toBe(false);
+  /** Each strip's turn about its hinge, radians, with the right thigh raised `lift` ahead. */
+  const swings = (lift: number) => {
+    const pose = rest([0, 0, 0], 0);
+    pose.rot[JOINT.THIGH_R] = mul(pose.rot[JOINT.THIGH_R], axis([1, 0, 0], lift));
+    const s = solve(pose);
+    const joints = hunterPose(s.pos, s.rot, [0, 0, 0], 0);
+    return strips.map(piece => {
+      const [, q] = stripSwing(piece.strip!, joints[JOINT.PELVIS], s.rot[JOINT.PELVIS], joints);
+      // The turn left once the pelvis's own is taken off.
+      const [x, y, z, w] = mul([-s.rot[0][0], -s.rot[0][1], -s.rot[0][2], s.rot[0][3]], q);
+      return [piece.strip!, 2 * Math.atan2(Math.hypot(x, y, z), Math.abs(w))] as const;
+    });
+  };
+  // At rest they hang as they are modelled, within 3 degrees (a strip's line a hair inside the
+  // clearance of the thigh it lies on).
+  const hung = swings(0);
+  for (const [, turned] of hung) {
+    expect(turned).toBeLessThan(0.06);
+  }
+  // The thigh raised to a sprint's: the strips in front of it swing up over it, those behind the
+  // body and on the other side hang still.
+  const raised = swings(1.2);
+  const front = raised.filter(([strip]) => strip.at[0] > 0.08 && strip.at[2] < -0.08);
+  expect(front.length).toBeGreaterThan(1);
+  // The one right over the thigh by 30 degrees and more; those beside it less, or not at all.
+  expect(Math.max(...front.map(([, turned]) => turned))).toBeGreaterThan(0.5);
+  raised.forEach(([strip, turned], i) => {
+    if (strip.at[0] < -0.08 || strip.at[2] > 0.08) {
+      expect(turned).toBeCloseTo(hung[i][1], 6);
+    }
+  });
 });

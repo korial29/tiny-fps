@@ -25,12 +25,15 @@ import { glow } from './flag';
 import { wristBlade, wristEnds } from './katana';
 import { hands, HUNTER_HAND } from './body';
 import { KIND } from './features';
-import { JOINT as J, JOINTS, PARENT, axis, rest, solve, turn } from './rig';
+import { JOINT as J, JOINTS, PARENT, axis, mul, rest, solve, turn } from './rig';
 import { Verts, room } from './verts';
 import type { Out } from './verts';
 import { mesh } from './store';
 import type { Pieces } from './store';
 import type { Quat } from './rig';
+
+/** The parts' name for the strips and the tassets under the belt, before each one's number: the strips 0 to 15, the tassets after them. */
+const STRIP = 'Belt strip ';
 
 const hide: Vec3 = [0.39, 0.42, 0.28];
 const leather: Vec3 = [0.15, 0.12, 0.105];
@@ -1572,6 +1575,8 @@ export function hunter(lod: 0 | 1 | 2) {
   // Each tasset folds along its spine. The turned lower lip casts a dark V
   // over the next lame, and the exposed leather traces the silhouette.
   for (let index = 0; index < 4; index++) {
+    // Hung on a hinge as the strips under it are (stripSwing()), numbered after them.
+    part(STRIP + (16 + index));
     const angle = (index * Math.PI) / 2;
     const side = index % 2 === 1;
     const length = side ? 0.29 : 0.315;
@@ -1620,6 +1625,8 @@ export function hunter(lod: 0 | 1 | 2) {
   /** How far the front strips' ends stand out over the thighs, metres. */
   const OVER_THIGH = 0.11;
   for (let i = 0; i < strips; i++) {
+    // Each a part of its own: it hangs from the belt on a hinge (stripSwing()).
+    part(STRIP + i);
     panel(
       (u, v) => {
         const angle = ((i + (u - 0.5) * (1.04 - 0.08 * v)) * 2 * Math.PI) / strips;
@@ -2166,7 +2173,7 @@ export function hunter(lod: 0 | 1 | 2) {
         name,
       );
     const bootKit = /^(Boot lames|Boot side) /.test(name);
-    const beltKit = name === 'Belt' || name === 'Flying disc';
+    const beltKit = name.startsWith('Belt') || name === 'Flying disc';
     for (let i = 0; i < mesh.length; i += STRIDE) {
       if (beltKit) {
         mesh[i + 1] += 0.08;
@@ -3266,7 +3273,7 @@ const followed = (name: string, [x, y]: Vec3): number[] => {
   if (HEAD_PARTS.test(name)) {
     return [J.HEAD];
   }
-  if (name === 'Belt' || name === 'Flying disc') {
+  if (name.startsWith('Belt') || name === 'Flying disc') {
     return [J.PELVIS];
   }
   if (TRUNK_PARTS.has(name)) {
@@ -3302,8 +3309,102 @@ export interface HunterPiece {
   cannon: boolean;
   /** The disc on his hip, left out while it is in his hand. */
   disc: boolean;
+  /** A strip under the belt, from its hinge rather than the joint (stripSwing()). */
+  strip?: HunterStrip;
   vertices: number[];
 }
+
+const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+/**
+ * A strip under the belt, hung on a hinge at the middle of its top edge: its number, the hinge
+ * from the pelvis at rest, the hinge's axis (about which a positive turn swings the strip out of
+ * the body) and where its foot hangs from the hinge.
+ */
+export interface HunterStrip {
+  i: number;
+  at: Vec3;
+  axis: Vec3;
+  end: Vec3;
+}
+/**
+ * The hinge of the strip `i` whose vertices are `v`, in model space: over the strip's middle, at
+ * its top, the strip's line straight down from it to its foot.
+ */
+const hingeOf = (i: number, v: number[]): HunterStrip => {
+  let [x, z, top, foot] = [0, 0, -Infinity, Infinity];
+  for (let k = 0; k < v.length; k += STRIDE) {
+    x += (v[k] * STRIDE) / v.length;
+    z += (v[k + 2] * STRIDE) / v.length;
+    top = Math.max(top, v[k + 1]);
+    foot = Math.min(foot, v[k + 1]);
+  }
+  // Out of the body: level, away from its axis. A turn about the hinge's axis, level and square
+  // to it, swings the strip's foot that way.
+  const [ox, , oz] = unit([x, 0, z]);
+  return {
+    i,
+    at: sub([x, top, z], HUNTER_REST[J.PELVIS]),
+    axis: [-oz, 0, ox],
+    end: [0, foot - top, 0],
+  };
+};
+/** How far a strip's line keeps from a thigh's bone, metres, and the step and the most it swings out, radians. */
+const [STRIP_CLEAR, STRIP_STEP, STRIP_MOST] = [0.115, 0.2, 1.8];
+/**
+ * Where a strip under the belt hangs on a posed Hunter (the user, 2026-11-25: strips that follow
+ * the thighs): its hinge and its turn, the pelvis at `pelvis` turned by `q` and his joints at
+ * `joints` (hunterPose()). It hangs as it is modelled unless a thigh comes within STRIP_CLEAR of
+ * its line: then it swings out about its hinge, by the least turn that clears both thighs. One
+ * turn a strip, its vertices placed as a rigid piece's are: none is worked out here.
+ */
+export const stripSwing = (
+  strip: HunterStrip,
+  pelvis: Vec3,
+  q: Quat,
+  joints: Vec3[],
+): [Vec3, Quat] => {
+  const hinge = add(pelvis, turn(q, strip.at));
+  /** Whether the strip swung out by `phi` is clear of both thighs. */
+  const clear = (phi: number) => {
+    const d = turn(q, turn(axis(strip.axis, phi), strip.end));
+    for (const f of [0.4, 0.7, 1]) {
+      for (const hip of [J.THIGH_L, J.THIGH_R]) {
+        const [a, b] = [joints[hip], joints[hip + 1]];
+        const [bx, by, bz] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const [px, py, pz] = [
+          hinge[0] + d[0] * f - a[0],
+          hinge[1] + d[1] * f - a[1],
+          hinge[2] + d[2] * f - a[2],
+        ];
+        const t = Math.min(
+          1,
+          Math.max(0, (px * bx + py * by + pz * bz) / (bx * bx + by * by + bz * bz)),
+        );
+        if (Math.hypot(px - bx * t, py - by * t, pz - bz * t) < STRIP_CLEAR) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+  let [lo, hi] = [0, 0];
+  if (!clear(0)) {
+    hi = STRIP_STEP;
+    while (hi < STRIP_MOST && !clear(hi)) {
+      hi += STRIP_STEP;
+    }
+    lo = hi - STRIP_STEP;
+    for (let n = 0; n < 3; n++) {
+      const mid = (lo + hi) / 2;
+      if (clear(mid)) {
+        hi = mid;
+      } else {
+        lo = mid;
+      }
+    }
+  }
+  return [hinge, mul(q, axis(strip.axis, hi))];
+};
 
 /**
  * The triangles around a bending joint, blended between the parent bone `a` and the child `b`
@@ -3397,6 +3498,9 @@ export const hunterRig = (
     }
     const thin = name.startsWith('Temple') || name === 'Rangefinder';
     const bendy = lod > 0 && BENDY.test(name);
+    // Far, the strips are one with the belt, rigid on the pelvis.
+    const strip =
+      lod > 0 && name.startsWith(STRIP) ? hingeOf(+name.slice(STRIP.length), v) : undefined;
     for (let i = 0; i < v.length; i += 3 * STRIDE) {
       const corners = [0, 1, 2].map(
         k => [v[i + k * STRIDE], v[i + k * STRIDE + 1], v[i + k * STRIDE + 2]] as Vec3,
@@ -3454,12 +3558,22 @@ export const hunterRig = (
       const harpoon = name === 'Harpoon';
       const cannon = name === 'Shoulder laser';
       const disc = name === 'Flying disc';
-      const key = joint * 16 + +thin + 2 * +harpoon + 4 * +cannon + 8 * +disc;
+      const key =
+        joint * 16 +
+        +thin +
+        2 * +harpoon +
+        4 * +cannon +
+        8 * +disc +
+        (strip ? 1000 * (strip.i + 1) : 0);
       let piece = pieces.get(key);
       if (!piece) {
-        pieces.set(key, (piece = { joint, thin, harpoon, cannon, disc, vertices: [] }));
+        pieces.set(key, (piece = { joint, thin, harpoon, cannon, disc, strip, vertices: [] }));
       }
-      const o = cannon ? CANNON_HINGE : HUNTER_REST[joint];
+      const o = cannon
+        ? CANNON_HINGE
+        : strip
+          ? add(strip.at, HUNTER_REST[J.PELVIS])
+          : HUNTER_REST[joint];
       for (let k = i; k < i + 3 * STRIDE; k += STRIDE) {
         piece.vertices.push(
           v[k] - o[0],

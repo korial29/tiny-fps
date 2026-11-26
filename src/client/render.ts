@@ -12,7 +12,7 @@ import { altitude } from '../shared/ship';
 import { LIMB, MODE, TEX } from '../shared/types';
 import type { Choice, PlayerState, Rover } from '../shared/types';
 import { hidden } from '../shared/world';
-import type { World, WorldDef } from '../shared/world';
+import type { Brush, World, WorldDef } from '../shared/world';
 import type { Body } from './body';
 import type { Tracer } from './beams';
 import type { Effects } from './effects';
@@ -308,6 +308,14 @@ const RELIEF = 0.06;
 // head a brush hides (a negative Ve.w, hidden() on the CPU) glows as a soft orange column (xr) on
 // what hides him: the view ray through the pixel, on past it, passes within his cylinder. One in
 // sight gets no through-wall glow. Gp pulses over the full geometry of a glory kill target.
+/** Metres from the eye where the mirrors begin to fade to the sky, and where they end. */
+const MIRROR_NEAR = [30, 55];
+
+// The mirrors in FRAG (MIRROR): Bx holds the map's boxes near the eye, one a row, three texels each (min, max,
+// albedo), and rt() finds the nearest box on a ray: its distance (1e4: none), its row and the face's normal.
+// mw is what the reflection weighs on a pixel: the glass 30 to 100 %, the steel 20 to 70 %, more at a grazing
+// angle. mf keeps it near the eye, fading out by MIRROR_NEAR[1] m: the skyline's glass is far and flat, and would
+// trace a ray a pixel for nothing.
 /** Landfall's haze over a pixel `ds` metres from the eye, for what its own code draws (the sea, the smoke). */
 const MIST = `1.-exp(-F.a*ds*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))))`;
 export const FRAG = `#version 300 es
@@ -317,6 +325,10 @@ uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform 
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform int Hv;uniform float Gp;uniform sampler2D Og;out vec4 o;
 #ifdef PRINTS
 uniform sampler2D Fp;uniform vec2 Fc;
+#endif
+#ifdef MIRROR
+uniform highp sampler2D Bx;uniform int Bn;
+float rt(vec3 o,vec3 d,out int i,out vec3 n){vec3 q=1./d;float b=1e4;i=-1;n=vec3(0);for(int j=0;j<Bn;j++){vec3 a=(texelFetch(Bx,ivec2(0,j),0).xyz-o)*q,e=(texelFetch(Bx,ivec2(1,j),0).xyz-o)*q,u=min(a,e),v=max(a,e);float s=max(max(u.x,u.y),u.z);if(s>0.&&s<b&&min(min(v.x,v.y),v.z)>=s){b=s;i=j;n=-sign(d)*step(u.yzx,u.xyz)*step(u.zxy,u.xyz);}}return b;}
 #endif
 #ifdef DEPTH
 void main(){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;}
@@ -570,7 +582,15 @@ c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 ${WET}
 ${SHEEN}
 #endif
+#ifdef MIRROR
+vec3 kk=k;
+float mw=step(abs(L-${TEX.GLASS}.),.5)*(.3+.7*fr)+step(abs(L-${TEX.STEEL}.),.5)*(.2+.5*fr);
+float mf=(1.-smoothstep(${MIRROR_NEAR[0]}.,${MIRROR_NEAR[1]}.,length(P-E)))*smoothstep(.05,.15,mw);
+if(mf>0.&&Bn>0){int bi;vec3 bn;rt(P+m*.03,r,bi,bn);if(bi>=0)kk=mix(k,texelFetch(Bx,ivec2(2,bi),0).rgb*(K1(bn,0.)*.4+X*max(dot(bn,O),0.)*.8),mf);}
+c+=kk*mw;
+#else
 c+=step(abs(L-${TEX.GLASS}.),.5)*k*(.1+.9*fr);
+#endif
 c=mix(c,k*(.4+c)*(.2+.8*smoothstep(-.1,.25,r.y)+1.6*exp(-abs(r.y-.12)*18.)),step(abs(L-(${SHINE})),.1)*(.35+.4*fr)*(1.-.85*kr));
 c+=step(abs(L-(${GLOSS})),.02)*(.3*fr+.1*smoothstep(.2,.9,r.y))*(.3+.7*sv)*mix(1.,sm*(1.-ch),wa);
 c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
@@ -592,6 +612,8 @@ if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
 
 /** The scene's uniforms. */
 const UNIFORMS = [
+  'Bx',
+  'Bn',
   'm',
   'E',
   'T',
@@ -661,6 +683,30 @@ interface Variant {
 }
 type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
 
+/** The most boxes the mirrors are tested against: a reflected pixel loops over all of them. */
+const MIRROR_BOXES = 256;
+
+/** Metres round the eye whose boxes the mirrors reflect, and how far the eye goes before they are chosen again. */
+const MIRROR_REACH = 90;
+const MIRROR_STEP = 10;
+
+/** The boxes the glass and the steel reflect near (x, z): the map's solid brushes within MIRROR_REACH of it, in the plan. */
+const mirrorBoxes = (brushes: readonly Brush[] = [], x: number, z: number): Brush[] =>
+  brushes
+    .filter(
+      b =>
+        !b.ghost &&
+        Math.hypot(
+          Math.max(b.min[0] - x, 0, x - b.max[0]),
+          Math.max(b.min[2] - z, 0, z - b.max[2]),
+        ) < MIRROR_REACH,
+    )
+    .slice(0, MIRROR_BOXES);
+
+/** A map that has glass or steel, so a program that mirrors the boxes (MIRROR). */
+const mirrors = (brushes: readonly Brush[] = []): boolean =>
+  brushes.some(b => [b.top, b.side].some(t => t === TEX.GLASS || t === TEX.STEEL));
+
 /**
  * The scene's fragment shader for a map and for what it draws: the moon's globe, stars, craters and
  * orbit fade only where the map has them, the ninja's quilting, cloth, boots and brushed metal only
@@ -673,13 +719,14 @@ type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
  * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk).
  */
 export const fragOf = (
-  def: Pick<WorldDef, 'scenery' | 'seam' | 'relief' | 'helmets'>,
+  def: Pick<WorldDef, 'scenery' | 'seam' | 'relief' | 'helmets'> &
+    Partial<Pick<WorldDef, 'brushes'>>,
   kind = 'LAND\n#define FLESH',
   rock = '',
 ) =>
   FRAG.replace(
     '\n',
-    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
+    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${kind.startsWith('LAND') && mirrors(def.brushes) ? '#define MIRROR\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
   ).replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`);
 
 /** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */
@@ -1297,6 +1344,25 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let shade: Variant;
   /** The scene program in use, the values given to the scene's uniforms by name (setter, arguments). */
   let live: Variant | undefined;
+  // The mirrors' boxes (MIRROR): the texture, where the eye was when they were chosen, and whether the map has any.
+  let mirrorTex: WebGLTexture | null = null;
+  let mirrorAt: [number, number] | undefined;
+  const mirrored = mirrors(world.def.brushes);
+  /** Sends the boxes near (x, z) as three RGBA32F texels a row: min, max, albedo. */
+  const mirrorUpload = (x: number, z: number) => {
+    const boxes = mirrorBoxes(world.def.brushes, x, z);
+    const rows = Math.max(1, boxes.length);
+    const bd = new Float32Array(rows * 12);
+    boxes.forEach((b, i) =>
+      bd.set([...b.min, 0, ...b.max, 0, ...(b.tint ?? [0.72, 0.72, 0.7]), 0], i * 12),
+    );
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, mirrorTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 3, rows, 0, gl.RGBA, gl.FLOAT, bd);
+    gl.activeTexture(gl.TEXTURE0);
+    uni('uniform1i', 'Bn', boxes.length);
+    mirrorAt = [x, z];
+  };
   const given = new Map<string, [Setter, unknown[]]>();
   /** One uniform into its place in `v`, unless `v` already has these arguments. */
   const send = (v: Variant, n: string, f: Setter, a: unknown[]) => {
@@ -1564,6 +1630,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     // Unit 6: the footprints' map (prints.ts), bound for good.
     gl.activeTexture(gl.TEXTURE6);
     prints = createPrints(gl, world);
+    uni('uniform1i', 'Bx', 7);
+    // Unit 7: the boxes the glass and the steel mirror (mirrorUpload()), read by texelFetch. Empty until the first frame knows the eye.
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, (mirrorTex = gl.createTexture()));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.activeTexture(gl.TEXTURE0);
+    uni('uniform1i', 'Bn', 0);
+    mirrorAt = undefined;
     // Unit 5: the chitin's plates (plates()), read in the skin's rest space; it repeats (REPEAT, the default).
     const pn = PLATES * PLATE_TEXELS;
     gl.activeTexture(gl.TEXTURE5);
@@ -1927,6 +2002,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         uni('uniform2f', 'Fc', prints.cx, prints.cz);
       }
       uni('uniform3fv', 'E', eye);
+      if (
+        mirrored &&
+        (!mirrorAt || Math.hypot(eye[0] - mirrorAt[0], eye[2] - mirrorAt[1]) > MIRROR_STEP)
+      ) {
+        mirrorUpload(eye[0], eye[2]);
+      }
       uni('uniform1f', 'T', now);
       uni('uniform1f', 'Z', 1);
       // Xenomorph vision uses enemy positions to reveal them through walls.

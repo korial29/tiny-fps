@@ -108,7 +108,8 @@ const BUDGETS = [
   // 284,096 B: the Hunter's pistol, its model, its glyph screen and its slot (the user, 2026-11-26).
   // 284,224 B: the Hunter's weapons on him only once found (the user, 2026-11-26).
   // 286,528 B: footprints in the sand and the regolith (the user, 2026-11-26).
-  { file: 'dist/index.js', max: 286_528 },
+  // 287,552 B: the glass and steel mirror the boxes near the eye (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 287_552 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

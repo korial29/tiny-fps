@@ -117,7 +117,7 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
   throws it flat, backhand, and the hand stays empty while it is out (`throwOf()`, `body/constants.ts`); the
   others see the hand and the hip empty too. The throw sounds like a blade cutting the air, the
   catch like a clap with a short metal ring, and the shoulder cannon reloads in silence. G with the
-  blades no longer throws it. In hand it is the hip's disc (`discVertices()`, `src/client/hunter.ts`),
+  blades no longer throws it. In hand it is the hip's disc (`discVertices()`, `src/client/hunter/disc.ts`),
   and the hip's is hidden. In the own view the hand lies on the disc, both nearly flat, the fingers ahead (`DISC_TILT`), the
   palm flat on its hub and the fingers and the thumb fanned out
   over it, flat on its hub, bent to grip it over their three joints, most at the middle one (`DISC_SPREAD`, `DISC_HOOK`, `HOOK`,
@@ -159,7 +159,7 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
 
 ## Look (the user, 2026-11-24, after a reference picture)
 
-All in `src/client/hunter.ts`; nothing here is on the wire.
+All in `src/client/hunter/` (re-exported by `src/client/hunter.ts`); nothing here is on the wire.
 
 - **Dreadlocks.** Eight separate locks a side (`DREADS`, part `Dreads`), rooted under the shell's rim
   from the temple round to the nape, each of its own length with bronze rings. The first three of

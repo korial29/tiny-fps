@@ -18,10 +18,13 @@ import {
   NADE_RANGE,
   NADE_SPEED,
   ORBIT,
+  DISK_R,
+  DISK_RANGE,
+  DISK_REACH,
 } from './constants';
 import { MOON } from './moon';
 import { spawn } from './physics';
-import { PLASMA_STEP, blast, cylinder, fly, launch, lob, stepOf, toss, wave } from './plasma';
+import { PLASMA_STEP, blast, cylinder, disk, fly, launch, lob, stepOf, toss, wave } from './plasma';
 import { MODE, TEX } from './types';
 import type { PlayerState } from './types';
 import { build } from './world';
@@ -194,6 +197,31 @@ describe('a plasma ball', () => {
   it('reaches GUN_RANGE and no further', () => {
     expect(shoot(flat, shooter(), [foe(GUN_RANGE - 1)])).toBeDefined();
     expect(shoot(flat, shooter(), [foe(GUN_RANGE + 1)])).toBeUndefined();
+  });
+});
+
+describe("the Hunter's disc (the user, 2026-11-25: too hard to land)", () => {
+  const thrown = (z: number, w = flat) => {
+    const b = disk(shooter());
+    return [fly(w, b, DISK_RANGE, [foe(10, z)]), b] as const;
+  };
+
+  it('hits a body it passes DISK_REACH from, and misses one just further', () => {
+    expect(DISK_REACH).toBeGreaterThan(DISK_R);
+    const r = PLAYER_R + DISK_REACH;
+    expect(thrown(r - 0.01)[0]).toBeDefined();
+    expect(thrown(-(r - 0.01))[0]).toBeDefined();
+    expect(thrown(r + 0.01)[0]).toBeUndefined();
+    // Bursting DISK_REACH out of the body, on the near side.
+    const [, b] = thrown(0);
+    expect(b.x).toBeCloseTo(10 - PLAYER_R - DISK_REACH, 5);
+  });
+
+  it('still brushes past a wall its DISK_R clears', () => {
+    // A wall's face 0.3 m beside the line: further than DISK_R, nearer than DISK_REACH.
+    const [hit, b] = thrown(20, walled(wall(4, 6, 0.3, 2)));
+    expect(hit).toBeUndefined();
+    expect(b.burst).toBe(false);
   });
 });
 

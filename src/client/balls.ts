@@ -12,7 +12,7 @@ import {
   BOLT,
   DISK,
   DISK_RETURN,
-  DISK_R,
+  DISK_REACH,
   HARPOON,
   HARPOON_R,
   INTERP_DELAY,
@@ -45,7 +45,7 @@ export const onBody = (b: Ball, p: Pick<PlayerState, 'x' | 'y' | 'z' | 'mode'>):
     (b.arc
       ? ARC_R
       : b.power === DISK || b.power === DISK_RETURN
-        ? DISK_R
+        ? DISK_REACH
         : b.power === HARPOON
           ? HARPOON_R
           : PLASMA_R) +

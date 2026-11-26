@@ -100,7 +100,8 @@ const BUDGETS = [
   // 279,168 B: the map cut into runs that each pass culls (the user, 2026-11-25).
   // 279,296 B: Landfall's see-through canopy, its glass drawn in two blended passes (the user, 2026-11-26).
   // 279,424 B: with the sand's dunes and the water's chop (#414) (the user, 2026-11-26).
-  { file: 'dist/index.js', max: 279_424 },
+  // 279,552 B: the Hunter's disc reaching bodies 0.5 m off its line (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 279_552 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

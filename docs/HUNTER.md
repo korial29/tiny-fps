@@ -110,7 +110,7 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
   over it, flat on its hub, bent to grip it over their three joints, most at the middle one (`DISC_SPREAD`, `DISC_HOOK`, `HOOK`,
   `Grip.spread`, `Grip.hook`, `THUMB_WIDE`)
   (`DISC_HOLD`, `DISC_CURL`, `DISC_RAISE`, `DISC_TILT`). The disc in hand and in flight is
-  `DISC_SCALE` (1.5) times the hip's; its hit radius is still `DISK_R`; in flight it is the same mesh, spinning
+  `DISC_SCALE` (1.5) times the hip's; it touches the map at `DISK_R` and a body at `DISK_REACH` (0.5 m, the user, 2026-11-25); in flight it is the same mesh, spinning
   nearly flat, with a blue trail (`Tracer.solids()` and `draw()`, `src/client/beams.ts`).
 - **Blades' shape.** After a model (the user, 2026-11-24): a long straight shank, a flare with a
   round notch behind it, two barbs swept back and a long point, in pale blue steel, splayed a

@@ -51,7 +51,8 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
   screen (`onScreen()`, `SCREEN`, shared by host and client); once he leaves it, it is lost and
   starts over. After `HUNTER_LASER_LOCK` (3 s) it is locked: the shots go at him and the cannon
   turns to follow him. `HUNTER_LASER_COOL` is 15 at most: `cool` is 4 bits on the wire.
-- **Its sight.** The three red sides of a triangle round the foe: tracking, they stand far out, each
+- **Its sight.** The three red sides of a triangle round the foe, shown only from the moment a lock
+  starts, never with no one to track (the user, 2026-11-26): tracking, they stand far out, each
   drifting and tilting on its own beat; they close in over the 3 s and join into the triangle at
   the lock, which then turns at 180° a second (`hunterAim()`). The HUD reads the rule locally and sends nothing to the other players. Every
   shot is seen as a red beam from the cannon's muzzle (`Tracer.laser()`), to the locked foe.
@@ -90,7 +91,7 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
 
 - **Slots.** The wrist blades are on 1, his pistol on 2, the harpoon on 3, the cannon on 4 and the
   disc on 5 (the user, 2026-11-26). He spawns with the blades alone, in hand, and finds the other
-  four on the racks; a slot he has not filled leaves the blades in hand, and the HUD shows all five.
+  four on the racks; a slot he has not filled leaves the blades in hand, and the HUD shows only the slots he has filled.
   The client's key and wheel order is `HUNTER_SLOTS` (`slotted()`, `src/client/input.ts`). On the
   wire the harpoon is the gun (no weapon key), the cannon `KEY.RAIL`, the disc `KEY.RIFLE`, and the
   pistol `KEY.FISTS`: he has no fists, so the bit is free for it (`WEAPON.SIDE` on the client).

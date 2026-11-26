@@ -1336,7 +1336,9 @@ const play = (
       const targetPoint = target ? rd.project(...chest(target)) : undefined;
       lockedAt = undefined;
       if (!target || !hunterLock || !targetPoint) {
-        hud.hunterAim(laserSelected ? [0.5, 0.5] : undefined, 0, now);
+        // No sight with no one to track: its three sides come up only as a lock starts (the user,
+        // 2026-11-26).
+        hud.hunterAim();
       } else {
         const progress = Math.min(1, (now - hunterLock.since) / 3000);
         // Tracking, the cannon hums (HUNTER_SEEK, below) as the triangles close in; locked, its tone

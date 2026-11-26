@@ -739,6 +739,22 @@ describe('the rail gun’s cells and heat', () => {
 });
 
 describe('the battery and the capsule', () => {
+  it('gives the Hunter’s pistol a battery of its own bronze, with no violet and no sky in it (the user, 2026-11-26)', () => {
+    const [plain, bronze] = [battery(1), battery(1, true)];
+    // The same shape, vertex for vertex: only its colours and its layer change.
+    expect(bronze).toHaveLength(plain.length);
+    let shiny = 0;
+    for (let i = 0; i < bronze.length; i += STRIDE) {
+      expect(bronze.slice(i, i + 6)).toEqual(plain.slice(i, i + 6));
+      // Red leads blue everywhere: the metal's bronze and the band's ember.
+      expect(bronze[i + 6]).toBeGreaterThan(bronze[i + 9]);
+      // Polished metal reflects the sky, which turned the bronze violet.
+      expect(bronze[i + 8]).not.toBe(SHINE);
+      shiny += +(plain[i + 8] === SHINE);
+    }
+    expect(shiny).toBeGreaterThan(0);
+  });
+
   it('sit home with no swap, and at its end', () => {
     for (const rail of [false, true]) {
       expect(swapped(-1, rail)).toEqual([0, 0, 0]);

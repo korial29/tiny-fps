@@ -78,9 +78,6 @@ const walks = (s?: PlayerState) => s?.mode === MODE.GROUND || s?.mode === MODE.C
 /** Taking steps: on a floor, or along a wall. */
 export const stepping = (s?: PlayerState): boolean => walks(s) || s?.mode === MODE.WALLRUN;
 
-/** On a floor: the modes in which physics snaps the feet up or down a step of at most STEP_H. */
-const onFloor = (s?: PlayerState) => walks(s) || s?.mode === MODE.SLIDE;
-
 /**
  * How fast the drawn eye catches up with a step the feet took at once, per second. Over a row of
  * low steps (the wrecked wing on Landfall, 0.15 m each) the eye then rises as on a slope.
@@ -189,7 +186,7 @@ export const createEffects = (): Effects => {
   let h: number | undefined;
   let last: PlayerState | undefined;
   /** The feet's height last frame, and the drawn eye's lag behind a step taken since (metres). */
-  let feet: number | undefined;
+  let feet = 0;
   let lag = 0;
   const y: Spring = [0, 0];
   const p: Spring = [0, 0];
@@ -283,12 +280,12 @@ export const createEffects = (): Effects => {
         fx.stride += d / stepLength(v);
       }
       amt += ((walks(me) && d > 0.5 * dt && d < 1 ? 1 : 0) - amt) * ease(10);
-      // A step up or down taken on a floor: the feet jump by it at once, the drawn eye follows.
-      const rise = me && feet !== undefined && onFloor(me) && onFloor(last) ? me.y - feet : 0;
-      // Above STEP_H it was no step (a respawn); under STEP_MIN a slope of the relief, drawn as it is.
-      lag = Math.abs(rise) > STEP_H + 1e-3 ? 0 : Math.abs(rise) > STEP_MIN ? lag - rise : lag;
-      lag = me ? Math.max(-STEP_H, Math.min(STEP_H, lag)) * Math.exp(-dt * STEP_EASE) : 0;
-      feet = me?.y;
+      // A step up or down taken on a floor (physics snaps the feet by it at once): the drawn eye
+      // follows. Above STEP_H it was no step (a respawn); under STEP_MIN a slope of the relief.
+      const rise = me?.ground && last?.ground ? me.y - feet : 0;
+      const a = Math.abs(rise);
+      lag = a > STEP_H ? 0 : (lag - (a > STEP_MIN ? rise : 0)) * Math.exp(-dt * STEP_EASE);
+      feet = me?.y ?? 0;
       last = me;
 
       // Hits are impulses on the springs: a landing pushes the eye down, a jump up, a grab the look down.

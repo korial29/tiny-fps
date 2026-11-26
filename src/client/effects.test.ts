@@ -296,7 +296,7 @@ describe('eye', () => {
     fx.update(me({ y: 6 }), 0, DT);
     expect(fx.dy).toBe(0);
     // A step taken in the air is a landing, not a stair.
-    fx.update(me({ y: 6.15, mode: MODE.AIR }), 0, DT);
+    fx.update(me({ y: 6.15, mode: MODE.AIR, ground: false }), 0, DT);
     expect(fx.dy).toBe(0);
   });
 

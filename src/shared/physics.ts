@@ -207,7 +207,7 @@ export const spawn = (
     ground: true,
     ...STILL,
     hp: kit.hp,
-    ...(kit.hunter && { ammo: kit.ammo, mag: kit.mag, rail: 0, cap: kit.cap, charge: 0 }),
+    // The Hunter too starts with his blades alone: he finds the rest on the racks (gun.ts step()).
     blade: !!kit.katana,
     wield: !!kit.katana,
   };

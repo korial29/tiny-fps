@@ -1132,7 +1132,8 @@ export const warmSteps = (own?: number, hunter = false): Step[] => [
     lod => () => partsOf(lod).forEach(({ key, make }) => mesh(key, o => make(o, ORIGIN, ID))),
   ),
   () => {
-    [0, 2, 3].forEach(rackWeapon);
+    [0, 2, 3].forEach(kind => rackWeapon(kind));
+    [1, 2, 3].forEach(kind => rackWeapon(kind, 'hunter'));
     vestMesh();
   },
 ];
@@ -1665,7 +1666,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       fall(dt);
       drawDrops(v);
       ctf?.bases.forEach((at, team) => base(v, at, teamRgb(team), now));
-      racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles, pieces);
+      racks(v, ctf?.racks, ctf?.blades, now, ctf?.rails, ctf?.rifles, pieces, ctf?.rackSet);
       ctf?.packs?.forEach(at => kit(v, at, now));
       ctf?.ammo?.forEach(at => cell(v, at, now));
       ctf?.cells?.forEach(at => battery(v, at, now));

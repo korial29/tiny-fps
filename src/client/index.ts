@@ -57,7 +57,8 @@ import { marks } from './marks';
 import { createPacing } from './pacing';
 import { brief, goal } from './mission';
 import { lamps } from './lamps';
-import { packsOf } from './props';
+import { packsOf, rackSetOf } from './props';
+import type { RackSet } from './props';
 import { BARE, FACE, HEAD, PORTRAIT, createRenderer, decor, warmSteps } from './render';
 import type { Decor } from './render';
 import { stepwise } from './tasks';
@@ -476,6 +477,8 @@ const play = (
   let worn: Choice & { body: number } = picked;
   /** The own class's health at most (Kit.hp), for the face. */
   let hpMax = HP_MAX;
+  /** Which weapons the own class sees on the racks: the xenomorph none, the Hunter his own. */
+  let rackSet: RackSet = 'gear';
   let previewActive = false;
   let previewJobs: (() => void)[] = [];
   let previewNext = 0;
@@ -717,6 +720,7 @@ const play = (
       hud.wear(build, worn, rolesOf(world.def));
       predictor.you(you.id, you.team, own?.role);
       const kit = kitOf(own?.role, world.def);
+      rackSet = rackSetOf(kit);
       const weapon = kit.katana ? WEAPON.BLADE : WEAPON.GUN;
       if (weapon !== defaultWeapon) {
         ctl.weapon = defaultWeapon = weapon;
@@ -898,6 +902,7 @@ const play = (
       blades,
       rails,
       rifles,
+      rackSet,
       packs: packsOf(world.def.packs, match.packs),
       ammo: packsOf(world.def.ammo, match.packs, world.def.packs?.length),
       cells: packsOf(

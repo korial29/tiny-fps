@@ -926,6 +926,21 @@ describe('Bot: team play', () => {
     expect(bot.think({ me, others: [], flags: [home, home], world, kit }).keys & KEY.RAIL).toBe(0);
   });
 
+  it('takes a Hunter to his own weapons on the racks: the disc on the rifle rack (the user, 2026-11-26)', () => {
+    const world = build(HIGHLINE);
+    const kit = KITS[ROLE.HUNTER];
+    const bot = new Bot(0);
+    const me = at(0, 0, 43, 156);
+    Object.assign(me.state, { y: 19, ammo: -1, rail: -1, rifle: -1, blade: true, wield: true });
+    bot.think({ me, others: [], flags: [home, home], world, kit });
+    expect(bot.view().why).toBe('disc rack');
+    for (let k = 0; k < 600 && (me.state.rifle ?? -1) < 0; k++) {
+      const intent = bot.think({ me, others: [], flags: [home, home], world, kit });
+      step(me.state, { ...intent, seq: k }, world, 0, true, [], kit);
+    }
+    expect(me.state.rifle).toBe(0);
+  });
+
   it('seeks a nearby missing rifle, then equips it, while a carrier goes home', () => {
     const world = build(HIGHLINE);
     const bot = new Bot(0);

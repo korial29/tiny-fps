@@ -47,6 +47,9 @@ const ARENA: WorldDef = {
       rail: [60, 1, 46],
     },
   ],
+  // Out of the way of the duel at the slab's middle.
+  ammo: [[5, 1, -20]],
+  cells: [[8, 1, -20]],
   floor: -20,
   sun: { dir: [0, 1, 0], color: [1, 1, 1] },
   sky: [
@@ -64,15 +67,37 @@ const go = (p: PlayerState, keys: number, n = 1) => {
   }
   return s;
 };
-const hunter = (over: Partial<PlayerState> = {}): PlayerState =>
+/** What the Hunter has once he found his harpoon, cannon and disc on the racks. */
+const ARMED: Partial<PlayerState> = {
+  ammo: HUNTER.ammo,
+  mag: HUNTER.mag,
+  rail: 0,
+  cap: HUNTER_CELLS,
+  rifle: 0,
+  clip: 0,
+};
+/** A Hunter at his spawn with his blades alone. */
+const bare = (over: Partial<PlayerState> = {}): PlayerState =>
   Object.assign(spawn(0, world, 0, 0, HUNTER), over);
+/** A Hunter who found all his weapons. */
+const hunter = (over: Partial<PlayerState> = {}): PlayerState => bare({ ...ARMED, ...over });
 
 describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon, on key 3)', () => {
-  it('is on him from the spawn, its battery full, and comes on key 3', () => {
-    const p = hunter();
-    expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS, blade: true, wield: true });
+  it('is not on him at the spawn: his blades alone, key 3 leaves them in hand (the user, 2026-11-26)', () => {
+    const p = bare();
+    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, blade: true, wield: true });
     go(p, RAIL);
-    expect(p).toMatchObject({ railed: true, wield: false, reload: 0 });
+    expect(p).toMatchObject({ railed: false, wield: true });
+    go(p, RIFLE);
+    expect(p).toMatchObject({ rifled: false, wield: true });
+    go(p, 0);
+    expect(p).toMatchObject({ wield: true, fists: false });
+  });
+
+  it('comes from the rail gun rack, its battery full, and on key 3', () => {
+    const p = bare({ x: -20, z: 46 });
+    go(p, RAIL);
+    expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS, railed: true, wield: false, reload: 0 });
   });
 
   it('fires on the click, then once each HUNTER_LASER_COOL ticks held, a shot of its battery each, and never heats or swaps', () => {
@@ -130,21 +155,48 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
     expect(p.shots).toBe(0);
   });
 
-  it('takes no other weapon: the rail and rifle racks give him nothing, the gun rack his harpoon bolts', () => {
-    // Key 4 (KEY.RIFLE) is his disc: carried, nothing in it, and no rifle, clip or grenade from the rack.
-    const p = hunter({ x: -20, z: 46 });
+  it('finds his own weapons on the racks and no standard one (the user, 2026-11-26)', () => {
+    // The gun rack gives him nothing.
+    const p = bare({ x: -20, z: 40 });
+    go(p, 0);
+    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, wield: true });
+    // The katana rack: his harpoon, on arrival only, and its bolts again on the next arrival.
+    Object.assign(p, STILL, { x: -20, z: 43, y: 1 });
+    go(p, 0);
+    expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag, rack: true, wield: false });
+    Object.assign(p, { ammo: 1, mag: 0 });
+    go(p, 0);
+    expect(p).toMatchObject({ ammo: 1, mag: 0 });
+    Object.assign(p, STILL, { x: -20, z: 40, y: 1 });
+    go(p, 0);
+    expect(p.rack).toBe(false);
+    Object.assign(p, STILL, { x: -20, z: 43, y: 1 });
+    go(p, 0);
+    expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag });
+    // The rail gun rack: his cannon, its battery full, never a rail gun's capsule.
+    Object.assign(p, STILL, { x: -20, z: 46, y: 1 });
     go(p, RAIL);
     expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS, railed: true });
-    Object.assign(p, STILL, { x: -20, z: 49, y: 1, inRifle: false });
+    // The rifle rack: his disc (key 4, KEY.RIFLE), carried, nothing in it, and no rifle, clip or grenade.
+    Object.assign(p, STILL, { x: -20, z: 49, y: 1 });
     go(p, RIFLE);
     expect(p).toMatchObject({ rifle: 0, clip: 0, rifled: true, nades: 0 });
     // An old marine's rail gun is not kept by a Hunter either: no more than his battery's shots.
     Object.assign(p, { rail: RAIL_MAX, cap: RAIL_CAP });
     go(p, 0);
     expect(p).toMatchObject({ rail: 0, cap: HUNTER_CELLS });
-    Object.assign(p, STILL, { x: -20, z: 40, y: 1, ammo: 1, mag: 0, rack: false });
-    go(p, 0);
-    expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag });
+  });
+
+  it('gets no second disc from the rack while the first is out', () => {
+    const p = hunter({ x: -20, z: 49, inRifle: false, clip: DISK_LOST });
+    go(p, RIFLE);
+    expect(p).toMatchObject({ rifle: 0, clip: DISK_LOST - 1 });
+  });
+
+  it('loses what he found when he dies: his blades alone at the respawn', () => {
+    const p = hunter({ hp: 0, down: 1 });
+    step(p, { seq: 0, keys: 0, yaw: EAST, pitch: 0 }, world, 0, true, [], HUNTER);
+    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, blade: true, wield: true });
   });
 });
 
@@ -173,15 +225,16 @@ describe('the shoulder cannon through the room', () => {
     };
     const hold = (n: number, keys: number) => turn(EAST, n, keys);
     // Face to face on the slab, 12 m apart, the foe square in the cannon's sight.
-    Object.assign(state(hunterC), STILL, { x: 0, y: 1, z: 0, yaw: EAST, ground: true });
+    Object.assign(state(hunterC), STILL, ARMED, { x: 0, y: 1, z: 0, yaw: EAST, ground: true });
     Object.assign(state(foeC), STILL, { x: 12, y: 1, z: 0, yaw: -EAST, ground: true });
     return { room, hold, turn, hunter: state(hunterC), foe: state(foeC) };
   };
 
-  it('has a full battery once he joins as the Hunter, the class taken after his spawn', () => {
+  it('has no cannon once he joins as the Hunter, the class taken after his spawn', () => {
     const m = match();
+    Object.assign(m.hunter, { ammo: -1, rail: -1, rifle: -1 });
     m.hold(1, RAIL);
-    expect(m.hunter).toMatchObject({ cap: HUNTER_CELLS, rail: 0 });
+    expect(m.hunter).toMatchObject({ rail: -1, railed: false, wield: true });
   });
 
   it('hits on the click, down the look, for three health (the user, 2026-11-23)', () => {
@@ -229,6 +282,25 @@ describe('the shoulder cannon through the room', () => {
     // 20° off the look: out of the 10° cone that starts a lock, still on the screen.
     m.turn(EAST - (20 * Math.PI) / 180, HUNTER_LASER_COOL + 4, RAIL | FIRE);
     expect(m.foe.hp).toBe(hp - HUNTER_LASER_HP);
+  });
+
+  it('leaves an ammo pack he cannot use and every rail cell where they are, and fills his harpoon from one', () => {
+    const m = match();
+    const gone = m.room['gone'] as number[];
+    // Full harpoon, his disc in hand, his battery charging: neither pack is his to take.
+    Object.assign(m.hunter, { x: 5, z: -20, cap: 1, rail: 9 });
+    m.hold(1, 0);
+    expect(gone[0]).toBe(0);
+    expect(m.hunter.rifle).toBe(0);
+    Object.assign(m.hunter, { x: 8, z: -20 });
+    m.hold(1, 0);
+    expect(gone[1]).toBe(0);
+    expect(m.hunter.rail).toBeLessThanOrEqual(HUNTER_CELL_TICKS);
+    // Short of bolts, the ammo pack fills the harpoon.
+    Object.assign(m.hunter, { x: 5, z: -20, ammo: 2 });
+    m.hold(1, 0);
+    expect(gone[0]).toBeGreaterThan(0);
+    expect(m.hunter).toMatchObject({ ammo: HUNTER.ammo, rifle: 0 });
   });
 
   it('does not lock on while the blades are in hand', () => {
@@ -297,14 +369,14 @@ describe('the Hunter’s wrist blades and harpoon (the user, 2026-11-23)', () =>
     expect(go(p, RIFLE | FIRE)).toBe(STRIKE.DISK);
   });
 
-  it('has his harpoon from the start, also when he took the class after his spawn', () => {
+  it('has his blades alone when he took the class after his spawn: the harpoon is on a rack', () => {
     // A marine's spawn (no gun until the rack), then the class changes at the next step.
     const p = Object.assign(spawn(0, world, 0, 0, KITS[ROLE.MARINE]), { x: 0, y: 1, z: 0 });
     expect(p.ammo).toBe(-1);
     go(p, 0);
-    expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag, blade: true });
+    expect(p).toMatchObject({ ammo: -1, blade: true, wield: true });
     go(p, 0);
-    expect(p).toMatchObject({ railed: false, wield: false, fists: false });
+    expect(p).toMatchObject({ railed: false, wield: true, fists: false });
   });
 
   it('never thrust: FORWARD with FIRE slashes, and its special is the leap, not the lunge', () => {

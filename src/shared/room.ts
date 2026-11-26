@@ -1577,10 +1577,14 @@ export class Room {
       // Up to what his class carries (kit.ts).
       const wants = ({ state: q, info }: Player) => {
         const kit = kitOf(info.role, this.world.def);
+        // The Hunter's disc (`rifle` 0) takes no rounds and his cannon (`rail`, its countdown)
+        // charges itself: an ammo pack fills his harpoon alone, and a rail cell is not his.
+        const own = !!kit.hunter;
         return [
           q.hp < kit.hp,
-          (q.ammo >= 0 && q.ammo < kit.ammo) || ((q.rifle ?? -1) >= 0 && q.rifle! < kit.rifle),
-          (q.rail ?? -1) >= 0 && q.rail! < kit.rail,
+          (q.ammo >= 0 && q.ammo < kit.ammo) ||
+            (!own && (q.rifle ?? -1) >= 0 && q.rifle! < kit.rifle),
+          !own && (q.rail ?? -1) >= 0 && q.rail! < kit.rail,
           kit.gear && (q.armor ?? 0) < ARMOR_MAX,
         ][kind];
       };
@@ -1593,7 +1597,12 @@ export class Room {
         } else if (kind == 1) {
           // It fills the gun and the laser rifle, whichever he has.
           q.ammo = q.ammo < 0 ? -1 : Math.min(kit.ammo, q.ammo + AMMO_PACK);
-          q.rifle = (q.rifle ?? -1) < 0 ? -1 : Math.min(kit.rifle, q.rifle! + RIFLE_CLIP);
+          q.rifle =
+            (q.rifle ?? -1) < 0
+              ? -1
+              : kit.hunter
+                ? q.rifle
+                : Math.min(kit.rifle, q.rifle! + RIFLE_CLIP);
         } else if (kind == 2) {
           q.rail = Math.min(kit.rail, q.rail! + RAIL_CELL);
         } else {

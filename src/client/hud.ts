@@ -345,7 +345,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 has twin wrist blades, which slash and never thrust. Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. Slot 4 is his disc: left click throws it (3 HP) and it comes back like a boomerang. He carries all four from the spawn, has no fists and takes no weapon from the racks.',
+    'Slot 1 has twin wrist blades, which slash and never thrust. Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. Slot 4 is his disc: left click throws it (3 HP) and it comes back like a boomerang. He spawns with the blades alone and finds the rest on the racks. No fists.',
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],

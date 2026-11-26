@@ -34,10 +34,10 @@ enregistré.
 
 ## Shoulder cannon
 
-The Hunter's third weapon, on key 3 (the user, 2026-11-23). He takes no other weapon: the rail gun
-and rifle racks give him nothing, and the gun rack only refills his harpoon bolts.
+The Hunter's third weapon, on key 3 (the user, 2026-11-23). He finds it on the rail gun rack (the
+user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026-11-24).
 
-- **Always carried.** It is his from the spawn. It never heats or swaps a capsule, and G does not
+- **Found, then kept until death.** It comes from the rail gun rack. It never heats or swaps a capsule, and G does not
   fire the rail gun's ring with it (`src/shared/gun.ts`).
 - **Battery.** It holds `HUNTER_CELLS` (15) shots in `cap`. Each shot spends one, and it does not
   fire empty. Each `HUNTER_CELL_TICKS` (1.5 s) without firing brings one back, counted down in
@@ -88,10 +88,10 @@ and rifle racks give him nothing, and the gun rack only refills his harpoon bolt
 
 ## Blades, harpoon and slots (the user, 2026-11-23)
 
-- **Slots.** The wrist blades are on 1, the harpoon on 2, the cannon on 3 and the disc on 4. He has
-  all four from the spawn, the blades in hand, and no fists: key 5 does nothing and the HUD shows four
-  slots. `step()` gives him the harpoon whenever he has none (`ammo` -1), so a player who picks the
-  class after his spawn has it too: a class changes at the next step, not at a respawn. Only the
+- **Slots.** The wrist blades are on 1, the harpoon on 2, the cannon on 3 and the disc on 4. He spawns
+  with the blades alone, in hand, and finds the other three on the racks (the user, 2026-11-26); a
+  slot he has not filled leaves the blades in hand. He has no fists: key 5 does nothing and the HUD
+  shows four slots. Only the
   client's key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE`
   is the same.
 - **Disc.** It takes the laser rifle's slot (`KEY.RIFLE`, `rifled`, `rifle` 0: carried, nothing
@@ -183,8 +183,17 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
 
 ## Radio, racks and HUD (the user, 2026-11-24)
 
-- **Racks.** Every rack serves both teams (`step()`, `src/shared/gun.ts`). The xenomorph takes
-  nothing from them and the Hunter only his harpoon's bolts, at either team's gun rack.
+- **Racks.** Every rack serves both teams (`step()`, `src/shared/gun.ts`) and stands yellow
+  (`RACK_RGB`, `src/client/props.ts`). Each class sees the racks its own way (`rackSetOf()`): the
+  xenomorph none, since it takes nothing from them, and the Hunter his own weapons.
+- **The Hunter's arsenal (the user, 2026-11-26).** He spawns with his wrist blades alone, and loses
+  the rest when he dies. On arrival at a rack he takes his own weapon and no standard one: the
+  katana rack gives the harpoon and refills its bolts, the rail gun rack the shoulder cannon with a
+  full battery, the rifle rack the disc (one: no second while the first is out). The gun rack gives
+  him nothing yet, and he does not see it: his pistol comes next. A weapon he has not found reads -1 in its field (`ammo`, `rail`, `rifle`); one
+  just found comes to hand (`chosen()`, `src/client/input.ts`). Ammo packs fill his harpoon only,
+  and rail cells are not his (`Room.heal()`). Bots go to his racks as to the others
+  (`harpoon rack`, `cannon rack`, `disc rack` in `src/shared/bot.ts`).
 - **Radio.** After each frag the Hunter answers in turn (`HUNTER_CALLS`, `src/client/taunt.ts`):
   his victim's own voice mimicked, `SOUND.HUNTER_CLICKS` (a trill of throat clicks over a gurgle),
   `SOUND.HUNTER_TAUNT`, a mimicry again, `SOUND.HUNTER_GROWL`. The mimicry is one of the victim's

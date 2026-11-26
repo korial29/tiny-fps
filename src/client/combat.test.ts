@@ -1101,7 +1101,8 @@ describe('drawing and sheathing the katana', () => {
       undefined,
       () => true,
     );
-    const p = Object.assign(spawn(0, highline, 0, 0, kit), { id: 1 });
+    // His cannon found on its rack, its battery full.
+    const p = Object.assign(spawn(0, highline, 0, 0, kit), { id: 1, rail: 0, cap: kit.cap });
     let now = 1000;
     /** `n` ticks of the real step with `keys`, two frames each, as the client sees them. */
     const run = (keys: number, n: number) => {

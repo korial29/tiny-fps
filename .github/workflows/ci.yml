@@ -59,8 +59,12 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     steps:
+      # Two commits deep: a pull request is checked out at its merge commit, whose first parent
+      # is the base branch's tip, and the test step diffs against that parent.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
 
       - name: Setup Node
         uses: actions/setup-node@v7
@@ -78,8 +82,14 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      # A pull request runs only the test files whose import graph reaches a file it changes
+      # (vitest --changed, diffed against the base branch's tip: HEAD^1 of the merge commit; a
+      # shallow fetch of the branch itself would share no merge base with it). A change to a file
+      # listed in the config's forceRerunTriggers runs them all, as does every push to master.
       - name: Test
-        run: npm run test:ci -- --shard=${{ matrix.shard }}/4
+        env:
+          CHANGED: ${{ github.event_name == 'pull_request' && '--changed=HEAD^1' || '' }}
+        run: npm run test:ci -- --shard=${{ matrix.shard }}/4 $CHANGED
 
   # The check master's protection requires: green only when the lint and every shard are. A job
   # skipped after a failed need would count as passed, hence always() and the results read here.

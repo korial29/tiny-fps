@@ -260,6 +260,46 @@ describe('eye', () => {
     expect(Math.abs(fx.dy)).toBeLessThan(0.01);
   });
 
+  it('climbs a row of low steps as a slope: the drawn eye never jumps by a step (the wing on Landfall)', () => {
+    // Running at 7 m/s up rows 0.47 m deep and 0.15 m high, as on the middle piece of the wing.
+    // The same run on the flat takes the bob out of what is measured.
+    const [fx, flat] = [createEffects(), createEffects()];
+    let [drawn, worst] = [0, 0];
+    for (let k = 0; k < 120; k++) {
+      const x = (7 * k) / 60;
+      const y = 0.15 * Math.floor(x / 0.47);
+      fx.update(at(7, k / 60, { y }), KEY.FORWARD, DT);
+      flat.update(at(7, k / 60), KEY.FORWARD, DT);
+      const eye = y + fx.dy - flat.dy;
+      if (k > 1) {
+        worst = Math.max(worst, Math.abs(eye - drawn));
+      }
+      drawn = eye;
+    }
+    // A sixtieth of a second of the slope's 2.2 m/s rise, and a little more: not the 0.15 m step.
+    expect(worst).toBeLessThan(0.06);
+    // It keeps up with the feet, a short way behind.
+    expect(fx.dy).toBeLessThan(0);
+    expect(fx.dy).toBeGreaterThan(-0.3);
+  });
+
+  it('follows a step down as smoothly, and leaves the slopes, a fall and a respawn alone', () => {
+    const fx = run(createEffects(), me({ y: 1 }), 0.2);
+    fx.update(me({ y: 0.85 }), 0, DT);
+    expect(fx.dy).toBeGreaterThan(0.1);
+    run(fx, me({ y: 0.85 }), 1);
+    expect(Math.abs(fx.dy)).toBeLessThan(1e-3);
+    // A slope of the relief: 2 cm a frame.
+    fx.update(me({ y: 0.87 }), 0, DT);
+    expect(Math.abs(fx.dy)).toBeLessThan(1e-5);
+    // A respawn, metres away.
+    fx.update(me({ y: 6 }), 0, DT);
+    expect(fx.dy).toBe(0);
+    // A step taken in the air is a landing, not a stair.
+    fx.update(me({ y: 6.15, mode: MODE.AIR, ground: false }), 0, DT);
+    expect(fx.dy).toBe(0);
+  });
+
   it('starts at the eye height of the first state, without a swoop', () => {
     const fx = createEffects();
     fx.update(me({ mode: MODE.CROUCH }), 0, DT);

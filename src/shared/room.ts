@@ -124,6 +124,7 @@ import {
 import type { Sight } from './rover';
 import { SHIP } from './ship';
 import type { Errand } from './sortie';
+import { RIDE } from './valet';
 import { PHASE, STATION, Station, inside, reaches as atPost } from './station';
 import { glory, pouncing, reaches, tackling } from './tackle';
 import { BODY, CUT, EV, FALL, HAIRS_N, KEY, LIMB, MODE, NOBODY, TONES_N } from './types';
@@ -180,6 +181,12 @@ interface Player {
 const MAX_CATCH_UP = 20;
 /** A new player does not spawn within this many metres of another one. */
 const SPAWN_CLEAR = 2;
+/**
+ * Ticks into a match before a bot is sent to the orbital station (the user, 2026-11-26: they flew
+ * off at the start and left the flag): the flag comes first.
+ */
+const SORTIE_AFTER = 150 * TICK_HZ;
+
 /** Ticks before a rover can run the same player over again. */
 const SPLAT_COOLDOWN = TACKLE_COOLDOWN;
 /**
@@ -2085,6 +2092,7 @@ export class Room {
           world: this.world,
           balls: this.balls,
           errand: errands.get(p.info.id),
+          car: this.carOf(p),
           kit: this.kit(p),
           hunters,
           packs: health,
@@ -2143,7 +2151,10 @@ export class Room {
         continue;
       }
       const over = this.ctf.over;
-      const want = !over && (phase === PHASE.READY || (phase === PHASE.ARMED && armed !== team));
+      const want =
+        !over &&
+        this.ctf.elapsed() > SORTIE_AFTER &&
+        (phase === PHASE.READY || (phase === PHASE.ARMED && armed !== team));
       const guard = !over && phase === PHASE.ARMED && armed === team;
       const able = (p: Player) =>
         !!p.bot && p.info.team === team && !p.state.down && this.ctf.carrying(p.info.id) < 0;
@@ -2179,6 +2190,28 @@ export class Room {
       }
     }
     return out;
+  }
+
+  /**
+   * The rover a bot may drive: the one at whose wheel it sits, or the nearest empty one within its
+   * walk (valet.ts), never a ship (the station's errand flies those).
+   */
+  private carOf(p: Player): Rover | undefined {
+    const [mine] = this.seatOf(p);
+    if (mine) {
+      return mine.ship ? undefined : mine;
+    }
+    return this.rovers
+      .filter(
+        r =>
+          !r.ship &&
+          !r.wreck &&
+          r.driver === NOBODY &&
+          r.rider === NOBODY &&
+          Math.abs(r.y - p.state.y) < 3 &&
+          gap2(r, p.state) < RIDE.NEAR ** 2,
+      )
+      .sort((a, b) => gap2(a, p.state) - gap2(b, p.state))[0];
   }
 
   /** The bots' map of the world, built when it loads rather than in the tick of a bot's first plan. */

@@ -196,6 +196,11 @@ export class Ctf {
     }
   }
 
+  /** Ticks the match has run (it counts down from the time limit). */
+  public elapsed(): number {
+    return this.rules.timeLimit * TICK_HZ - this.clock;
+  }
+
   /** The part of a snapshot that is the match's. */
   public wire(): Pick<Snapshot, 'score' | 'clock' | 'over' | 'flags'> {
     return {

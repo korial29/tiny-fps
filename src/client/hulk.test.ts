@@ -12,7 +12,7 @@ import {
 } from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
 import { canopy, hulk, parts } from './hulk';
-import { CANOPY, HULL, TARP } from './paint';
+import { CANOPY, DULL, HULL, TARP } from './paint';
 import { STRIDE } from './mesh';
 import { TEX } from '../shared/types';
 
@@ -55,16 +55,17 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 90,000 vertices in all', () => {
-    expect(count(made.hull)).toBeLessThan(27_000);
+  it('keeps each part within its share: under 112,000 vertices in all', () => {
+    // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, inside 18,708, wings 7,224, debris 27,246.
+    expect(count(made.hull)).toBeLessThan(35_000);
     expect(count(made.ends)).toBeLessThan(2_500);
-    expect(count(made.inside)).toBeLessThan(16_000);
+    expect(count(made.inside)).toBeLessThan(20_000);
     expect(count(made.cabin)).toBeLessThan(16_000);
-    expect(count(made.wings)).toBeLessThan(7_000);
-    expect(count(made.debris)).toBeLessThan(18_000);
+    expect(count(made.wings)).toBeLessThan(8_000);
+    expect(count(made.debris)).toBeLessThan(28_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26): 6,348.
     expect(count(made.camps)).toBeLessThan(7_000);
-    expect(count(hulk(BEACH))).toBeLessThan(90_000);
+    expect(count(hulk(BEACH))).toBeLessThan(112_000);
   });
 
   it('keeps the troops’ seats against the flanks, clear of the ways through, the doors and the tears', () => {
@@ -184,6 +185,44 @@ describe('hulk', () => {
     expect(lining).toHaveLength(0);
   });
 
+  it('lays no level face of a tear’s frame on a deck’s top or underside, where the two would fight', () => {
+    const l = verts(made.hull);
+    SHIP.forEach((_, n) => {
+      const faces = DECKS.slice(0, 2).flatMap(h => [h, h - 0.3].map(e => SHAPE.axis[n] + e));
+      const [x0, x1] = SHAPE.sections[n];
+      for (let i = 0; i < l.length; i += 3) {
+        const t = l.slice(i, i + 3);
+        const y = t[0][1];
+        if (
+          t[0][0] >= x0 &&
+          t[0][0] <= x1 &&
+          t.every(v => v[8] === TEX.STEEL && Math.abs(v[1] - y) < 1e-3)
+        ) {
+          expect(
+            faces.some(f => Math.abs(f - y) < 5e-3),
+            `at ${t[0]}`,
+          ).toBe(false);
+        }
+      }
+    });
+  });
+
+  it('hangs no lamp or cable under a hole: nothing would hold it there', () => {
+    const soot = verts(made.inside).filter(v => v[8] === -1 && v[6] < 0.04 && v[7] < 0.04);
+    expect(soot.length).toBeGreaterThan(100);
+    SHIP.forEach(({ holes }, n) => {
+      const c = SHAPE.axis[n];
+      for (const [deck, x0, x1, half] of holes) {
+        const top = c + (deck > 1 ? 6.8 : DECKS[deck]);
+        const under = soot.filter(
+          v =>
+            v[0] > x0 && v[0] < x1 && Math.abs(v[2] - MID) < half && v[1] > top - 0.4 && v[1] < top,
+        );
+        expect(under, `hole ${deck} at ${x0}`).toHaveLength(0);
+      }
+    });
+  });
+
   it('lays each wing as thin slabs through the tops of its rows: a foot sinks or floats half a row’s rise at most', () => {
     const rows = of('wingpiece');
     const skin = verts(made.wings).filter(v => v[8] === HULL);
@@ -276,7 +315,7 @@ describe('hulk', () => {
         ),
       );
     for (const c of inside('container')) {
-      expect(c.filter(v => v[8] === TEX.STEEL).length / c.length).toBeGreaterThan(0.7);
+      expect(c.filter(v => v[8] === TEX.STEEL + DULL).length / c.length).toBeGreaterThan(0.7);
     }
     const tents = of('shelter');
     const poles = tents.filter(p => p.max[1] - p.min[1] > 1);

@@ -268,3 +268,30 @@ the gaps crossed on foot and the hold walked into described above.
 - **The floors' grating** (`inside.ts` `FLOOR`): brighter, 12.5 cm bars, and on Landfall its
   relief stands out `GRATE_RELIEF` (4) times more than RELIEF.
 - **Vertices**: the wreck 81,156 → 83,244 (camps 4,476 → 6,348, debris 17,040 → 17,256).
+
+## Torn metal, the doors and the shine (the user, 2026-11-26)
+
+- **Torn metal** (`teeth()` in `hulk/common.ts`, for every hole, tear, broken end and piece of
+  debris): each tooth was one flat triangle. It is now a petal: its root on the edge, a shoulder
+  pinched in by a random share, a ragged tip (one point, two, or a fork), widths uneven so the
+  roots overlap or leave a notch, curled on the way it already leans off the edge's plane and
+  twisted a little, darker toward the tip. Its back, a centimetre behind, is bare steel (`RAW`);
+  the canopy's shards have none. The seed is the same either side of the centre line, so red's
+  and blue's twins tear alike.
+- **The tears' frames** (`skin()` in `hull.ts`): the jambs, sills and lintels between the skin and
+  its lining are bare steel (`RAW`), no more strips of iron and steel. A sill on a deck's top or a
+  lintel on its underside (0.3 m under it) goes 2 cm into the deck: they lay in its faces and
+  fought them.
+- **Lamps and cables** (`inside.ts`): none under a hole in the deck or the back over them. One
+  hung in the nose's back hole with nothing over it.
+- **Shine**: the floors' grating shines on Landfall (`BRIGHT_GRATE`, 3 and 180, and a little sky
+  on its bars, none in its gaps); the hull's white is darker (0.48) and its glint and mirrored sky
+  weaker (`hk` 0.7, `GLOSS` about half); the containers are dull steel, STEEL's texture on the
+  layer `STEEL + DULL` (`paint.ts`), with `DULL_METAL` (0.5 and 60) and a quarter of the sky.
+- **Vertices**: the wreck 83,244 → 109,146 (hull 24,276 → 33,744, ends 1,788 → 2,244, inside
+  14,616 → 18,708, wings 5,328 → 7,224, debris 17,256 → 27,246). Building it at load 35 → 44 ms
+  (Node, median of 12).
+- **Frame** (headless Chrome on Metal, 1280 × 720, GPU timer, medians of 120 frames, before and
+  after alternated three times): at the spawn looking at the wreck 8.32 → 8.41 ms, in the hold
+  facing its door 8.73 → 8.69 ms, within the noise. Highline and Tranquility draw none of it; the
+  shader's changes are under `BEACH` but for one comparison.

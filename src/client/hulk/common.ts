@@ -12,7 +12,7 @@ export const tex = (l: number, k = 1, s = 1, r?: boolean): Mat => ({ l, c: [k], 
 export const ink = (c: V, k = 1, l = -1): Mat => ({ l, c: c.map(v => v * k), s: 1 });
 
 export const MID = ZED / 2;
-export const WHITE = ink([0.68, 0.69, 0.71], 1, HULL);
+export const WHITE = ink([0.48, 0.49, 0.51], 1, HULL);
 export const SKIN = WHITE;
 export const GIRDER = tex(TEX.STEEL, 0.45);
 export const PLATE = tex(TEX.METAL, 0.7);
@@ -148,11 +148,82 @@ export const bar = (a: V, b: V, w: number, m: Mat, h = w) => {
   face(q, m, c);
 };
 
-/** Torn metal: n teeth on the edge a to b, each reaching as far as `d` at most, turned away from `c`. */
+/** Bare metal, where a torn sheet shows its back. */
+export const RAW = tex(TEX.STEEL, 0.6);
+
+/**
+ * Torn metal: n petals on the edge a to b, each reaching as far as `d` at most, turned away from
+ * `c`. A petal is a sheet torn in two rows: its root on the edge, a shoulder pinched in by a
+ * random share, a ragged tip (one point, two, or a fork), curled on toward the side `d` already
+ * leans and twisted a little about its length. Its face is `m` lit `k`, darker toward the tip;
+ * its back, a centimetre behind, is bare metal (glass has none).
+ */
 export const teeth = (a: V, b: V, d: V, n: number, m: Mat, k = 1, c = DOWN) => {
+  // Red's and blue's twins tear alike: the seed is the same either side of the line.
+  const seed = a[0] * 7 + Math.abs(a[2] - MID) * 3 + a[1];
+  const h = (i: number, j: number) => hash(i, seed + j * 1.37, 11 + j);
+  const along = sub(b, a);
+  const reach = Math.hypot(d[0], d[1], d[2]);
+  // The sheet's side away from c, and the way the petals curl: on, the way d leans off the edge's plane.
+  let nrm = unit(cross(along, d));
+  const out = sub(mid(a, b), c);
+  if (nrm[0] * out[0] + nrm[1] * out[1] + nrm[2] * out[2] < 0) {
+    nrm = nrm.map(v => -v);
+  }
+  const lean = Math.sign(nrm[0] * d[0] + nrm[1] * d[1] + nrm[2] * d[2]) || 1;
+  const w = 1 / n;
   for (let i = 0; i < n; i++) {
-    const [p, q] = [off(a, sub(b, a), i / n), off(a, sub(b, a), (i + 1) / n)];
-    face([p, q, off(mid(p, q), d, 0.3 + 0.7 * hash(i, a[0] * 7 + a[2] * 3 + a[1], 11))], m, c, k);
+    // Petals of uneven width: their roots overlap or leave a notch between them.
+    const t0 = (i + 0.3 * (h(i, 0) - 0.5) * (i > 0 ? 1 : 0)) * w;
+    const t1 = (i + 1 + 0.3 * (h(i + 1, 0) - 0.5) * (i < n - 1 ? 1 : 0)) * w;
+    const s = 0.3 + 0.7 * h(i, 1);
+    const curl = lean * reach * (0.15 + 0.5 * h(i, 2));
+    const twist = (h(i, 3) - 0.5) * 0.5 * reach;
+    // A point of the petal: u across it (0 to 1), v along its reach (0 to 1).
+    const at = (u: number, v: number) =>
+      off(
+        off(off(a, along, t0 + (t1 - t0) * u), d, s * v),
+        nrm,
+        curl * v * v * s + twist * (u - 0.5) * v * s,
+      );
+    const pinch = [0.08 + 0.3 * h(i, 4), 0.92 - 0.3 * h(i, 5)];
+    const v1 = 0.35 + 0.25 * h(i, 6);
+    const tip = h(i, 7);
+    const outline: number[][] = [
+      [0, 0],
+      [1, 0],
+      [pinch[1], v1],
+      ...(tip < 0.45
+        ? [[0.25 + 0.5 * h(i, 8), 1]]
+        : tip < 0.8
+          ? [
+              [0.55 + 0.3 * h(i, 8), 0.75 + 0.25 * h(i, 9)],
+              [0.15 + 0.3 * h(i, 9), 1],
+            ]
+          : [
+              [0.7 + 0.2 * h(i, 8), 1],
+              [0.5, 0.55 + 0.15 * h(i, 9)],
+              [0.1 + 0.2 * h(i, 9), 0.9],
+            ]),
+      [pinch[0], v1 + 0.1 * (h(i, 10) - 0.5)],
+    ];
+    const pts = outline.map(([u, v]) => at(u, v));
+    const lit = outline.map(([, v]) => k * (1 - 0.45 * v));
+    // A fan from the root's first corner, which sees the whole outline, forked tips too.
+    for (let j = 1; j < pts.length - 1; j++) {
+      const tri = [pts[0], pts[j], pts[j + 1]];
+      const kk = [lit[0], lit[j], lit[j + 1]];
+      face(tri, m, c, kk);
+      // Glass has no back of its own: the canopy's layer shows from both sides.
+      if (m.l != CANOPY) {
+        face(
+          tri.map(p => off(p, nrm, -0.012)),
+          RAW,
+          off(pts[0], nrm, 9),
+          kk.map(v => Math.min(1, 0.5 + v)),
+        );
+      }
+    }
   }
 };
 

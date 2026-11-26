@@ -287,12 +287,16 @@ describe('the racks of a scene', () => {
     expect(count(undefined, undefined)).toBe(0);
   });
 
-  it('paints each rack in the colour of its team', () => {
+  it('paints every rack yellow, whichever team it stands for', () => {
     const blue = drawn(out => racks(out, [], [undefined, [4, 3, 8]], 0));
     const red = drawn(out => racks(out, [], [[4, 3, 8]], 0));
     const dish = (v: number[][]) => v.find(x => x[1] > 3.7 && x[1] < 3.8 && x[8] == -1)!;
-    expect(dish(blue)[9]).toBeGreaterThan(dish(blue)[6]);
-    expect(dish(red)[6]).toBeGreaterThan(dish(red)[9]);
+    // A player vertex keeps its colour in c.x, c.y and c.w (6, 7 and 9); 8 is the layer.
+    const rgb = (x: number[]) => [x[6], x[7], x[9]];
+    expect(rgb(dish(blue))).toEqual(rgb(dish(red)));
+    const [r, g, b] = rgb(dish(red));
+    expect(r).toBeGreaterThan(b * 3);
+    expect(g).toBeGreaterThan(b * 3);
   });
 });
 

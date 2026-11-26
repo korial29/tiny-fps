@@ -5,6 +5,7 @@
 // brush under the map's sky, which goes when Start is pressed.
 import { PARRY, RIFLE_CLIP, TEAM_COLOR, XENO_HP } from '../shared/constants';
 import { ROLE, buildOf, rolesOf } from '../shared/kit';
+import { HUNTER_GEAR } from './soldier';
 import { STILL, spawn } from '../shared/physics';
 import type { Choice, PlayerState } from '../shared/types';
 import { build } from '../shared/world';
@@ -297,6 +298,8 @@ export const createLobby = (
     ...STILL,
     ...spawn(idOf(role), studio, 0, 0),
     id: idOf(role),
+    // The Hunter's picture shows his whole arsenal, though he finds it on the racks.
+    ...(role === ROLE.HUNTER && HUNTER_GEAR),
   });
   const men = roles.map(stand);
   const me = (role: number) => men[roles.indexOf(role)];

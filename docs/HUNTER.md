@@ -200,7 +200,9 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   (`RACK_RGB`, `src/client/props.ts`). Each class sees the racks its own way (`rackSetOf()`): the
   xenomorph none, since it takes nothing from them, and the Hunter his own weapons.
 - **The Hunter's arsenal (the user, 2026-11-26).** He spawns with his wrist blades alone, and loses
-  the rest when he dies. On arrival at a rack he takes his own weapon and no standard one: the
+  the rest when he dies. A weapon he has not found is not drawn on him either: no harpoon on his
+  back, no cannon on his shoulder, no disc at his hip (`soldier.ts`, `body.ts`); the menus'
+  pictures show him with all of it (`HUNTER_GEAR`). On arrival at a rack he takes his own weapon and no standard one: the
   katana rack gives the harpoon and refills its bolts, the rail gun rack the shoulder cannon with a
   full battery, the rifle rack the disc (one: no second while the first is out). The gun rack gives
   him his pistol, with the marine's shots and battery. A weapon he has not found reads -1 in its field (`ammo`, `rail`, `rifle`); one

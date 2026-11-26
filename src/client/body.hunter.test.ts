@@ -21,10 +21,10 @@ const player: PlayerState = {
   ...STILL,
 };
 
-const view = (isHunter: boolean, pieces?: Pieces): number[] => {
+const view = (isHunter: boolean, pieces?: Pieces, p: PlayerState = player): number[] => {
   const body = createBody();
   body.wear(0, undefined, false, false, isHunter);
-  body.update(player, 1 / 60);
+  body.update(p, 1 / 60);
   const out: number[] = [];
   body.draw(out, [0, 1.6, 0], 0, 0, 0, undefined, pieces);
   return out;
@@ -32,9 +32,11 @@ const view = (isHunter: boolean, pieces?: Pieces): number[] => {
 
 it('draws the Hunter model equipment on the first-person rig', () => {
   const marine = view(false);
-  const hunterView = view(true);
+  const hunterView = view(true, undefined, { ...player, rifle: 0 });
   const pieces: Pieces = [];
-  const kept = view(true, pieces);
+  // His disc found: it hangs at his hip (the user, 2026-11-26: not before).
+  const found = { ...player, rifle: 0 };
+  const kept = view(true, pieces, found);
   const plainHands: number[] = [],
     clawedHands: number[] = [];
   const pose = solve(rest());
@@ -49,6 +51,10 @@ it('draws the Hunter model equipment on the first-person rig', () => {
   const gear = pieces.reduce((sum, p) => sum + p.m.count * STRIDE, 0);
   // With no list to hand them to, the same parts are written into the frame's vertices.
   expect(hunterView.length - marine.length).toBe(gear + clawed);
+  // Not found yet, the disc is not at his hip: one piece fewer.
+  const bare: Pieces = [];
+  view(true, bare);
+  expect(bare).toHaveLength(9);
   expect(hunterView.some((_, i) => i % STRIDE === 8 && hunterView[i] === SHINE)).toBe(true);
   expect(hunterView.length % STRIDE).toBe(0);
 });

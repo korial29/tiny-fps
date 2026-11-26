@@ -1345,6 +1345,13 @@ export const cannonOf = (
   const look = mul(axis([0, 1, 0], p.yaw), axis([1, 0, 0], p.pitch));
   return [hinge, slerp(stowed, look, folded(k))];
 };
+/**
+ * The Hunter with all he finds on the racks carried and nothing in hand (`fists`: he has none, so
+ * no weapon is out): what his pictures on the menus show. In play his weapons are drawn on him
+ * only once he has found them.
+ */
+export const HUNTER_GEAR = { ammo: 12, mag: 1, rail: 0, cap: 15, rifle: 0, side: 60, fists: true };
+
 /** The Hunter's joints this frame (hunterPose()), reused. */
 const hunterAt: Vec3[] = [];
 
@@ -1603,9 +1610,12 @@ export const soldier = (
         blendHunter(out, band, joints, s.rot);
       }
       for (const piece of rig.pieces) {
+        // A weapon in hand is drawn there, not where it is carried; one he has not found on a rack
+        // is not on him at all (the user, 2026-11-26): the harpoon, the disc, the shoulder cannon.
         if (
-          (piece.harpoon && handOf(p) === 0 && !p.sided) ||
-          (piece.disc && (p.rifled || !!p.clip))
+          (piece.harpoon && (p.ammo < 0 || (handOf(p) === 0 && !p.sided))) ||
+          (piece.disc && ((p.rifle ?? -1) < 0 || p.rifled || !!p.clip)) ||
+          (piece.cannon && (p.rail ?? -1) < 0)
         ) {
           continue;
         }

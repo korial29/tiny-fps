@@ -3004,8 +3004,10 @@ export const createBody = (world?: World): Body => {
         }
         if (hunter) {
           for (const part of hunterView(build)) {
-            // The hip's disc is in his hand while it is the weapon.
-            if (!(me?.rifled && part.key.endsWith('Flying disc'))) {
+            // The hip's disc is in his hand while it is the weapon, and not on him until he finds
+            // it on a rack (the user, 2026-11-26).
+            const noDisc = !!me?.rifled || (!!me && (me.rifle ?? -1) < 0);
+            if (!(noDisc && part.key.endsWith('Flying disc'))) {
               drawHunterPart(out, part, s, pieces);
             }
           }

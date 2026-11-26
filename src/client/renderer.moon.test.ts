@@ -4,6 +4,7 @@ import { STILL } from '../shared/physics';
 import { ROVER } from '../shared/rover';
 import { ORBIT } from '../shared/constants';
 import { MOON } from '../shared/moon';
+import { ground } from '../shared/relief';
 import { SHIP } from '../shared/ship';
 import { MODE, NOBODY, TEX } from '../shared/types';
 import type { PlayerState, Rover } from '../shared/types';
@@ -255,6 +256,43 @@ describe('createRenderer', () => {
       expect(high.slice(1, 3)).toEqual([1, 1]);
       // A map with no relief never has one.
       expect(ob(ROOM, ORBIT.SEAM + 300)).toEqual([0, 0, 0, 0]);
+    });
+
+    it('sends each frame’s vertices to the frame’s buffer, also after a footprint was stamped from the prints’ own', () => {
+      const moon = build({ ...ROOM.def, relief: MOON.relief, scenery: 'moon' });
+      const rd = createRenderer(canvas, moon);
+      const plant = { x: 2, y: ground(moon, 2, 2), z: 2, yaw: 0, side: 1, n: 0 };
+      const body = { id: 1, plant, draw: () => {} };
+      // Every call since the renderer was made: what is bound outlives a frame.
+      calls.length = 0;
+      let bound: unknown;
+      let at = 0;
+      /** A frame: the buffer bound for its first upload (its vertices), and whether it stamped a print. */
+      const frame = () => {
+        rd.frame([2, 3, 2], 0, 0, [], new Map(), createEffects(), [], body as never);
+        let to: unknown;
+        let sent = false;
+        for (const c of calls.slice(at)) {
+          if (c[0] == 'bindBuffer') {
+            bound = c[2];
+          } else if (c[0] == 'bufferSubData' && !sent) {
+            sent = true;
+            to = bound;
+          }
+        }
+        const stamped = calls.slice(at).some(c => c[0] == 'drawArraysInstanced');
+        at = calls.length;
+        return [to, stamped] as const;
+      };
+      frame();
+      const [buffer, none] = frame();
+      expect(none).toBe(false);
+      // A step: its print is stamped in this frame, from the prints' queue.
+      plant.n = 1;
+      expect(frame()).toEqual([buffer, true]);
+      // The frame after it: its vertices still go to the frame's buffer, not into that queue, where
+      // they do not fit and the bodies stayed as they were before the step.
+      expect(frame()[0]).toBe(buffer);
     });
 
     it('draws the moon’s stars in the sky, and its Earth wherever the eye is, at the same angle: they are infinitely far', async () => {

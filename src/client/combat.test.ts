@@ -856,6 +856,7 @@ describe('the sounds and the screen of what happens to the own player', () => {
       2,
       false,
       false,
+      -1,
     );
     expect(hud.down).toHaveBeenLastCalledWith(0, 0);
     frame(player({ hp: 0, ammo: -1, down: 90 }));
@@ -874,6 +875,7 @@ describe('the sounds and the screen of what happens to the own player', () => {
       0,
       false,
       false,
+      -1,
     );
     expect(hud.down).toHaveBeenLastCalledWith(0, 1.5);
   });
@@ -1027,6 +1029,7 @@ describe('the own hits with the katana', () => {
       0,
       false,
       false,
+      -1,
     );
     frame(player({ ammo: 12, blade: true, wield: false }));
     expect(hud.vitals).toHaveBeenLastCalledWith(
@@ -1044,6 +1047,7 @@ describe('the own hits with the katana', () => {
       0,
       false,
       false,
+      -1,
     );
   });
 });

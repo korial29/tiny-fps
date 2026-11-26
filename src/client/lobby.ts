@@ -74,6 +74,8 @@ export const TRAITS: { name: string; tag: string; pros: string[]; cons: string[]
 
 /** Where the last choice is kept, so the next visit starts with it. */
 const SAVED = 'tiny-fps-cast';
+/** The side of a tile's pixel art (cast-art.ts), in its own pixels. */
+const ART_SIZE = 64;
 /**
  * The id each class's pictures are drawn with (its face is this id's): one per class, as the
  * renderer keeps a player's skin by his id, and a tile of another class would take the big
@@ -98,8 +100,6 @@ const ARMED: Partial<Record<number, Partial<Shot>>> = {
   // His disc put away (the user, 2026-11-24): as while it flies (`clip`), none hangs at his belt.
   [ROLE.HUNTER]: { hold: { blade: true, wield: true, clip: 1 }, spin: 0.45 },
 };
-/** A tile's picture: head and shoulders. */
-const BUST: Shot = { ...PORTRAIT, eye: 1.5, away: 1.6, turn: -0.4, fov: 22 };
 
 /** No lens effect on the frame that sizes the targets. */
 const BLANK = { fov: 0, roll: 0, lines: 0 } as unknown as Parameters<Renderer['frame']>[5];
@@ -117,7 +117,7 @@ const CSS =
   `.tl button{flex:1 1 0;min-height:0;max-height:92px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:1fr 1fr;column-gap:12px;align-items:center;padding:6px 12px 6px 6px;text-align:left;` +
   `border-color:#26323e;background:#0f161e;transition:border-color .15s,background .15s}` +
   `.tl button:hover{border-color:#3a4a5a;background:#141e28}.tl [aria-checked=true],.tl [aria-checked=true]:hover{border-color:#f7782a;box-shadow:0 0 0 1px #f7782a;background:linear-gradient(90deg,#f7782a2a,#0f161e 70%)}` +
-  `.tl canvas{grid-row:span 2;height:100%;max-height:78px;aspect-ratio:1;border-radius:8px;background:radial-gradient(#26323e,#0d141c)}` +
+  `.tl canvas{grid-row:span 2;height:100%;max-height:78px;aspect-ratio:1;border-radius:8px;image-rendering:pixelated;background:radial-gradient(#26323e,#0d141c)}` +
   `.tl b{align-self:end;font-size:clamp(14px,2.3vh,18px);font-weight:800;color:#fff}.tl small{align-self:start;font-size:12px;color:#8d9aa7}` +
   `.look{display:grid;gap:8px;padding:10px 12px;border:1px solid #26323e;border-radius:12px;background:#0b1117}.look[hidden],.look [hidden]{display:none}` +
   `.look>div{display:grid;grid-template-columns:46px 1fr;gap:12px;align-items:center}.look h4{margin:0}.look [role=radiogroup]{display:flex;flex-wrap:wrap;gap:5px}` +
@@ -197,7 +197,7 @@ export const createLobby = (
     `<div class="side"><div role="radiogroup" aria-label="Class" class="tl">${roles
       .map(r =>
         radio(
-          `<canvas width="112" height="112"></canvas><b>${TRAITS[r].name}</b><small>${TRAITS[r].tag}</small>`,
+          `<canvas width="${ART_SIZE}" height="${ART_SIZE}"></canvas><b>${TRAITS[r].name}</b><small>${TRAITS[r].tag}</small>`,
         ),
       )
       .join('')}</div>` +
@@ -225,7 +225,25 @@ export const createLobby = (
   const gl = $<HTMLCanvasElement>('.gl');
   const [pros, cons] = [$<HTMLElement>('.p'), $<HTMLElement>('.c')];
   const thumbs = [...tiles.querySelectorAll('canvas')];
-  const sheet = document.createElement('canvas');
+  // The tiles' pictures: pixel art drawn by hand (the user, 2026-11-26), in a chunk of its own.
+  void import('./cast-art').then(({ ART, ART_KEYS }) =>
+    thumbs.forEach((t, i) => {
+      const [palette, pixels] = ART[roles[i]];
+      const g = t.getContext('2d');
+      if (!g) {
+        return;
+      }
+      const img = g.createImageData(ART_SIZE, ART_SIZE);
+      for (let k = 0; k < pixels.length; k++) {
+        const at = ART_KEYS.indexOf(pixels[k]) * 6;
+        if (at >= 0) {
+          const n = parseInt(palette.slice(at, at + 6), 16);
+          img.data.set([n >> 16, (n >> 8) & 255, n & 255, 255], k * 4);
+        }
+      }
+      g.putImageData(img, 0, 0);
+    }),
+  );
   const buttons = (g: HTMLElement) => [...g.children] as HTMLButtonElement[];
 
   /** Each group's pick lit and alone in the Tab order; the parts the class has no choice of hidden. */
@@ -269,7 +287,6 @@ export const createLobby = (
       c.hair = i;
     }
     lit();
-    thumbed = '';
   };
   [tiles, bodies, skins, hairs].forEach((g, k) => {
     g.onclick = e => choose(k, buttons(g).indexOf((e.target as Element).closest('[role=radio]')!));
@@ -306,14 +323,11 @@ export const createLobby = (
   let rd: Renderer | undefined;
   let raf = 0;
   let next = 0;
-  /** The look the tiles were last drawn with, and the tiles still to draw for it, one a frame. */
-  let thumbed = '';
-  let todo: number[] = [];
+  /** The look the classes were last dressed in. */
+  let worn = '';
   let shown = false;
   /** The size changed: a frame of the view first, which sizes the renderer's own targets anew. */
   let resized = false;
-  /** The last frame drew the big picture. */
-  let drew = false;
   /** The picture's and the renderer's canvases the size the picture shows at. */
   const fit = () => {
     const [w, h] = [figure.clientWidth, figure.clientHeight];
@@ -339,45 +353,17 @@ export const createLobby = (
       rd.frame([men[0].x, men[0].y + 1.6, men[0].z + 3], 0, 0, [], new Map(), BLANK, []);
     }
     const key = JSON.stringify(c);
-    if (key != thumbed) {
-      thumbed = key;
+    if (key != worn) {
+      worn = key;
       // Each class's player dressed as the room would: the Hunter's model needs it.
       rd.wear(
         new Map(roles.map(r => [idOf(r), buildOf({ ...c, role: r }, def)])),
         new Map(roles.map(r => [idOf(r), lookOf(r)])),
       );
-      todo = roles.map((_, i) => i);
     }
-    // The big picture first, then a tile every other frame: on a slow machine every frame is due
-    // for the big one.
-    if (shown && todo.length && drew) {
-      drew = false;
-      const i = todo.shift()!;
-      const r = roles[i];
-      // Drawn the big picture's size, then its middle cut out: portrait() drawing pictures of
-      // another size between them, with no frame of the view in between, leaves the big one blank.
-      [sheet.width, sheet.height] = [picture.width, picture.height];
-      if (rd.portrait(sheet, me(r), buildOf({ ...c, role: r }, def), color, lookOf(r), BUST)) {
-        // The Hunter's pictures are always of the whole of him (portrait()): his head and chest cut out.
-        const tall = r == ROLE.HUNTER;
-        const side = sheet.height * (tall ? 0.42 : 1);
-        thumbs[i]
-          .getContext('2d')
-          ?.drawImage(
-            sheet,
-            (sheet.width - side) / 2,
-            tall ? sheet.height * 0.04 : 0,
-            side,
-            side,
-            0,
-            0,
-            thumbs[i].width,
-            thumbs[i].height,
-          );
-      }
-    } else if (now >= next || !shown) {
+    if (now >= next || !shown) {
       next = Math.max(next, now - 1000 / HZ) + 1000 / HZ;
-      drew = rd.portrait(picture, me(c.role!), buildOf(c, def), color, c, {
+      const drew = rd.portrait(picture, me(c.role!), buildOf(c, def), color, c, {
         ...FULL,
         ...ARMED[c.role!],
       });

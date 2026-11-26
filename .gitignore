@@ -2,3 +2,5 @@ node_modules
 dist
 dist-demo
 coverage
+__pycache__/
+scripts/art/preview.png

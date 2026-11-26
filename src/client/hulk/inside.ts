@@ -19,6 +19,9 @@ import {
 } from './common';
 import { sheet, ARCH, form, wide, stations, lines, lining, open } from './hull';
 
+/** The floors' grating: bright galvanised steel, its bars 12.5 cm apart (the user, 2026-11-26: metallic). */
+const FLOOR = tex(TEX.GRATE, 1.7, 2);
+
 // ---------------------------------------------------------------------------------------------
 // The inside.
 
@@ -86,7 +89,7 @@ export const inside = (n: number) => {
     [p[2], q[2]] = [Math.max(p[2], MID - w), Math.min(q[2], MID + w)];
     if (q[0] > p[0] && q[2] > p[2]) {
       // The back's top is the skin's; a floor that goes down to the keel shows its top only.
-      box(p, q, back ? PLATE : GIRDER, tex(TEX.GRATE), back ? 8 : a[1] < c - 6.9 ? 52 : 0);
+      box(p, q, back ? PLATE : GIRDER, FLOOR, back ? 8 : a[1] < c - 6.9 ? 52 : 0);
     }
   }
   for (const [deck, p, q, half] of holes) {

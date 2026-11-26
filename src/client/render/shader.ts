@@ -21,7 +21,7 @@ import { GRAIN, SAND, SKY, WATER, WET } from '../shore';
 import { SPAN } from '../prints';
 import { FRAME } from '../../shared/beach';
 import { PLUME, SMOKE } from '../smoke';
-import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL } from '../paint';
+import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
 import { JOINTS } from '../rig';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT } from '../skin';
 import { CLOTH } from '../mask';
@@ -161,6 +161,8 @@ export const PLEATS = 38;
 export const PITCH = 620;
 /** Metres a height of 1 in a texture's alpha stands for. */
 export const RELIEF = 0.06;
+/** Landfall's floors' grating stands out this much more than RELIEF (the user, 2026-11-26: a bump map on it); no other map's GRATE changes. */
+export const GRATE_RELIEF = 4;
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
 // and layers -2 and -3, which glow: no light, no shade. Layer -3 is smoke: grey C.x (and C.w for
@@ -435,6 +437,8 @@ float bw=0.,hk=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
 if(bs){float pr=smoothstep(.1,.45,P.y-${FRAME.water}.);h+=prh*pr;c*=1.-.38*prk*pr;}
 #endif
 if(abs(L-(${HULL}))<.005)${PANEL}
+if(abs(L-(${TARP}))<.001)${TARP_GLSL}
+if(abs(L-${TEX.GRATE}.)<.5)h*=${GRATE_RELIEF}.;
 #endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);

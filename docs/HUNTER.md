@@ -114,7 +114,7 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
   as he catches it, and a disc still out when it runs down (stuck) is gone and back in the hand.
   `clip` is sent in the snapshot, so the client predicts the next throw exactly; the old cooldown
   in `cool` had only 4 bits on the wire and let the client throw at will. In the own view the arm
-  throws it flat, backhand, and the hand stays empty while it is out (`throwOf()`, `body.ts`); the
+  throws it flat, backhand, and the hand stays empty while it is out (`throwOf()`, `body/constants.ts`); the
   others see the hand and the hip empty too. The throw sounds like a blade cutting the air, the
   catch like a clap with a short metal ring, and the shoulder cannon reloads in silence. G with the
   blades no longer throws it. In hand it is the hip's disc (`discVertices()`, `src/client/hunter.ts`),
@@ -173,7 +173,7 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   are leaner, the chest thinner from the side (`CHEST_THIN`) and the flanks straighter.
 - **Hide.** Olive (`HIDE`), lightened to a green beige over the pecs and the abs (`HIDE_LIGHT`), with
   dark green spots gathered on the flanks, the back and the limbs (`HIDE_SPOT`). Painted per vertex.
-  The hands (`HUNTER_HAND`, `body.ts`) take the same olive in both views.
+  The hands (`HUNTER_HAND`, `body/fingers.ts`) take the same olive in both views.
 - **Spots.** Small round dark green dots (`spots()`, `SPOTS` to a square metre), the same on his two
   sides, thick on the flanks, the back and the limbs and thinning out over the chest. Each is a flat
   hexagon laid on the skin, rigid on its nearest bone. The painted blotches are mirrored too.

@@ -41,6 +41,7 @@ const fake = () => {
     [SOUND.ENGINE]: [],
     [SOUND.SKID]: [],
     [SOUND.JET]: [],
+    [SOUND.SWIM]: [],
   };
   let muted = false;
   const audio: Audio = {
@@ -669,5 +670,52 @@ describe('the xenomorph', () => {
       return played[0].gain;
     };
     expect(gain(true)!).toBeLessThan(gain(false)! / 2);
+  });
+});
+
+describe('the water', () => {
+  const still = { ev: 0, fall: 0 };
+
+  it('splashes each step of a foot under the surface, and plays the plain step on a dry one', () => {
+    const { audio, played } = fake();
+    const f = createFoley(audio, undefined, 0);
+    f.me(player({ y: -0.5 }), still, 0);
+    f.me(player({ y: -0.5 }), still, 1);
+    f.me(player({ y: 0.3 }), still, 2);
+    expect(played.map(p => p.id)).toEqual([SOUND.WADE, SOUND.STEP]);
+    // A map with no water never splashes.
+    const dry = fake();
+    const g = createFoley(dry.audio);
+    g.me(player({ y: -0.5 }), still, 0);
+    g.me(player({ y: -0.5 }), still, 1);
+    expect(dry.played.map(p => p.id)).toEqual([SOUND.STEP]);
+    // Others' feet splash too, at their place.
+    const o = fake();
+    const h = createFoley(o.audio, undefined, 0);
+    h.others([player({ id: 2, y: -0.4 })], () => 0);
+    h.others([player({ id: 2, y: -0.4 })], () => 1);
+    expect(o.played.map(p => p.id)).toEqual([SOUND.WADE]);
+  });
+
+  it('splashes as a body goes in, and washes while he swims: louder with his speed, silent after', () => {
+    const { audio, played, sets } = fake();
+    const f = createFoley(audio, undefined, 0);
+    f.me(player({ y: -0.5 }), still, 0);
+    f.me(player({ mode: MODE.SWIM, y: -1.1, vx: 0 }), still, 0);
+    f.me(player({ mode: MODE.SWIM, y: -1.1, vx: 0 }), still, 0);
+    expect(played.filter(p => p.id === SOUND.WADE)).toHaveLength(1);
+    f.me(player({ mode: MODE.SWIM, y: -1.1, vx: 4 }), still, 0);
+    const wash = sets[SOUND.SWIM].map(([v]) => v);
+    expect(wash[0]).toBe(0);
+    expect(wash[1]).toBeGreaterThan(0);
+    expect(wash.at(-1)!).toBeGreaterThan(wash[1]);
+    f.me(player({ y: -0.5 }), still, 0);
+    expect(sets[SOUND.SWIM].at(-1)![0]).toBe(0);
+    // Another swimmer going in splashes where he is.
+    const o = fake();
+    const h = createFoley(o.audio, undefined, 0);
+    h.others([player({ id: 2, y: -0.5 })], () => 0);
+    h.others([player({ id: 2, mode: MODE.SWIM, y: -1.1 })], () => 0);
+    expect(o.played.map(p => p.id)).toEqual([SOUND.WADE]);
   });
 });

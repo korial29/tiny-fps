@@ -102,7 +102,8 @@ const BUDGETS = [
   // 279,424 B: with the sand's dunes and the water's chop (#414) (the user, 2026-11-26).
   // 279,552 B: the Hunter's disc reaching bodies 0.5 m off its line (the user, 2026-11-26).
   // 280,704 B: Landfall's swimming, its breaststroke and the view under the water (the user, 2026-11-26: raise; 280,400 B before the merged changes of #413 and #414).
-  { file: 'dist/index.js', max: 280_704 },
+  // 280,960 B: the water's splash and swim sounds (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 280_960 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

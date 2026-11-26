@@ -412,7 +412,7 @@ const play = (
   /** Whether a player fires the Hunter's harpoon. */
   const hunter = (id: number) =>
     roleOf(roster.find(p => p.id == id)?.role, world.def) == ROLE.HUNTER;
-  const foley = createFoley(audio, beast);
+  const foley = createFoley(audio, beast, world.def.water);
   /** A player's voice: his body's, a ninja's in Japanese. */
   const speaker = (id: number) => {
     const p = roster.find(q => q.id == id);

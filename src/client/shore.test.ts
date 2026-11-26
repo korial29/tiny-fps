@@ -3,10 +3,12 @@ import { BEACH, FRAME, HULL, ZED } from '../shared/beach';
 import { HIGHLINE } from '../shared/map';
 import { MAPS } from '../shared/maps';
 import { ground, noise } from '../shared/relief';
+import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import type { WorldDef } from '../shared/world';
 import { STRIDE } from './mesh';
-import { FRAG, fragOf, scenery } from './render';
+import { GRANITE } from './granite';
+import { FRAG, decor, fragOf, scenery } from './render';
 import { LIFT, LUMPS, SAND, SEA, STREWN, lagoon, shore } from './shore';
 
 /** The beach of docs/BEACH.md as a relief: the bed 3 m down at the sea's edge, the sand 2.5 m up at the trees, a little rough. */
@@ -157,6 +159,16 @@ describe("the beach's shader", () => {
     expect(fragOf(BEACH, 'FLESH')).not.toContain('#define BEACH');
     expect(fragOf(HIGHLINE, 'LAND')).not.toContain('#define BEACH');
     expect(fragOf(MAPS.tranquility, 'LAND')).not.toContain('#define BEACH');
+  });
+
+  it("paints the rocks in granite only once Landfall's chunk has brought it: not in the main bundle", async () => {
+    const rock = `if(abs(L-${TEX.ROCK}.)<.5)`;
+    expect(FRAG).not.toContain(rock);
+    expect(fragOf(BEACH, 'LAND')).not.toContain(rock);
+    const d = await decor(BEACH);
+    expect(d.rock).toBe(GRANITE);
+    expect(fragOf(BEACH, 'LAND', d.rock)).toContain(`\n#define BEACH\n`);
+    expect(fragOf(BEACH, 'LAND', d.rock)).toContain(rock + GRANITE);
   });
 
   it('has none of the moon, relief or not', () => {

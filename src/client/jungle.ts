@@ -2,9 +2,9 @@
 // once from the lists of shared/beach.ts and an integer hash. The rocks of ROCKS and the palms of
 // TRUNKS stand where the map collides with them; everything else is drawn only, behind them: the
 // rocks past the headland's line and out in the sea, the trees and the undergrowth past EDGE.
-// Lit paint (layer -1) but the rocks, in basalt (TEX.ROCK).
-import { FRAME, HULL, ROCKS, TRUNKS, ZED } from '../shared/beach';
-import { rockMid, rockOf } from '../shared/moon';
+// Lit paint (layer -1) but the rocks: TEX.ROCK, which Landfall's shader paints as granite (granite.ts GRANITE).
+import { FRAME, HULL, ROCKS, TRUNKS, ZED, blockOf } from '../shared/beach';
+import { rockMid } from '../shared/moon';
 import { TAU } from '../shared/physics';
 import { ground, hash, noise, raise } from '../shared/relief';
 import type { World, WorldDef } from '../shared/world';
@@ -20,7 +20,7 @@ type Ground = (x: number, z: number) => number;
  * TURN, from x = WEST on one headland to x = WEST on the other. Nothing of it is solid: the map's
  * ghost wall is expected between the first row of palms and this line.
  */
-const [EDGE, BACK, TURN, WEST] = [FRAME.trees + 5, 12, 14, 40];
+const [EDGE, BACK, TURN, WEST] = [FRAME.trees + 5, 70, 14, 80];
 /** The line's straight run behind a headland, a corner's arc, and its whole length. */
 const [RUN, ARC] = [EDGE - TURN - WEST, (TAU / 4) * TURN];
 const LEN = 2 * (RUN + ARC) + ZED + 2 * (BACK - TURN);
@@ -325,10 +325,14 @@ const fern = (o: number[], x: number, y: number, z: number, s: number, big: numb
   }
 };
 
-/** A rock of shared/beach.ts's kind (x, z, radius, height, seed), as Tranquility's: dark basalt, darker still where the sea wets it. */
-const rock = (o: number[], gy: Ground, [x, z, R, H, s]: number[], lod: number) => {
-  const { reach } = rockOf(s, R, H);
-  const g = gy(x, z);
+/**
+ * A block of shared/beach.ts's kind (x, z, radius, height, seed, and how far over the ground it is
+ * set: one stacked on another), blockOf()'s form: granite (granite.ts GRANITE), darker where the sea
+ * wets it.
+ */
+const rock = (o: number[], gy: Ground, [x, z, R, H, s, lift = 0]: number[], lod: number) => {
+  const { reach } = blockOf(s, R, H);
+  const g = gy(x, z) + lift;
   const mid = g + rockMid(H);
   const from = o.length;
   stone(
@@ -341,42 +345,76 @@ const rock = (o: number[], gy: Ground, [x, z, R, H, s]: number[], lod: number) =
     g,
     g + H,
     s,
-    0.4 + 0.2 * hash(s, 5, 41),
-    gy,
+    // Granite is pale: a shade near full, where Tranquility's basalt has half.
+    0.72 + 0.14 * hash(s, 5, 41),
+    lift ? undefined : gy,
   );
   for (let i = from; i < o.length; i += STRIDE) {
     const wet = FRAME.water + 0.4 + 1.2 * noise(0.4 * o[i], 0.4 * o[i + 2], 9);
     o[i + 9] *= 0.4 + 0.6 * sm((o[i + 1] - wet) / 1.5);
   }
+  facet(o, from);
+};
+
+/** Each triangle's normals turned a quarter of the way to its face's: a block of granite shows a little of its facets, not a smooth mass. */
+const facet = (o: number[], from: number) => {
+  for (let t = from; t < o.length; t += 3 * STRIDE) {
+    const [a, b, c] = [t, t + STRIDE, t + 2 * STRIDE];
+    const [ux, uy, uz] = [o[b] - o[a], o[b + 1] - o[a + 1], o[b + 2] - o[a + 2]];
+    const [vx, vy, vz] = [o[c] - o[a], o[c + 1] - o[a + 1], o[c + 2] - o[a + 2]];
+    const [fx, fy, fz] = [uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx];
+    const l = Math.hypot(fx, fy, fz) || 1;
+    for (const i of [a, b, c]) {
+      const [nx, ny, nz] = [
+        0.75 * o[i + 3] + (0.25 * fx) / l,
+        0.75 * o[i + 4] + (0.25 * fy) / l,
+        0.75 * o[i + 5] + (0.25 * fz) / l,
+      ];
+      const m = Math.hypot(nx, ny, nz) || 1;
+      [o[i + 3], o[i + 4], o[i + 5]] = [nx / m, ny / m, nz / m];
+    }
+  }
 };
 
 /**
- * Red's headland: the rocks of ROCKS, then what is only drawn. Behind them two rows, taller and
- * coarser the further, so the cape rises away from the beach; small ones in the gaps; and a reef
- * running out into the sea past x = FRAME.sea, lower and lower. `k` is 0 for red and 1 for blue,
- * whose jumble is its own. The rocks of ROCKS stand on `red`, red's ground, for both: the map's
- * boxes for blue's are the twins of red's, and the lattice's triangles are not mirrored.
+ * Red's headland: the rocks of ROCKS, then what is only drawn, all past the headland's wall: low
+ * blocks scattered on the sand that runs on; the mass on the trees' side, tors of two or three
+ * blocks stacked, rising inland; stacks standing in the sea off the strand; and a reef running out
+ * past x = FRAME.sea, lower and lower. Between them the sand and the sea go on. `k` is 0 for red
+ * and 1 for blue, whose jumble is its own. The rocks of ROCKS stand on `red`, red's ground, for
+ * both: the map's boxes for blue's are the twins of red's, and the lattice's triangles are not
+ * mirrored.
  */
 const cape = (gy: Ground, k: number, red: Ground): number[] => {
   const o: number[] = [];
   const h = (i: number, j: number) => hash(i, j, 90 + k);
-  ROCKS.forEach(r => rock(o, red, r, r[2] < 8 ? 4 : 5));
-  for (let i = 0; i < 12; i++) {
-    const at = [-16 + 11 * i + 5 * h(i, 1), ZED + 5 + 4 * h(i, 2)];
-    rock(o, gy, [...at, 7 + 3 * h(i, 3), 12 + 7 * h(i, 4), 100 + i + 50 * k], 3);
-  }
-  for (let i = 0; i < 8; i++) {
-    const at = [8 + 14 * i + 6 * h(i, 5), ZED + 15 + 6 * h(i, 6)];
-    rock(o, gy, [...at, 10 + 4 * h(i, 7), 18 + 10 * h(i, 8), 120 + i + 50 * k], 3);
-  }
+  const seed = (i: number) => 100 + i + 50 * k;
+  ROCKS.forEach(r => rock(o, red, r, 4));
+  // Low blocks on the sand past the wall, thinning out toward the sea.
   for (let i = 0; i < 7; i++) {
-    const at = [4 + 15 * i + 6 * h(i, 9), ZED + 1 + 3 * h(i, 10)];
-    rock(o, gy, [...at, 2.5 + 2 * h(i, 11), 3 + 3 * h(i, 12), 130 + i + 50 * k], 2);
+    const at = [34 + 8 * i + 5 * h(i, 1), ZED + 16 + 26 * h(i, 2)];
+    rock(o, gy, [...at, 2.5 + 2.5 * h(i, 3), 1.8 + 2.4 * h(i, 4), seed(i)], 3);
+  }
+  // The mass on the trees' side: tors, a block or two set on a wide one, stepping up inland.
+  for (let i = 0; i < 6; i++) {
+    const [x, z] = [94 + 7 * i + 4 * h(i, 5), ZED + 14 + 9 * (i % 3) + 6 * h(i, 6)];
+    const [R, H] = [7 + 3 * h(i, 7), 7 + 5 * h(i, 8) + 2 * i];
+    rock(o, gy, [x, z, R, H, seed(10 + i)], 4);
+    const up = [x + 1.5 * h(i, 9) - 0.75, z + 1.5 * h(i, 10) - 0.75, 0.6 * R, 0.55 * H];
+    rock(o, gy, [...up, seed(20 + i), 0.8 * H], 3);
+    if (h(i, 11) < 0.5) {
+      rock(o, gy, [up[0] + 0.5, up[1] - 0.4, 0.35 * R, 0.4 * H, seed(30 + i), 1.3 * H], 2);
+    }
+  }
+  // Stacks in the sea off the strand, past the wall.
+  for (let i = 0; i < 5; i++) {
+    const at = [12 - 9 * i + 4 * h(i, 12), ZED + 14 + 9 * i + 6 * h(i, 13)];
+    rock(o, gy, [...at, 2.5 + 2 * h(i, 14), 4 + 5 * h(i, 15), seed(40 + i)], 3);
   }
   for (let i = 0; i < 8; i++) {
     const t = i / 7;
-    const at = [FRAME.sea - 12 - 62 * t + 6 * h(i, 13), ZED - 4 - 14 * t * t + 8 * h(i, 14)];
-    rock(o, gy, [...at, 7 - 4.5 * t, 9 - 7 * t, 140 + i + 50 * k], t < 0.5 ? 3 : 2);
+    const at = [FRAME.sea - 12 - 62 * t + 6 * h(i, 13), ZED + 36 - 14 * t * t + 8 * h(i, 14)];
+    rock(o, gy, [...at, 7 - 4.5 * t, 6 - 4 * t, 140 + i + 50 * k], 2);
   }
   return o;
 };

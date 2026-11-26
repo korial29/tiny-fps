@@ -16,6 +16,11 @@ export interface ReliefDef {
   /** Metres between two nodes. */
   cell: number;
   /**
+   * A point the lattice runs through, x and z (absent: 0, 0): Landfall lays a row of nodes on its
+   * centre line, so that each node has its mirror twin.
+   */
+  origin?: [number, number];
+  /**
    * The height of the ground at a node. Only + - * /, Math.sqrt and integer hashes: Math.sin and **
    * round differently from one engine to the next, and every side must build the same lattice.
    */
@@ -64,7 +69,7 @@ export const raise = (def: ReliefDef): Relief => {
   if (old) {
     return old;
   }
-  const { hole, bound, cell, at, pits = [] } = def;
+  const { hole, bound, cell, at, pits = [], origin: [ox, oz] = [0, 0] } = def;
   const box = pits.reduce<Quad>(
     (b, q) => [
       Math.min(b[0], q[0]),
@@ -75,8 +80,8 @@ export const raise = (def: ReliefDef): Relief => {
     [Infinity, Infinity, -Infinity, -Infinity],
   );
   const [cx, cz, a, b] = bound;
-  const x0 = Math.floor((cx - a) / cell) * cell;
-  const z0 = Math.floor((cz - b) / cell) * cell;
+  const x0 = Math.floor((cx - a - ox) / cell) * cell + ox;
+  const z0 = Math.floor((cz - b - oz) / cell) * cell + oz;
   const nx = Math.ceil((cx + a - x0) / cell) + 1;
   const nz = Math.ceil((cz + b - z0) / cell) + 1;
   const h = new Float32Array(nx * nz);

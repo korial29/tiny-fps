@@ -9,11 +9,11 @@ scene, nothing copied from a film or a series.
 
 ## Frame and symmetry
 
-- Metres, y up. Play area x 0..110, z 0..200 (`ZED = 200`). Red's half is z > 100, blue's the
-  mirror (z → ZED − z, the red tint to blue), as Tranquility.
+- Metres, y up. Play area x 0..110, z 0..250 (`ZED = 250`, 200 until 2026-11-26). Red's half is
+  z > 125, blue's the mirror (z → ZED − z, the red tint to blue), as Tranquility.
 - Across x (`FRAME` in `src/shared/beach.ts`): deep water at x = 0, the waterline at x = 30, the
-  first trees at x = 90, nothing walked past x = 110. Along z the headlands close the beach before
-  z = 8 and after z = 192.
+  first trees at x = 90, nothing walked past x = 110. Along z the sand runs on past each camp to
+  the headlands, whose walls stand 10 m past each end, at z = −10 and z = 260.
 - The water's surface is y = 0. The sand rises from the waterline to about 2.5 m at the trees and
   the seabed falls to about −3 m at x = 0.
 - Full gravity, no vehicle, no helmet: Highline's runners. `scenery: 'beach'`, key `landfall`.
@@ -29,7 +29,7 @@ no swimming, no new wire data.
 
 ## The wreck
 
-The hull lies along x on the centre line z = 100, which is its own plane of symmetry, so it is
+The hull lies along x on the centre line z = 125, which is its own plane of symmetry, so it is
 written once and a wing falls in each half. Radius 7 m, sunk 2 m: its back is 12 m over the sand.
 Broken in three (`HULL.sections`): the tail x 6..36 in the water, the middle x 44..74 on the sand,
 the nose x 82..106 in the trees at the end of the furrow it ploughed, a bank of sand on each side.
@@ -51,8 +51,8 @@ Each camp: an escape pod (`POD`) with tarpaulin shelters, the flag by the pod, t
 ## Edges
 
 - East: the forest. Palms and undergrowth, the first row's trunks solid, a ghost wall behind.
-- North and south: headlands of large rocks, Tranquility's (`rockOf`, `fitted`, `stone()`), as dark
-  volcanic rock, wet at the foot.
+- North and south: headlands of large rocks, Tranquility's forms (`rockOf`, `stone()`), in light
+  granite, wet at the foot (see the longer beach below).
 - West: the sea, by its depth.
 
 ## Pieces
@@ -179,3 +179,48 @@ The ship carried troops. Its inside now says so, and the canopy is glass.
   nose drawn 5 cm inside the skin, after it) another 0.5 ms, both shading the inside twice. Now that
   lining is the skin's own dark inner face, the cabin goes first, and the glass is one run of its
   own whose two passes are skipped when it is out of the frustum.
+
+## The longer beach (the user, 2026-11-26)
+
+The beach is 25 % longer, the camps further apart, and the headlands read as the beach going on.
+
+- `ZED = 250`: the wreck on z = 125. Everything of the wreck's (the hull, the wings, the engines,
+  the floats, the lagoon's legs, the debris and the packs on it) keeps its place from the centre
+  line, 25 m on in red's half. The camp goes 45 m on: pod (60, 219), flag on the hatch at
+  (60, 211), spawns at z 226 and 229, the camp's level sand z 209..229. Into the 20 m between the
+  field of debris and the camp went a panel (west), a standing container and the rifle's crate.
+  The line of debris's first panel and container are lower (0.65 m, 1.875 m over the sand): the
+  dunes are higher there than on the camp's level sand, and the jumps keep their steps.
+- The lattice (`relief.origin`, `NODE` in `beach.ts`) runs through z = 1, so a row of nodes lies on
+  the centre line and every node has its twin (250 / 4 is not whole). The sand round the wreck is
+  node for node what it was round z = 100.
+- The headland (the user, second pass): the beach is seen to go on. Behind the camp, ten low
+  blocks scattered on the sand (`ROCKS`, solid), bigger toward the trees where the mass begins;
+  along the waterline open sand. The wall at z = ZED − `EDGE.cape` = 260 stands on open sand there,
+  unseen, and the drawn sand and sea run on past it to a few stacks standing in the sea and a reef.
+  Past the wall, drawn only: low blocks thinning out on the sand, the mass on the trees' side as
+  tors (a block or two set on a wide one, `lift` in jungle.ts), stepping up inland; the forest's
+  line runs 70 m past the end on the trees' side only (from x = 80). `massed()` is finer on a low
+  block (1 m strips, 1 m layers): 356 boxes for both headlands, 851 brushes in all (1,007 before).
+  The palms' first row is 28 trunks a side.
+- The blocks' form is `blockOf()` in `beach.ts`, not moon.ts `rockOf()`: superellipsoids of the
+  powers 4 and 8 blended (flat faces, rounded edges), turned and stretched by the seed, sheared by
+  two steep planes, dented by a low noise. jungle.ts turns each triangle's normals a quarter of the
+  way to its face's, so the faces read.
+- Granite (`GRANITE` in `granite.ts`, compiled under `BEACH` for TEX.ROCK only), from large to small:
+  a tone warmer and cooler over metres (what is seen from afar), dark weathering streaks down the
+  steep faces, lichen in patches (pale or dark) on those facing up, thin dark cracks and a few pale
+  veins, then interlocking crystals of about 6 cm (a cheap Voronoi on a warped lattice: white and
+  pinkish feldspar, grey and smoky quartz) with black mica in uneven clusters, and laths of pink
+  feldspar up to 10 cm in patches. Each scale fades to its mean with distance. Tranquility's basalt
+  is untouched. The rocks' vertex shade is 0.72 to 0.86 (it was 0.4 to 0.6), the wet foot as before.
+- The granite's GLSL comes with Landfall's chunk (`Decor.rock`, `granite.ts`), spliced into the map's
+  program by `fragOf()`: not in the main bundle. Every scale a pixel no longer holds is skipped, not
+  faded; the noises are shared. At 1600 × 900 (headless Chrome, Metal), the granite costs about
+  3 ms of GPU with a boulder filling half the screen (it cost 8 ms all on), and the camp's view is
+  1 ms cheaper than master's.
+- Vertices, the drawn level without smoke: 257,634 → 262,734 (sand 35,232 → 40,440, sea 13,908 →
+  16,008, rocks 51,756 → 45,006, palms 29,736 → 39,648, forest, undergrowth and canopy 55,872 →
+  51,624). Ways across, red's spawn to blue's flag side (beach.test.ts): east gap 23.4 → 27.8 s,
+  west gap 19.0 → 23.4 s, hold 19.7 → 24.1 s, high road 22.5 → 24.8 s, rails 23.5 → 27.9 s, lower
+  deck 20.8 → 25.1 s, lagoon 19.8 → 22.7 s.

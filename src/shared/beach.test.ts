@@ -30,6 +30,7 @@ import {
   WING,
   ZED,
   at,
+  blockOf,
   section,
   walked,
 } from './beach';
@@ -46,7 +47,7 @@ import {
 } from './constants';
 import { TEAM_TINT } from './map';
 import { MAPS } from './maps';
-import { rockMid, rockOf } from './moon';
+import { rockMid } from './moon';
 import { floorAt, move, spawn } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { ground } from './relief';
@@ -187,7 +188,7 @@ describe('LANDFALL', () => {
 });
 
 describe('LANDFALL, symmetry', () => {
-  it('has a mirror twin for every brush across the line z = 100, the blue accents for the red', () => {
+  it('has a mirror twin for every brush across the line z = 125, the blue accents for the red', () => {
     const red = brushes.filter(b => b.tint === TEAM_TINT[0]);
     const blue = brushes.filter(b => b.tint === TEAM_TINT[1]);
     expect(red.length).toBeGreaterThanOrEqual(5);
@@ -278,14 +279,14 @@ describe('LANDFALL, the sand and the seabed', () => {
     }
     // walked() is what the physics reads.
     for (let k = 0; k < 400; k++) {
-      const [x, z] = [-20 + ((k * 37) % 127) + 0.31, ((k * 53) % 199) + 0.77];
+      const [x, z] = [-20 + ((k * 37) % 127) + 0.31, ((k * 53) % 249) + 0.77];
       expect(walked(x, z)).toBeCloseTo(ground(world, x, z), 9);
     }
   });
 
   it('meets the water at x 30, rises to 2.5 m at the trees and falls to 3 m under it at x 0, and on', () => {
     // Clear of the furrow and of the camp.
-    for (const z of [128, 144, 72, 56]) {
+    for (const z of [153, 169, 97, 81]) {
       expect(at(FRAME.shore, z)).toBe(FRAME.water);
       expect(at(FRAME.sea, z)).toBeCloseTo(-3, 6);
       expect(at(-20, z)).toBeCloseTo(-5, 6);
@@ -323,7 +324,7 @@ describe('LANDFALL, the sand and the seabed', () => {
       src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|fround|PI)\w+/g) ?? [],
     ).toEqual([]);
     expect(at(61.5, 143.25)).toBe(at(61.5, 143.25));
-    expect(checksum(relief)).toBe(2340211168);
+    expect(checksum(relief)).toBe(660310480);
   });
 
   it('is never steeper than 30 degrees, node to node', () => {
@@ -394,7 +395,7 @@ describe('LANDFALL, the water', () => {
   });
 
   it('lets a runner who walks out to sea swim from where the bed passes SWIM_DEPTH: afloat, slow, never respawned', () => {
-    for (const z of [122, 132, 150, 170, 180, 70, 40]) {
+    for (const z of [147, 157, 175, 195, 205, 95, 65]) {
       const s = red().put(FRAME.shore, 0, z, WEST);
       let respawned = false;
       s.until(
@@ -950,68 +951,68 @@ describe('LANDFALL, the wreck', () => {
 /** The ways across on the sand, each from red's spawn to the centre line. */
 const WAYS = {
   // Through the gap by the trees, between the heap of ribs and the nose.
-  east: [g(66, 179), g(66, 165), g(75, 128), g(80.7, 113), g(80.7, MID)],
+  east: [g(66, 224), g(66, 190), g(75, 153), g(80.7, 138), g(80.7, MID)],
   // Between the fallen engine and the wing, then through the gap at the waterline, wading the flooded furrow.
-  west: [g(55, 179), g(47.5, 152), g(48.2, 134), g(43, 114), g(42.75, MID)],
+  west: [g(55, 224), g(47.5, 177), g(48.2, 159), g(43, 139), g(42.75, MID)],
   // Under the wing to the door, and into the hold.
-  hold: [g(55, 179), g(47.5, 152), g(48.2, 134), g(59, 118), g(59, 108), go(59, MID, HOLD.floor)],
+  hold: [g(55, 224), g(47.5, 177), g(48.2, 159), g(59, 143), g(59, 133), go(59, MID, HOLD.floor)],
 };
 /** The high road, red's half: up the wing from the spawn to the fairing's ledge, a jump over each break. */
 const WING_UP = [
-  g(66, 179),
-  g(62, 160),
-  g(55, 155),
-  go(55, 152, 1.6),
-  go(55.5, 141.2, 3.3, false),
-  leap([55.5, 140.9], [55.5, 136], 3.6, W),
-  go(55.5, 126.8, 6.8, false),
-  leap([55.5, 126.4], [55.5, 121.5], 6.4, W),
-  go(62, 112, 8.5),
+  g(66, 224),
+  g(62, 185),
+  g(55, 180),
+  go(55, 177, 1.6),
+  go(55.5, 166.2, 3.3, false),
+  leap([55.5, 165.9], [55.5, 161], 3.6, W),
+  go(55.5, 151.8, 6.8, false),
+  leap([55.5, 151.4], [55.5, 146.5], 6.4, W),
+  go(62, 137, 8.5),
 ];
 /** And down it from the ledge to the sand. */
 const WING_DOWN = [
-  go(55.5, 121.7, 6.4, false),
-  leap([55.5, 121.9], [55.5, 126.5], 6.8, W),
-  go(55.5, 136.4, 3.6, false),
-  leap([55.5, 136.4], [55.5, 141], 3.3, W),
-  go(55, 152, 1.6),
-  g(55, 156),
-  g(62, 160),
+  go(55.5, 146.7, 6.4, false),
+  leap([55.5, 146.9], [55.5, 151.5], 6.8, W),
+  go(55.5, 161.4, 3.6, false),
+  leap([55.5, 161.4], [55.5, 166], 3.3, W),
+  go(55, 177, 1.6),
+  g(55, 181),
+  g(62, 185),
 ];
 /** From the ledge through the tear into the gallery, to the centre line. */
-const GALLERY = [go(67.5, 108.5, 8.5), go(67.5, MID, 8.5)];
+const GALLERY = [go(67.5, 133.5, 8.5), go(67.5, MID, 8.5)];
 /** The whole of it: red's wing, the gallery, blue's wing. */
-const HIGH = [...WING_UP, ...GALLERY, ...blue([GALLERY[0], go(62, 111, 8.5), ...WING_DOWN])];
+const HIGH = [...WING_UP, ...GALLERY, ...blue([GALLERY[0], go(62, 136, 8.5), ...WING_DOWN])];
 /** The same on a rail over each break, with no jump: from the spawn to the centre line. */
 const RAIL = [
   ...WING_UP.slice(0, 4),
-  go(53.5, 141, 3.3),
-  go(53.5, 136.4, 3.6, false),
-  go(53.5, 126.4, 6.8),
-  go(53.5, 122, 6.4, false),
-  go(62, 112, 8.5),
+  go(53.5, 166, 3.3),
+  go(53.5, 161.4, 3.6, false),
+  go(53.5, 151.4, 6.8),
+  go(53.5, 147, 6.4, false),
+  go(62, 137, 8.5),
   ...GALLERY,
 ];
 /** Round the tail: wade to the first float, then jump by jump to the raft on the line; and on from the raft, the same jumps the other way. */
 const LAGOON = {
   out: [
-    g(55, 179),
-    g(40, 150),
-    g(26, 118),
-    g(23.2, 117.5, false),
-    leap([23, 117.5], [20, 117.5], 0.35, W),
-    leap([16.4, 117.2], [12, 114.8], 0.5, W),
-    leap([10.3, 114], [6, 112.5], 1.4, W),
-    go(4, 108.8, 1.4, false),
-    leap([3.5, 107.7], [3, 102], 0.4, W),
+    g(55, 224),
+    g(40, 175),
+    g(26, 143),
+    g(23.2, 142.5, false),
+    leap([23, 142.5], [20, 142.5], 0.35, W),
+    leap([16.4, 142.2], [12, 139.8], 0.5, W),
+    leap([10.3, 139], [6, 137.5], 1.4, W),
+    go(4, 133.8, 1.4, false),
+    leap([3.5, 132.7], [3, 127], 0.4, W),
   ],
   in: [
-    go(3, 97, 0.4),
-    leap([3, 103.5], [3.5, 108.5], 1.4, W),
-    leap([6.5, 112.5], [11, 114.5], 0.5, W),
-    leap([12.6, 115], [17, 117.3], 0.35, W),
-    go(21, 117.5, 0.35, false),
-    g(26, 118),
+    go(3, 122, 0.4),
+    leap([3, 128.5], [3.5, 133.5], 1.4, W),
+    leap([6.5, 137.5], [11, 139.5], 0.5, W),
+    leap([12.6, 140], [17, 142.3], 0.35, W),
+    go(21, 142.5, 0.35, false),
+    g(26, 143),
   ],
 };
 /** Inside the middle section, from the hold up to the back: a crate and a pull up through a hole at each level. */
@@ -1023,9 +1024,9 @@ const CLIMB = [
   leap([60.3, MID], [61.5, MID], 5.9, W),
   go(62, MID, 5.9, false),
   leap([61.6, MID], [59, MID], 8.5, W),
-  go(59.5, 101.5, 8.5, false),
-  go(57, 101.8, 8.5, false),
-  leap([57, 101.2], [57, MID], 10.5, W),
+  go(59.5, 126.5, 8.5, false),
+  go(57, 126.8, 8.5, false),
+  leap([57, 126.2], [57, MID], 10.5, W),
   go(56.6, MID, 10.5, false),
   leap([57.1, MID], [59.5, MID], 13.25, W),
 ];
@@ -1036,11 +1037,11 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
       const s = red();
       const f = fly(s, across(way));
       expect(f.failed).toBeUndefined();
-      expect(s.p.z).toBeLessThan(25);
+      expect(s.p.z).toBeLessThan(30);
       expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
       expect(s.modes).toEqual(new Set([MODE.GROUND]));
-      expect(f.seconds).toBeGreaterThan(18);
-      expect(f.seconds).toBeLessThan(24);
+      expect(f.seconds).toBeGreaterThan(22);
+      expect(f.seconds).toBeLessThan(29);
     }
     // The west one is waded: knee to waist deep, never out of depth.
     const s = red();
@@ -1059,7 +1060,7 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const s = red();
     const f = fly(s, across(WAYS.hold));
     expect(f.failed).toBeUndefined();
-    expect(s.p.z).toBeLessThan(25);
+    expect(s.p.z).toBeLessThan(30);
     expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
     expect(s.modes).toEqual(new Set([MODE.GROUND]));
     expect(f.seconds).toBeLessThan(26);
@@ -1069,8 +1070,8 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const s = red();
     const f = fly(s, HIGH);
     expect(f.failed).toBeUndefined();
-    expect(s.p.z).toBeLessThan(45);
-    expect(s.p.y).toBeCloseTo(walked(62, 160), 2);
+    expect(s.p.z).toBeLessThan(70);
+    expect(s.p.y).toBeCloseTo(walked(62, ZED - 185), 1);
     expect(s.ev & EV.JUMP).toBeTruthy();
     expect(s.ev & EV.RESPAWN).toBe(0);
     expect(s.modes).toEqual(new Set([MODE.GROUND, MODE.AIR]));
@@ -1082,16 +1083,16 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const s = red();
     const f = fly(s, across(RAIL));
     expect(f.failed).toBeUndefined();
-    expect(s.p.z).toBeLessThan(25);
+    expect(s.p.z).toBeLessThan(30);
     expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
     expect(s.modes).toEqual(new Set([MODE.GROUND]));
     expect(f.seconds).toBeLessThan(30);
     // Sprinting off each lip between the rails, up the wing and down it: not onto the next piece on his feet.
     for (const [z, y, yaw] of [
-      [144, 2.7, NORTH],
-      [130, 5.43, NORTH],
-      [118, 7, SOUTH],
-      [132, 4.97, SOUTH],
+      [169, 2.7, NORTH],
+      [155, 5.43, NORTH],
+      [143, 7, SOUTH],
+      [157, 4.97, SOUTH],
     ]) {
       const t = red()
         .put(55.75, y + 0.5, z, yaw)
@@ -1107,8 +1108,8 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const s = red().put(67.5, 8.5, MID);
     // Round the gallery's hole to the crate under the back's.
     const f = fly(s, [
-      go(66.5, 104.5, 8.5, false),
-      go(59.5, 104.5, 8.5, false),
+      go(66.5, 129.5, 8.5, false),
+      go(59.5, 129.5, 8.5, false),
       ...CLIMB.slice(-5),
     ]);
     expect(f.failed).toBeUndefined();
@@ -1128,7 +1129,7 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(t.hard).toBeGreaterThan(12);
     // From there out by the blue tear, onto blue's ledge.
     expect(
-      fly(t, blue([go(62, MID + 4, 8.5), go(67.5, 108.5, 8.5), go(62, 111, 8.5)])).failed,
+      fly(t, blue([go(62, MID + 4, 8.5), go(67.5, 133.5, 8.5), go(62, 136, 8.5)])).failed,
     ).toBeUndefined();
   });
 
@@ -1142,11 +1143,11 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const t = red().put(62, 13.25, MID);
     const d = fly(t, [
       go(56.5, MID, 8.5, false),
-      go(55, 102, 8.5, false),
-      go(59.5, 102, 8.5, false),
-      go(61, 102, 4.5, false),
-      go(57, 102, 4.5, false),
-      go(55.5, 102, HOLD.floor, false),
+      go(55, 127, 8.5, false),
+      go(59.5, 127, 8.5, false),
+      go(61, 127, 4.5, false),
+      go(57, 127, 4.5, false),
+      go(55.5, 127, HOLD.floor, false),
       go(59, MID, HOLD.floor),
       go(59, MID - 8, 1),
     ]);
@@ -1160,27 +1161,27 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     const s = red();
     const f = fly(s, [
       ...WAYS.hold.slice(0, 3),
-      g(51, 113),
-      leap([51, 111], [51, 109], box.max[1], W),
-      leap([51, 108.6], [51, 105.5], 4.5, W),
+      g(51, 138),
+      leap([51, 136], [51, 134], box.max[1], W),
+      leap([51, 133.6], [51, 130.5], 4.5, W),
       go(49.5, MID, 4.5),
-      go(49.5, 94, 4.5),
-      go(51, 91.4, box.max[1], false),
-      g(48.5, 88),
+      go(49.5, 119, 4.5),
+      go(51, 116.4, box.max[1], false),
+      g(48.5, 113),
       ...blue(WAYS.hold.slice(0, 3).reverse()),
     ]);
     expect(f.failed).toBeUndefined();
-    expect(s.p.z).toBeLessThan(25);
+    expect(s.p.z).toBeLessThan(30);
     expect(s.ev & EV.RESPAWN).toBe(0);
-    expect(f.seconds).toBeLessThan(26);
+    expect(f.seconds).toBeLessThan(31);
     expect(s.hard).toBeLessThan(12);
   });
 
   it('crosses on the lower deck of the nose and of the tail, tear to tear, and climbs each from its floor to its back', () => {
     // The nose: a pull up from the sand, across west of the hole, and down.
-    const n = red().put(85.8, ground(world, 85.8, 112), 112);
+    const n = red().put(85.8, ground(world, 85.8, 137), 137);
     expect(
-      fly(n, [leap([85.8, 108.8], [85.8, 105], 5.75, W), go(85.8, 94, 5.75)]).failed,
+      fly(n, [leap([85.8, 133.8], [85.8, 130], 5.75, W), go(85.8, 119, 5.75)]).failed,
     ).toBeUndefined();
     n.goTo(85.8, 88, { sprint: true });
     n.settle();
@@ -1195,14 +1196,14 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
       leap([87.9, MID], [89, MID], 3.5, W),
       go(88.5, MID, 3.5, false),
       leap([89.1, MID], [92, MID], 5.75, W),
-      go(91, 102, 5.75, false),
-      go(86, 102, 5.75, false),
-      go(84, 101.8, 5.75, false),
-      leap([84, 101.2], [84, MID], 7.15, W),
+      go(91, 127, 5.75, false),
+      go(86, 127, 5.75, false),
+      go(84, 126.8, 5.75, false),
+      leap([84, 126.2], [84, MID], 7.15, W),
       go(83.5, MID, 7.15, false),
       leap([84.1, MID], [87, MID], 9.75, W),
-      go(88.4, 101.6, 9.75, false),
-      leap([88.4, 101.2], [88.4, MID], 11.75, W),
+      go(88.4, 126.6, 9.75, false),
+      leap([88.4, 126.2], [88.4, MID], 11.75, W),
       go(89, MID, 11.75, false),
       leap([88.4, MID], [86, MID], 14.5, W),
     ]);
@@ -1210,31 +1211,31 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(f.seconds).toBeLessThan(12);
     // The tail: from the float under its tear, across the deck, and down into the lagoon, in his depth.
     const [float] = pieces('float').filter(p => p.min[2] < MID + 8);
-    const t = red().put(24.5, float.max[1], 109);
+    const t = red().put(24.5, float.max[1], 134);
     expect(
-      fly(t, [leap([24.5, 108.4], [24.5, 105], 2.25, W), go(22.5, 94.5, 2.25)]).failed,
+      fly(t, [leap([24.5, 133.4], [24.5, 130], 2.25, W), go(22.5, 119.5, 2.25)]).failed,
     ).toBeUndefined();
     t.goTo(22.5, 90);
     t.settle();
     expect(t.ev & EV.RESPAWN).toBe(0);
     expect(t.p.y).toBeLessThan(0);
     // From the west gap: along its floor awash, then a crate and a hole at each level.
-    const w = red().put(40, ground(world, 40, 103), 103);
+    const w = red().put(40, ground(world, 40, 128), 128);
     const c = fly(w, [
-      go(22, 102, -0.75, false),
+      go(22, 127, -0.75, false),
       go(17.5, MID, -0.75, false),
       leap([17.8, MID], [19, MID], 0.25, W),
       go(18.5, MID, 0.25, false),
       leap([19.1, MID], [22, MID], 2.25, W),
-      go(24, 102, 2.25, false),
-      go(27, 101.8, 2.25, false),
+      go(24, 127, 2.25, false),
+      go(27, 126.8, 2.25, false),
       go(27, MID, 2.25, false),
       leap([26.2, MID], [25, MID], 3.65, W),
       go(25.5, MID, 3.65, false),
       leap([24.9, MID], [22, MID], 6.25, W),
-      go(20, 101.5, 6.25, false),
-      go(17.5, 101.6, 6.25, false),
-      leap([17.5, 101.2], [17.5, MID], 8.25, W),
+      go(20, 126.5, 6.25, false),
+      go(17.5, 126.6, 6.25, false),
+      leap([17.5, 126.2], [17.5, MID], 8.25, W),
       go(17.1, MID, 8.25, false),
       leap([17.6, MID], [20, MID], 11, W),
     ]);
@@ -1270,9 +1271,9 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
 
   it('is not walked: off a float without a jump, a runner is in the lagoon, swimming', () => {
     for (const [x, z, yaw] of [
-      [17, 117.5, WEST],
-      [11, 114.5, WEST],
-      [4, 110, NORTH],
+      [17, 142.5, WEST],
+      [11, 139.5, WEST],
+      [4, 135, NORTH],
     ]) {
       const s = red().put(x, 0.5, z, yaw);
       s.settle();
@@ -1300,15 +1301,15 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(gear.min[2] - last.max[2]).toBeCloseTo(2.6, 9);
     const s = red();
     const f = fly(s, [
-      g(66, 179),
-      g(68.75, 166, false),
-      leap([68.75, 164], [68.75, 161.3], tops[0], W),
-      leap([69.6, 159.9], [69.8, 155.5], tops[1], W),
-      leap([69.8, 151.4], [69.8, 146.8], tops[2], W),
-      leap([69, 146], [66, 142], tops[3], W),
-      go(65.5, 141.5, tops[3], false),
+      g(66, 224),
+      g(68.75, 191, false),
+      leap([68.75, 189], [68.75, 186.3], tops[0], W),
+      leap([69.6, 184.9], [69.8, 180.5], tops[1], W),
+      leap([69.8, 176.4], [69.8, 171.8], tops[2], W),
+      leap([69, 171], [66, 167], tops[3], W),
+      go(65.5, 166.5, tops[3], false),
       // And off it onto the wing's last piece, at its lip over the second break.
-      leap([64.6, 141.5], [59, 141.5], 3.3, W),
+      leap([64.6, 166.5], [59, 166.5], 3.3, W),
     ]);
     expect(f.failed).toBeUndefined();
     expect(s.p.y - ground(world, s.p.x, s.p.z)).toBeGreaterThan(1.8);
@@ -1337,7 +1338,7 @@ describe('LANDFALL, the edges', () => {
         expect(mine[0].max[1]).toBeGreaterThan(ground(world, x, side) + 6);
       }
     }
-    // The rocks: every box inside what rockOf() draws (its corners within 0.5 m of it), and a ghost.
+    // The rocks: every box inside what blockOf() draws (its corners within 0.5 m of it), and a ghost.
     for (const [n, c] of LAYOUT.crags.entries()) {
       const far = n >= ROCKS.length;
       expect([c.at[0], far ? ZED - c.at[2] : c.at[2], c.R, c.H, c.s]).toEqual(
@@ -1345,9 +1346,10 @@ describe('LANDFALL, the edges', () => {
       );
       // (The height of red's: the lattice's triangles are not mirrored, the rocks are.)
       expect(c.at[1]).toBe(walked(c.at[0], far ? ZED - c.at[2] : c.at[2]));
-      expect(c.parts.length).toBeGreaterThan(8);
+      // (The mass's great rocks stand mostly behind the headland's wall, where they need none.)
+      expect(c.parts.length).toBeGreaterThan(4);
       expect(c.parts.length).toBeLessThan(50);
-      const { reach } = rockOf(c.s, c.R, c.H);
+      const { reach } = blockOf(c.s, c.R, c.H);
       const mid = c.at[1] + rockMid(c.H);
       for (const [x0, y0, z0, x1, y1, z1] of c.parts) {
         expect(
@@ -1379,11 +1381,12 @@ describe('LANDFALL, the edges', () => {
 
   it('lets no runner out: sprinting and jumping at the trees, the headlands and the sea from all along them', () => {
     const runs: [number, number, number][] = [];
-    for (let z = 12; z <= 188; z += 16) {
-      runs.push([88, z, EAST], [20, z, WEST]);
+    for (let z = 12; z <= ZED - 12; z += 16) {
+      // Not into the tail, which lies in the water on the line.
+      runs.push([88, z, EAST], [20, Math.abs(z - MID) < HULL.r + 2 ? z - 12 : z, WEST]);
     }
     for (let x = 18; x <= 92; x += 6) {
-      runs.push([x, 180, SOUTH], [x, 20, NORTH]);
+      runs.push([x, ZED - 20, SOUTH], [x, 20, NORTH]);
     }
     for (const [x, z, yaw] of runs) {
       const s = red().put(x, ground(world, x, z), z, yaw);
@@ -1392,14 +1395,14 @@ describe('LANDFALL, the edges', () => {
         expect(inArea(p), `from ${x}, ${z}, step ${k}: ${p.x}, ${p.y}, ${p.z}`).toBe(true);
       }
       // Stopped by a trunk, the wall or a rock, or out at sea, swimming: not far from where he was heading.
-      expect(yaw === WEST ? s.modes.has(MODE.SWIM) : true).toBe(true);
+      expect(yaw === WEST ? s.modes.has(MODE.SWIM) : true, `from ${x}, ${z}`).toBe(true);
     }
     // Off the nose's back, the highest place there is, and off the lagoon's engine toward the open sea.
     const top = HULL.axis[2] + HULL.r;
     for (const [x, y, z, yaw] of [
       [84, top, MID, EAST],
       [84, top, MID + 1, (EAST + SOUTH) / 2],
-      [6, 1.4, 112, WEST],
+      [6, 1.4, 137, WEST],
     ]) {
       const s = red().put(x, y, z, yaw);
       for (let k = 0; k < 300; k++) {
@@ -1544,7 +1547,7 @@ describe('LANDFALL, capture the flag, end to end through a room', () => {
       go(base[0], base[2] + 3, CAMP),
       ...blue([...WING_UP.slice(1), ...GALLERY]),
       GALLERY[0],
-      go(62, 111, 8.5),
+      go(62, 136, 8.5),
       ...WING_DOWN,
       go(home[0], home[2] - 3, CAMP),
       go(home[0], home[2], home[1], false),

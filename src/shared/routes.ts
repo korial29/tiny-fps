@@ -234,23 +234,23 @@ export const above = (legs: Leg[], y: number): Leg[] => {
  * by beach.test.ts): from `start` in red's shallows, walked west so the first jump is come at
  * along its line, onto the float aground there, to the second float, up onto the engine and down
  * to the raft on the centre line (`out`); and from the raft back by the same boxes to red's
- * shallows (`in`). Blue's are their mirror across z = 100, so a way round is `out` then the
+ * shallows (`in`). Blue's are their mirror across z = 125, so a way round is `out` then the
  * mirror of `in`.
  */
 export const LAGOON: { start: P; out: Leg[]; in: Leg[] } = {
-  start: [26, 118],
+  start: [26, 143],
   out: [
-    leap([23, 117.5], [20, 117.5], 0.35, { sprint: false }),
-    leap([16.4, 117.2], [12, 114.8], 0.5, { sprint: false }),
-    leap([10.3, 114], [6, 112.5], 1.4, { sprint: false }),
-    go(4, 108.8, 1.4, false),
-    leap([3.5, 107.7], [3, 102], 0.4, { sprint: false }),
+    leap([23, 142.5], [20, 142.5], 0.35, { sprint: false }),
+    leap([16.4, 142.2], [12, 139.8], 0.5, { sprint: false }),
+    leap([10.3, 139], [6, 137.5], 1.4, { sprint: false }),
+    go(4, 133.8, 1.4, false),
+    leap([3.5, 132.7], [3, 127], 0.4, { sprint: false }),
   ],
   in: [
-    go(3, 97, 0.4),
-    leap([3, 103.5], [3.5, 108.5], 1.4, { sprint: false }),
-    leap([6.5, 112.5], [11, 114.5], 0.5, { sprint: false }),
-    leap([12.6, 115], [17, 117.3], 0.35, { sprint: false }),
-    go(21, 117.5, 0.35, false),
+    go(3, 122, 0.4),
+    leap([3, 128.5], [3.5, 133.5], 1.4, { sprint: false }),
+    leap([6.5, 137.5], [11, 139.5], 0.5, { sprint: false }),
+    leap([12.6, 140], [17, 142.3], 0.35, { sprint: false }),
+    go(21, 142.5, 0.35, false),
   ],
 };

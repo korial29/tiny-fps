@@ -6,6 +6,7 @@ import {
   DASH_TICKS,
   RUN_SPEED,
   SPRINT_SPEED,
+  STEP_H,
   STUMBLE_TICKS,
   HEAT_MAX,
 } from '../shared/constants';
@@ -76,6 +77,17 @@ const walks = (s?: PlayerState) => s?.mode === MODE.GROUND || s?.mode === MODE.C
 
 /** Taking steps: on a floor, or along a wall. */
 export const stepping = (s?: PlayerState): boolean => walks(s) || s?.mode === MODE.WALLRUN;
+
+/** On a floor: the modes in which physics snaps the feet up or down a step of at most STEP_H. */
+const onFloor = (s?: PlayerState) => walks(s) || s?.mode === MODE.SLIDE;
+
+/**
+ * How fast the drawn eye catches up with a step the feet took at once, per second. Over a row of
+ * low steps (the wrecked wing on Landfall, 0.15 m each) the eye then rises as on a slope.
+ */
+export const STEP_EASE = 12;
+/** The least height change in a frame taken for a step rather than a slope, metres. */
+const STEP_MIN = 0.05;
 
 /** The unit vector toward a wall on each SIDE, as in physics. */
 const WALL = [
@@ -176,6 +188,9 @@ export const createEffects = (): Effects => {
   /** The eye height as drawn; undefined until the first state, which it starts at. */
   let h: number | undefined;
   let last: PlayerState | undefined;
+  /** The feet's height last frame, and the drawn eye's lag behind a step taken since (metres). */
+  let feet: number | undefined;
+  let lag = 0;
   const y: Spring = [0, 0];
   const p: Spring = [0, 0];
   const r: Spring = [0, 0];
@@ -268,6 +283,12 @@ export const createEffects = (): Effects => {
         fx.stride += d / stepLength(v);
       }
       amt += ((walks(me) && d > 0.5 * dt && d < 1 ? 1 : 0) - amt) * ease(10);
+      // A step up or down taken on a floor: the feet jump by it at once, the drawn eye follows.
+      const rise = me && feet !== undefined && onFloor(me) && onFloor(last) ? me.y - feet : 0;
+      // Above STEP_H it was no step (a respawn); under STEP_MIN a slope of the relief, drawn as it is.
+      lag = Math.abs(rise) > STEP_H + 1e-3 ? 0 : Math.abs(rise) > STEP_MIN ? lag - rise : lag;
+      lag = me ? Math.max(-STEP_H, Math.min(STEP_H, lag)) * Math.exp(-dt * STEP_EASE) : 0;
+      feet = me?.y;
       last = me;
 
       // Hits are impulses on the springs: a landing pushes the eye down, a jump up, a grab the look down.
@@ -312,6 +333,7 @@ export const createEffects = (): Effects => {
       fx.dy =
         (h ?? 0) -
         want +
+        lag +
         y[0] -
         Math.cos(fx.stride * 2 * Math.PI) * bob(v) * amt -
         lie * (want - LIE[1]);

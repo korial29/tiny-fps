@@ -148,3 +148,11 @@ in the same change and consult the user about any remaining increase.
   check and inspect a screenshot.
 - Write code, comments, docs, conventional commit subjects and PRs in English.
   Comment on facts that the code leaves implicit.
+
+## Context hygiene
+
+- When my request is unrelated to the current task, say so in one line
+  and suggest I run /clear before continuing. Don't start the new task
+  until I confirm.
+- For broad searches or exploration, delegate to a subagent so the
+  results don't pile up in the main context.

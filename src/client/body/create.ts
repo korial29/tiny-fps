@@ -141,7 +141,7 @@ import {
   TUCK,
   counter,
 } from './fingers';
-import { hands } from './hands';
+import { hands, palmsOf } from './hands';
 import {
   armTurn,
   cannonInView,
@@ -172,6 +172,8 @@ import { clasp, rotate, wield } from './wield';
 
 export const createBody = (world?: World): Body => {
   let gait = createGait(0);
+  /** Where the two hands were at the last draw() (Body.palms). */
+  const palms = new Float32Array(32);
   let build = 0;
   let tone: number[] | undefined;
   /** The ninja's black suit, with no armour (soldier.ts). */
@@ -1109,6 +1111,7 @@ export const createBody = (world?: World): Body => {
     draw(out, eye, yaw, pitch, roll = 0, color = [0.7, 0.7, 0.7], pieces) {
       const s = pose(eye, yaw, pitch, roll);
       if (s) {
+        palmsOf(s, palms);
         // An armoured suit (see palette()): its gloves cover the fingers too; white armour in space,
         // else in the team's colour.
         const suit = !!world?.def.armor && !ninja && !xeno && !hunter;
@@ -1371,6 +1374,7 @@ export const createBody = (world?: World): Body => {
     },
     spun: () => (me && prog >= 0 ? SWAY * bent(me, prog)[0] * w.blade : 0),
     parried: () => (parry = 0),
+    palms,
     get steps() {
       return gait.steps;
     },

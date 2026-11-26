@@ -5,6 +5,7 @@ import type { Out } from '../verts';
 import { CLAW_HAND, HAND_F } from './fingers';
 import type { Claws } from './fingers';
 import { hand } from './glove';
+import { GRAIN_SCALE } from './hide';
 import type { Solved } from './types';
 
 /** What a hand does besides closing (hand()): the left index pointing, the right thumb pushing toward `to`, the left thumb cupped. */
@@ -80,3 +81,25 @@ export const hands = (
       i ? hook : 0,
     );
   });
+
+/**
+ * Where the two hands of the skeleton `s` are, left then right, written into `into`: for each a
+ * matrix (column-major, 16 numbers) that takes a point of the world to the hand's own space (x
+ * toward the thumb, y the back, z toward the fingers, hand()). The frame's vertices carry no rest
+ * place, and the shader's skin pass needs one that holds still on the skin: it finds a bare hand's
+ * through these (VERT's `Hh`), so the own hands' grain stays on them as they move. The space is
+ * shrunk by GRAIN_SCALE: the shader's pores and grain come out that much coarser on the hand.
+ */
+export const palmsOf = (s: Solved, into: Float32Array) => {
+  [J.HAND_L, J.HAND_R].forEach((j, i) => {
+    const q = s.rot[j];
+    const p = s.pos[j];
+    [spin(q, [0, 0, -1]), spin(q, [i * 2 - 1, 0, 0]), spin(q, [0, -1, 0])].forEach((a, row) => {
+      for (let col = 0; col < 3; col++) {
+        into[i * 16 + col * 4 + row] = a[col] * GRAIN_SCALE;
+      }
+      into[i * 16 + 12 + row] = -(a[0] * p[0] + a[1] * p[1] + a[2] * p[2]) * GRAIN_SCALE;
+    });
+    into[i * 16 + 15] = 1;
+  });
+};

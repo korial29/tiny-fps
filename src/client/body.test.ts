@@ -106,24 +106,28 @@ const draw = (body: Body, p: PlayerState, pitch = 0, color = TEAM): Vert[] => {
 };
 const colored = (v: Vert[], c: number[]) => v.filter(q => c.every((n, i) => q.c[i] == n));
 /**
- * Vertices of the hand, in the order drawn: the palm, a tube of the cuff's sides and 3 rings; each
- * finger, one of FINGER_SIDES and 16 rings from where it leaves the palm (four rings round each bend,
- * the glove's edge, two round the tip: the user, 2026-11-17), then a fan, and its nail; the weld from the palm's last ring to the fingers'
- * roots (the user, 2026-11-09: one piece), the palm's 24 and the roots' outline zipped (46 steps); the thumb,
- * 15 rings from halfway along its first bone, and its nail; its mound, two strips from the palm;
- * the glove's gear (the knuckles' shell, the back's plate and its stitching, the strap and its buckle).
+ * Vertices of the hand, in the order drawn: the palm, a skin of the cuff's sides and 8 rings (the
+ * user, 2026-11-26: a more real hand, its palm with a man's flesh on it); each finger, one of
+ * FINGER_SIDES and 18 rings from where it leaves the palm (two round the knuckle, four round each
+ * bend, the glove's edge, two round the tip), then a fan, and its nail; the weld from the palm's
+ * last ring to the fingers' roots (the user, 2026-11-09: one piece), the palm's 24 and the roots'
+ * outline zipped (28 steps: the webs take the sides of the roots that face a neighbour); the three
+ * webs between the fingers, six strips each; the thumb, 13 rings from the bend of its first joint,
+ * and its nail; its mound, twice as fine round as the thumb and five strips from the palm; the
+ * glove's gear (the knuckles' shell, the back's plate and its stitching, the strap and its buckle).
  */
-const [PALM, FINGER, THUMB, NAIL, WELD, MOUND, GEAR] = [
-  12 * CUFF_SIDES,
-  870,
-  810,
+const [PALM, FINGER, THUMB, NAIL, WELD, WEBS, MOUND, GEAR] = [
+  42 * CUFF_SIDES,
+  990,
+  690,
   24,
-  (CUFF_SIDES + 46) * 3,
-  2 * FINGER_SIDES * 6,
+  (CUFF_SIDES + 28) * 3,
+  3 * 6 * 12,
+  2 * FINGER_SIDES * 5 * 6,
   // 1764 until the fingers' round tips (2026-11-18): the knuckles' shell went from 10 sides to 8, the plate lost its middle ring.
   1470 + 18 * CUFF_SIDES,
 ];
-const HAND = PALM + 4 * (FINGER + NAIL) + WELD + THUMB + NAIL + MOUND + GEAR;
+const HAND = PALM + 4 * (FINGER + NAIL) + WELD + WEBS + THUMB + NAIL + MOUND + GEAR;
 const away = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 describe('body', () => {
@@ -458,7 +462,7 @@ describe('body', () => {
           n: out.slice(i * STRIDE + 3, i * STRIDE + 6) as Vec3,
         }));
         expect(v).toHaveLength(HAND);
-        const thumb = PALM + 4 * (FINGER + NAIL) + WELD;
+        const thumb = PALM + 4 * (FINGER + NAIL) + WELD + WEBS;
         return [
           v.slice(0, PALM),
           ...Array.from({ length: 4 }, (_, i) =>
@@ -563,7 +567,7 @@ describe('body', () => {
           (_, i) => out.slice(i * STRIDE, i * STRIDE + 3) as Vec3,
         );
         const w = PALM + 4 * (FINGER + NAIL);
-        const m = w + WELD + THUMB + NAIL;
+        const m = w + WELD + WEBS + THUMB + NAIL;
         return [v.slice(w, w + WELD), v.slice(m, m + MOUND)];
       };
       // 0.9, every grip's.
@@ -608,9 +612,11 @@ describe('body', () => {
         expect(of([0.2, 0.2, 0.2]).length).toBeGreaterThan(100);
       });
 
-      it('stay under 7200 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
-        // 6000 until the fingers took four rings round each joint to close on a grip (the user, 2026-11-09).
-        expect(HAND).toBeLessThanOrEqual(7200);
+      it('stay under 8700 vertices a hand, smooth fingers, nails and the glove’s gear', () => {
+        // 6000 until the fingers took four rings round each joint to close on a grip (the user, 2026-11-09);
+        // 7200 until the hand took its knuckles, webs, palm's flesh and finer mound (the user, 2026-11-26:
+        // a more real hand, and the budget may go up for it).
+        expect(HAND).toBeLessThanOrEqual(8700);
       });
 
       it('make each finger and the thumb one closed surface: no cap or face between its phalanges', () => {
@@ -661,8 +667,11 @@ describe('body', () => {
           const ring = new Set(thumb.map(v => key(v.at)));
           // On the thumb: its first ring.
           expect(mound.filter(p => ring.has(key(p))).length).toBeGreaterThan(0);
-          // Its foot on the palm, by the thumb's root and within the palm's width.
-          const foot = mound.filter(p => !ring.has(key(p)));
+          // Its foot on the palm, by the thumb's root and within the palm's width: the near edge
+          // of its first strip (two triangles a side, the first, second and fourth corners on it).
+          const foot = mound
+            .slice(0, 2 * FINGER_SIDES * 6)
+            .filter((_, i) => [0, 1, 3].includes(i % 6));
           expect(foot.length).toBeGreaterThan(0);
           expect(Math.min(...foot.map(p => p[2]))).toBeGreaterThan(0);
           expect(Math.max(...foot.map(p => Math.abs(p[0])))).toBeLessThan(0.05);
@@ -1072,7 +1081,8 @@ describe('the ammo on the back of the gun', () => {
     const out: number[] = [];
     const p = man();
     watch(p, 60).draw(out, eyeOf(p), 0, 0, 0, TEAM);
-    expect(out.length / STRIDE).toBeLessThan(26000);
+    // 26000 until the hands took 1722 vertices more each (the user, 2026-11-26: a more real hand).
+    expect(out.length / STRIDE).toBeLessThan(30000);
     expect(out.slice(-6).every(v => Number.isFinite(v))).toBe(true);
   });
 });

@@ -185,9 +185,9 @@ export const FINGER_R = 0.01;
 /** The lengths of a finger's three phalanges against `l`, the root one first. */
 export const BONES = [1, 0.62, 0.42];
 /** The ring of a finger from which on it is bare: the glove's fingers end 60 % along the middle phalanx. */
-export const BARE = 8;
+export const BARE = 10;
 /** The rings of a finger a near runner's hand keeps past its root (hand()'s `lite`): the knuckle's bend, the glove's edge, the last bend, the tip. */
-export const LITE = [5, 8, 12];
+export const LITE = [7, 10, 14];
 
 /**
  * The rings of a finger, in the hand's space: from `p` along `d1`, `d2` then `d3`, its three
@@ -199,6 +199,14 @@ export const LITE = [5, 8, 12];
 export const KNEE = 0.6;
 /** A spread hand's (the Hunter's disc, the user 2026-11-23): sharper joints. */
 export const KNEE_SHARP = 0.25;
+
+/** How much of a finger's half thickness a fist presses out of the inside of each of its joints. */
+export const CREASE = 0.6;
+/** A man's finger of FINGER_R, metres: the flesh under a phalanx, the head of a joint on its back, and what a joint adds to its half width. */
+export const [FLESH, JOINT_HEAD, JOINT_WIDE] = [0.0014, 0.0011, 0.0007];
+/** How far the head of a knuckle stands out of the back of the hand, metres: on a straight finger, and what a bend adds for each unit of 1 - cos of half of it. */
+export const KNUCKLE = [0.001, 0.003];
+const dot3 = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 export const finger = (
   p: Vec3,
@@ -212,6 +220,8 @@ export const finger = (
   bony = 0,
   /** How far each joint's curve reaches along the bones, a share of them: less, a sharper joint. */
   knee = KNEE,
+  /** 0 to 1: a fist's finger, the flesh inside each joint pressed flat (CREASE) where a sharp bend would fold the skin through itself. */
+  crease = 0,
 ): Ring[] => {
   const [l1, l2, l3] = BONES.map(k => k * l);
   const shaft = 1 - 0.34 * bony;
@@ -220,16 +230,27 @@ export const finger = (
   const j1 = along(p, d1, l1);
   const j2 = along(j1, d2, l2);
   /** A ring at `c` across `d`, `k` thick, `h` of that from the palm side to the back. */
-  const ring = (c: Vec3, d: Vec3, k: number, h = 1): Ring => {
+  const ring = (c: Vec3, d: Vec3, k: number, h = 1, rise = 0, pad = 0, w = 1): Ring => {
     const [t, y] = [unit(d), unit(cross(d, X))];
     // A man's finger is a little wider than it is deep (the user, 2026-11-17: more real hands).
-    return [c, cross(y, t).map(v => v * r * k) as Vec3, y.map(v => v * r * k * h * oval) as Vec3];
+    // `rise` lifts its back alone, the palm side where it was: the head of a knuckle. `pad` swells
+    // its palm side alone: the flesh under a phalanx. `w` widens it alone.
+    return [
+      add(c, y.map(v => (v * (rise - pad)) / 2) as Vec3),
+      cross(y, t).map(v => v * r * k * w) as Vec3,
+      y.map(v => v * (r * k * h * oval + (rise + pad) / 2)) as Vec3,
+    ];
   };
+  // A man's finger (the user, 2026-11-26: a more real hand): flesh under each phalanx, and at each
+  // joint a head on the back, a crease under it and more width. The xenomorph's bones have none.
+  const [PAD, KNOB, WIDE] = [FLESH * (1 - 0.7 * crease), JOINT_HEAD, JOINT_WIDE].map(
+    v => v * taper * (r / FINGER_R),
+  );
   /**
    * The bend from `a` to `b` round the joint `j`, a curve on it (its ends along the two bones, no
    * kink where it meets them): four rings, `k0` to `k1` thick.
    */
-  const bend = (a: Vec3, j: Vec3, b: Vec3, k0: number, k1: number, flat = 0) => {
+  const bend = (a: Vec3, j: Vec3, b: Vec3, k0: number, k1: number, flat = 0, head = 1) => {
     const c = j;
     return [1 / 5, 2 / 5, 3 / 5, 4 / 5].map(k =>
       ring(
@@ -239,39 +260,60 @@ export const finger = (
         (k0 + (k1 - k0) * k) * (shaft + (0.06 + 0.18 * bony) * Math.sin(Math.PI * k)),
         // Flatter across the joint, most at its middle: the inside of the bend does not fold.
         1 - flat * Math.sin(Math.PI * k),
+        KNOB * head * Math.sin(Math.PI * k),
+        -CREASE * crease * r * Math.sin(Math.PI * k),
+        1 + (WIDE / r) * head * Math.sin(Math.PI * k),
       ),
     );
   };
   // The first bend from 60 % back along the first bone to 60 % along the second: a wide knuckle,
   // its inside not folded.
-  const sharp = knee < KNEE;
   const [a1, mid, b2] = [
     along(j1, d1, -knee * l1),
     along(j1, d2, knee * l2),
-    along(j2, d3, (sharp ? knee : 0.5) * l3),
+    along(j2, d3, Math.min(knee, 0.5) * l3),
   ];
   // The second bend starts past the glove's edge, or closer to its joint on a sharp one.
-  const s2 = sharp ? along(j2, d2, -knee * l2) : along(mid, d2, 0.003);
+  const s2 = along(j1, d2, Math.max(knee * l2 + 0.003, (1 - knee) * l2));
   // The root sunk 12 mm in the palm and flared, a fillet that leaves it at a slant with no seam
   // (the user, 2026-11-09).
+  // The knuckle (the user, 2026-11-26: a more real hand): the first bone turns out of the palm
+  // round its joint over two rings between the root and the bone, and the head of the joint stands
+  // out of the back of the hand, further the more the finger is bent (KNUCKLE).
+  const rise = KNUCKLE[0] + KNUCKLE[1] * (1 - dot3(unit(d1), unit(t)));
   return [
     // The xenomorph's thin finger leaves the palm thinner too: no step down just past its root.
     ring(along(p, unit(t), -0.012), t, 1.35 * (1 - 0.2 * bony)),
-    ring(p, t, 1.1 * (1 - 0.2 * bony)),
+    ring(p, t, 1.1 * (1 - 0.2 * bony), 1, rise),
+    ...[
+      [0.3, 0.7, 1.06, 0.8],
+      [0.68, 2.6, 1.01, 0.4],
+    ].map(([f, turn, k, up]) =>
+      ring(
+        along(p, d1, f * (1 - knee) * l1),
+        add(unit(t), unit(d1).map(v => v * turn) as Vec3),
+        k * (1 - 0.2 * bony),
+        1,
+        rise * up,
+      ),
+    ),
     // It tapers from its root to its tip (the user, 2026-11-17: they were tubes), a human one.
-    ring(a1, d1, shaft * (1 - 0.04 * taper)),
+    ring(a1, d1, shaft * (1 - 0.04 * taper), 1, 0, PAD),
     ...bend(a1, j1, mid, 0.98 - 0.02 * taper, 0.95 - 0.05 * taper, 0.22),
     // The glove's edge, rolled, then the bare finger a hair beyond it.
-    ring(mid, d2, (0.95 - 0.05 * taper) * shaft),
-    ring(along(mid, d2, 0.003), d2, (0.88 - 0.05 * taper) * shaft),
-    ...bend(s2, j2, b2, 0.86 - 0.04 * taper, 0.84 - 0.07 * taper),
+    ring(mid, d2, (0.95 - 0.05 * taper) * shaft, 1, 0, PAD * 0.8),
+    ring(along(mid, d2, 0.003), d2, (0.88 - 0.05 * taper) * shaft, 1, 0, PAD * 0.8),
+    ...bend(s2, j2, b2, 0.86 - 0.04 * taper, 0.84 - 0.07 * taper, 0, 0.6),
     // The xenomorph's last phalanx as wide as its claw's root, which goes on from it.
-    ring(b2, d3, (0.82 - 0.06 * taper) * (1 - 0.24 * bony)),
+    ring(b2, d3, (0.82 - 0.06 * taper) * (1 - 0.24 * bony), 1, 0, PAD),
     // Its tip thinner inside the claw, which sheathes it: none of it through the claw.
     // A round tip: the pad of the finger, not a cone.
     ...(bony
       ? [ring(along(j2, d3, l3 - 0.001), d3, 0.7 * (1 - 0.4 * bony))]
-      : [ring(along(j2, d3, l3 - 0.003), d3, 0.72), ring(along(j2, d3, l3 + 0.003), d3, 0.46)]),
+      : [
+          ring(along(j2, d3, l3 - 0.003), d3, 0.72, 1, 0, PAD * 0.8),
+          ring(along(j2, d3, l3 + 0.003), d3, 0.46),
+        ]),
     ring(along(j2, d3, l3 + 0.006), d3, 0),
   ];
 };
@@ -294,6 +336,13 @@ const LITTLE_IN = 0.55;
 /** A spread hand's thumb mound, from its foot on the palm to the thumb's root, in this many steps (others 2). */
 export const MOUND_RINGS = 4;
 
+/** A fist's joints, radians: the first bone off the line of the hand, the middle joint's bend and the last's. */
+export const FIST_JOINTS = [1.62, 1.72, 1.3];
+/** How far past a grip's curl toward a fist `curl` is, 0 to 1. */
+export const clench = (curl: number) => Math.min(Math.max((curl - 0.9) / 0.1, 0), 1);
+/** How far a fist's joints' curves reach along the bones (finger()'s `knee`): its phalanges straight, its corners square. */
+export const KNEE_FIST = 0.5;
+
 export const phalanges = (curl: number, i: number, spread = 1, hook = 0): [Vec3, Vec3, Vec3] => {
   // `spread` times the open hand's fan: wider apart, as on the Hunter's disc. What it adds turns
   // the first bone only partly, the rest further out (FAN), so the finger leaves the knuckle
@@ -305,15 +354,19 @@ export const phalanges = (curl: number, i: number, spread = 1, hook = 0): [Vec3,
   // Past a grip's curl the joints bend no more (tighter, a bend folds into itself): the finger
   // turns at its root.
   const k = Math.min(curl, 0.9);
-  const a = 0.1 + 1.81 * curl;
-  const b = a + 0.08 + 1.74 * k;
+  // Past it, a fist (the user, 2026-11-26): the first bone comes back square to the back of the
+  // hand while the two joints beyond close further (FIST_JOINTS), the tips into the palm. Until then
+  // the finger turned on at its root alone, and a fist was a grip with no handle in it.
+  const fist = clench(curl);
+  const a = 0.1 + 1.81 * k + (FIST_JOINTS[0] - (0.1 + 1.81 * 0.9)) * fist;
+  const b = a + 0.08 + 1.74 * k + (FIST_JOINTS[1] - (0.08 + 1.74 * 0.9)) * fist;
   // `hook` (radians) bends the finger further as a hand gripping an edge does, over its three
   // joints: the first bone lifted a little at the knuckle, most of the bend at the middle joint,
   // the rest at the last (HOOK, each joint's share).
   const [x, y, z] = [
     a + HOOK[0] * hook,
     b + (HOOK[0] + HOOK[1]) * hook,
-    b + 0.06 + 0.99 * k + hook,
+    b + 0.06 + 0.99 * k + (FIST_JOINTS[2] - (0.06 + 0.99 * 0.9)) * fist + hook,
   ].map((n, j) => unit([splays[j], -Math.sin(n), Math.cos(n)]));
   return [x, y, z];
 };

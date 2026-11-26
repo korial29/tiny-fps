@@ -117,7 +117,8 @@ const BUDGETS = [
   // 58,500 B until that hull rebased on the ws-free room entry (#399) and the fires' damage (#400) (the user, 2026-11-25: 58,700 B).
   // 58,950 B: Landfall's swimming (the user, 2026-11-26).
   // 59,392 B: Landfall 25 % longer, its lattice on the centre line and its blocks of granite (the user, 2026-11-26).
-  { file: 'dist/local.js', max: 59_392 },
+  // 59,520 B: the bots swimming back to shore (the user, 2026-11-26).
+  { file: 'dist/local.js', max: 59_520 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured

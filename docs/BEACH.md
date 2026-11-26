@@ -88,7 +88,7 @@ Target: 300,000 vertices at most (Tranquility: 436,467), match-frame JavaScript 
   to 1.5 m off the ledges runners walk. Worst gap where a body touches: 0.28 m. A wing's top is the
   plane through its steps' upper edges: a foot sinks 0 to 0.47 m in it.
 - `smoke.ts`: eight columns over the engines and the hull's broken ends, static balls the shader
-  turns to smoke (paint layer −6), one blended draw. `AIRS` in `sfx.ts` is a map's ambience: the
+  turns to smoke (paint layer −6), one blended draw. `AIRS` in `sfx/air.ts` is a map's ambience: the
   surf, the wind, insects, fire and gulls, scaled by where the listener stands.
 - Bots (`nav.ts`, `routes.ts`, `bot.ts`): no floor within 0.3 m of the kill floor, five routes on
   the centre line a bot is given by its id, the lagoon's legs as links. Over 24 matches: east gap

@@ -1,5 +1,5 @@
 """The players' own voices, spoken by Kokoro-82M (Apache-2.0) and encoded into one sprite: the taunts
-a player says when he frags. His cry as he goes down is the synth's (sfx.ts, scream()), not his
+a player says when he frags. His cry as he goes down is the synth's (sfx/voices.ts, scream()), not his
 voice (the user, 2026-11-17). The ninja's are in Japanese, in voices of
 their own after the others.
 

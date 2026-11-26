@@ -1041,7 +1041,13 @@ export class Bot {
     if (ray(w, [p.x, p.y + 1.9, p.z], [fx, 0, fz], reach) < reach) {
       return false;
     }
-    if (ray(w, [p.x, p.y + STEP_H + 0.01, p.z], [fx, 0, fz], ahead) >= ahead) {
+    // Open at the knees and up to the head: a box that floats over the floor (a wing's row over the
+    // sand, Landfall) stops the body as a wall does, and is jumped onto the same way.
+    let clear = true;
+    for (let h = STEP_H + 0.01; clear && h < 1.9; h += 0.2) {
+      clear = ray(w, [p.x, p.y + h, p.z], [fx, 0, fz], ahead) >= ahead;
+    }
+    if (clear) {
       return 'open';
     }
     // A box to jump onto: low enough, with a floor behind it no lower than the bot stands, not a

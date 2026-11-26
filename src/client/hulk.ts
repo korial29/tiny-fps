@@ -1362,40 +1362,6 @@ const wing = (s: number) => {
         );
       }
     }
-    // Where the map is solid to the sand under it (a body would not fit): the sand it ploughed, banked up under it.
-    const solid = mine.filter(p => p.max[1] - p.min[1] > 0.7);
-    if (solid.length) {
-      const vOf = (z: number) => (z - z0 - push) / WING.span;
-      const [va, vb] = [vOf(solid[0].min[2]), vOf(solid[solid.length - 1].max[2])];
-      const span = [va, ...vs.filter(v => v > va && v < vb), vb];
-      /** The bank's foot: out from under the wing by as much as it is high. */
-      const foot = (v: number, u: number, dv = 0) => {
-        const p = at(v, u, 1);
-        const q = at(v + dv, u + (u - 0.5) * 0.1, 1);
-        const h = Math.max(p[1] - gy(p[0], p[2]), 0) + 0.2;
-        const d = unit([q[0] - p[0], 0, q[2] - p[2]]);
-        const e = off(p, d, h);
-        return [e[0], gy(e[0], e[2]) - 0.1, e[2]];
-      };
-      const c = at((va + vb) / 2, 0.5, 9);
-      for (const u of [0.04, 0.96]) {
-        loft(
-          span.map(v => at(v, u, 1)),
-          span.map(v => foot(v, u)),
-          () => DUNE,
-          c,
-        );
-      }
-      if (va > v0 + 0.5 || n) {
-        const us = [0.04, 0.3, 0.6, 0.96];
-        loft(
-          us.map(u => at(va, u, 1)),
-          us.map(u => foot(va, u, -1)),
-          () => DUNE,
-          c,
-        );
-      }
-    }
   });
 };
 
@@ -1453,7 +1419,10 @@ const arch = (pts: number[][], x: number, y: number, z: number) =>
   [...pts, ...pts.map(([h, v]) => [-h, v]).reverse()].map(([h, v]) => [x + h, y + v, z]);
 
 /** Each kind of piece, drawn on its box: `t` its tint in the map, `s` 1 in red's half and -1 in blue's. */
-const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) => void> = {
+const KIND: Record<
+  string,
+  (p: { min: V; max: V }, t: V | undefined, s: number, d?: number) => void
+> = {
   // Skin lying flat or afloat, its edge torn; or a slab of it standing in the sand, its stringers on one face.
   panel: ({ min: a, max: b }, _t, s) => {
     const k = 0.55 + 0.45 * hash(a[0], a[2], 51);
@@ -1691,13 +1660,36 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
       face([hub, rim(i), rim(i + 1)], ink(i & 1 ? STRIPE : [0.8, 0.8, 0.76], 0.9), DOWN);
     }
   },
-  // A heap of ribs: a plate on it, girders lying round it.
-  heap: ({ min: a, max: b }, t = STRIPE) => {
-    box(a, b, GIRDER, ink(t, 0.55));
-    const g = Math.max(gy(a[0], a[2]), 0);
-    bar([a[0] - 0.9, g + 0.1, a[2] - 0.25], [b[0] + 0.5, g + 0.3, a[2] - 0.05], 0.25, GIRDER);
-    bar([b[0] + 0.2, g + 0.25, a[2] - 0.6], [b[0] + 0.05, g + 0.1, b[2] + 0.8], 0.25, GIRDER);
-    bar([a[0] - 0.1, g + 0.3, b[2] + 0.2], [b[0] - 0.4, g + 0.1, b[2] + 0.05], 0.22, IRON);
+  // A heap of wreckage across a gap, broken end to broken end: plates of skin leaning on a dark
+  // core on both faces, their tops torn, a deck plate on top; a broken end's lowest floor crushed
+  // shut (`jam`, d = 0): the same plates across it, on the face toward the gap.
+  heap: ({ min: a, max: b }, t = STRIPE, _s = 1, d = 0) => {
+    const [o, u] = d ? [0, 2] : [2, 0];
+    box(a, b, IRON, d ? IRON : ink(t, 0.55));
+    const n = Math.round((b[u] - a[u]) / 1.6);
+    for (const e of d ? [d] : [-1, 1]) {
+      const w = (e < 0 ? a : b)[o];
+      for (let i = 0; i < n; i++) {
+        const h = (k: number) => hash(i, w * 7 + k, 41);
+        const q = (j: number, y: number, out: number): V => {
+          const p = [0, y, 0];
+          p[u] = a[u] + ((b[u] - a[u]) * (i + j)) / n;
+          p[o] = w + e * out;
+          return p;
+        };
+        const top = b[1] - 0.15 - 0.5 * h(3);
+        const out = 0.12 + 0.12 * h(4);
+        const l = [
+          q(0.05, a[1], out),
+          q(0.95, a[1], out),
+          q(0.95, top, 0.02),
+          q(0.05, top - 0.2 * h(6), 0.02),
+        ];
+        const c = q(0.5, top / 2, -9);
+        face(l, h(5) > 0.45 ? SKIN : PLATE, c, [0.75, 0.75, 1, 1]);
+        teeth(l[3], l[2], [0, 0.35, 0], 3, PLATE, 0.9, c);
+      }
+    }
   },
   // A frame fallen at a broken end, two girders of it on the sand and a rib still standing against the hull.
   frame: ({ min: a, max: b }, _t, s) => {
@@ -1709,6 +1701,8 @@ const KIND: Record<string, (p: { min: V; max: V }, t: V | undefined, s: number) 
   },
 };
 KIND.float = KIND.raft = KIND.panel;
+// A jam faces the gap: +x at a section's east end.
+KIND.jam = (p, t, s) => KIND.heap(p, t, s, SHAPE.sections.some(e => e[1] == p.max[0]) ? 1 : -1);
 
 /** The kinds of the camps: the rest is debris. */
 const CAMP = ['pod', 'dais', 'crate', 'shelter'];

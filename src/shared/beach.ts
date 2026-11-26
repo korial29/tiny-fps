@@ -126,7 +126,8 @@ export const SHIP = [
       [2, 53, 58, 2.2],
     ],
     tears: [
-      [57.5, 60.5, -5, -2.05],
+      // The hold's doors, their sills a metre over its floor and 2 m over the sand: climbed into.
+      [57.5, 60.5, -4, -2.05],
       [47.5, 55, -1.75, 1.95],
       [64, 71, 2.25, 5],
     ],
@@ -332,7 +333,7 @@ export const NODE = MID % CELL;
  * the lattice's triangles are, and back to the sand 6 m further; none within 12 m of the next.
  */
 export const FLATS = [
-  [57, 132, 61, 138, HOLD.floor - 0.25],
+  [57, 132, 61, 138, HOLD.floor - 0.95],
   [56, 171, 66, 175, 1.3],
   [44, 209, 76, 229, CAMP],
 ];
@@ -551,16 +552,35 @@ const hull = (): Brush[] =>
   });
 const BACK = HULL.axis.map(c => c + HULL.r);
 
-/** A heap of ribs in the middle of each gap, a pack on it, and a fallen frame leaning on each broken end. */
-const GAPS = [40, 78].map(x => {
-  const [hi, lo] = under(x - 1.5, MID - 1.5, x + 1.5, MID + 1.5);
-  const top = Math.round((Math.max(hi, FRAME.water) + 0.4) * 32) / 32;
+/**
+ * A heap of wreckage across each gap, from one broken end to the other, on the line: nobody walks
+ * through a gap (the user, 2026-11-26). Its top is 1.875 m over the highest sand under it (no
+ * jump lands on it) and at most 2.8 m over the lowest (a jump and a pull up), a pack on it.
+ */
+const GAPS = HULL.sections.slice(1).map(([x1], n) => {
+  const x0 = HULL.sections[n][1];
+  const [hi, lo] = under(x0, MID - 1.5, x1, MID + 1.5);
+  const top = Math.round((Math.max(hi, FRAME.water) + 1.875) * 32) / 32;
   return {
-    x,
+    x: (x0 + x1) / 2,
     top,
-    heap: box(x - 1.5, lo - 0.5, MID - 1.5, x + 1.5, top, MID + 1.5, STEEL, ORANGE),
+    heap: box(x0, lo - 0.5, MID - 1.5, x1, top, MID + 1.5, STEEL, ORANGE),
   };
 });
+/**
+ * Each broken end's lowest floor crushed shut, from it to the deck over it and skin to skin: the
+ * heap is not gone round inside the hull. Its x0 and x1, the section's.
+ */
+const JAMS = HULL.sections.flatMap(([x0, x1], n) =>
+  [n && [x0, x0 + 1], n < 2 && [x1 - 1, x1]]
+    .filter(e => e)
+    .map(e => {
+      const [a, b] = e as number[];
+      const c = HULL.axis[n];
+      const w = Math.round(16 * section(SHIP[n].floor)) / 16 - HULL.skin;
+      return box(a, c + SHIP[n].floor, MID - w, b, c + LINES[1], MID + w, METAL);
+    }),
+);
 /** A frame fallen against one broken end of each gap, on both sides of the line: the way through is between it and the heap, or round the heap's other side. */
 const FRAMES = [36, 74].flatMap(x => {
   const [hi, lo] = under(x, MID + 3, x + 1.2, MID + 5.5);
@@ -574,6 +594,7 @@ const centre: Brush[] = [
   ...hull(),
   ...GAPS.map(g => note(line, 'heap', g.heap)),
   ...FRAMES.map(b => note(line, 'frame', b)),
+  ...JAMS.map(b => note(line, 'jam', b)),
   note(line, 'raft', RAFT),
   // Behind the first palms, from one headland to the other and through the nose.
   ghost(box(EDGE.east, -10, EDGE.cape - 2, EDGE.east + 2, 40, ZED - EDGE.cape + 2, STONE)),
@@ -594,7 +615,7 @@ export const edge = (l: number[][], v: number): number => {
 };
 /**
  * The wing: each piece in rows across the span, a step down from one to the next, as wide as the
- * outline there and as thin as the wing (thick()); solid to the sand where a runner would not fit under it. Then the two rails
+ * outline there and as thin as the wing (thick()), free of the sand under it (the user, 2026-11-26). Then the two rails
  * across the break before it, level with the lower of its two lips.
  */
 const wing = (): Brush[] =>
@@ -613,13 +634,7 @@ const wing = (): Brush[] =>
         const [xa, xb] = [WING.trail, WING.lead].map(l => Math.round(8 * (edge(l, v) + dx)) / 8);
         const [za, zb] = [k, k + 1].map(i => z(v0 + ((v1 - v0) * i) / rows));
         const y = y0 + ((y1 - y0) * k) / (rows - 1);
-        const low = y - thick(v);
-        const [hi, lo] = under(xa, za, xb, zb);
-        return note(
-          mine,
-          'wingpiece',
-          box(xa, low - hi < 2.2 ? lo - 0.5 : low, za, xb, y, zb, METAL),
-        );
+        return note(mine, 'wingpiece', box(xa, y - thick(v), za, xb, y, zb, METAL));
       }),
       ...(last
         ? WING.rails.map(x => {

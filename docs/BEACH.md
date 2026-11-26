@@ -224,3 +224,26 @@ The beach is 25 % longer, the camps further apart, and the headlands read as the
   51,624). Ways across, red's spawn to blue's flag side (beach.test.ts): east gap 23.4 → 27.8 s,
   west gap 19.0 → 23.4 s, hold 19.7 → 24.1 s, high road 22.5 → 24.8 s, rails 23.5 → 27.9 s, lower
   deck 20.8 → 25.1 s, lagoon 19.8 → 22.7 s.
+
+## Climbed, not walked (the user, 2026-11-26)
+
+No way across is walked any more: every one is climbed, on the wreck or through it. This replaces
+the gaps crossed on foot and the hold walked into described above.
+
+- **The gaps** (`GAPS` in `beach.ts`): a heap of wreckage across each, from one broken end to the
+  other on the centre line, 3 m deep. Its top is 1.875 m over the highest sand under it, so no
+  jump lands on it, and at most 2.8 m over the lowest, a jump and a pull up (the bots' limit):
+  1.875 m in the west gap, 2.66 m in the east. The pack stays on it. The west gap's easy wade is
+  gone.
+- **The broken ends** (`JAMS`): each end's lowest floor is crushed shut, from the floor to the
+  deck over it and skin to skin, so the heap is not gone round inside the hull. The tail's floor
+  is reached only by its hole now. The decks over it stay open onto the gaps: from the west heap
+  the tail's lower deck is a step, from the east heap the nose's a pull up.
+- **The hold's doors**: their sills are a metre over its floor (`LINES[0]`), and the sand before
+  them is 0.95 m under it (`FLATS`), so a sill is 1.95 m over the sand: a jump and a pull up, the
+  opening 1.95 m high.
+- **The wings**: no sand under them, drawn or collided with. Every row is as thin as the wing
+  (`thick()`); where it is too low to pass under, a body is stopped at its edge.
+- Drawn (`hulk.ts`, `heap`, `jam` alike): a dark core, plates of skin and metal leaning on it
+  with torn tops, a deck plate in the stripe's colour on the heap; a jam's plates face the gap.
+- **Vertices**: the wreck 80,928 → 81,156 (debris 16,476 → 17,040, wings 5,688 → 5,328).

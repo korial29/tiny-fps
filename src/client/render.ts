@@ -99,7 +99,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let builds: ReadonlyMap<number, number> = new Map();
   let looks: ReadonlyMap<number, Choice> = new Map();
   // The runners' skins, armour, cuts, hair and the xenomorph, built now (warmSteps()): a frame of
-  // the match would stall on them. Done already when index.ts ran the steps one task each.
+  // the match would stall on them. Done already when play/entry.ts ran the steps one task each.
   warmSteps().forEach(through);
   /** Another build's skins and armour, as a runner of it comes (wear()). */
   const dressed = (build: number) => outfit(build).forEach(through);

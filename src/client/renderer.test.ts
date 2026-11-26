@@ -502,6 +502,66 @@ describe('createRenderer', () => {
     expect(eye.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('draws with the vision’s code only in a frame of the xenomorph’s vision', () => {
+    const rd = createRenderer(canvas, ROOM);
+    const p: PlayerState = {
+      id: 1,
+      x: 2,
+      y: 0,
+      z: 2,
+      vy: 0,
+      yaw: 0,
+      pitch: 0,
+      ground: true,
+      ...STILL,
+    };
+    const frame = () => {
+      const from = calls.length;
+      rd.frame([1, 1.6, 1], 0, 0, [p], new Map(), createEffects(), []);
+      return from;
+    };
+    /** The fragment shader of each program linked so far, and whether the colour draws of a frame used it. */
+    const sources = () => {
+      const src = new Map<unknown, string>();
+      const prog = new Map<unknown, string>();
+      for (const c of calls) {
+        if (c[0] == 'shaderSource') {
+          src.set(c[1], String(c[2]));
+        } else if (c[0] == 'attachShader' && src.get(c[2])?.includes('sampler2DArray')) {
+          prog.set(c[1], src.get(c[2])!);
+        }
+      }
+      return prog;
+    };
+    const used = (from: number) => {
+      const prog = sources();
+      let [on, colour] = ['', false];
+      const ran = new Set<string>();
+      for (const c of calls.slice(from)) {
+        if (c[0] == 'useProgram') {
+          on = prog.get(c[1]) ?? '';
+        } else if (c[0] == 'viewport') {
+          colour = c[3] == 320;
+        } else if (c[0] == 'drawArrays' && colour && on) {
+          ran.add(on);
+        }
+      }
+      return [...ran];
+    };
+    const plain = used(frame());
+    expect(plain.length).toBeGreaterThan(1);
+    expect(plain.some(f => f.includes('#define VISION'))).toBe(false);
+    expect([...sources().values()].some(f => f.includes('#define VISION'))).toBe(false);
+    rd.vision(true);
+    const seen = used(frame());
+    expect(seen.length).toBe(plain.length);
+    expect(seen.every(f => f.includes('\n#define VISION\n'))).toBe(true);
+    // The map's and the bodies' programs, both, and no other kind.
+    expect(seen.map(f => f.split('\n')[1]).sort()).toEqual(['#define FLESH', '#define LAND']);
+    rd.vision(false);
+    expect(used(frame()).some(f => f.includes('#define VISION'))).toBe(false);
+  });
+
   describe('body', () => {
     const SOLID = 36 * STRIDE;
     const body = (

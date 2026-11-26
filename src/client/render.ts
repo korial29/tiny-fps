@@ -181,6 +181,37 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let shade: Variant;
   /** The scene program in use, the values given to the scene's uniforms by name (setter, arguments). */
   let live: Variant | undefined;
+  /**
+   * A frame in a xenomorph's or the Hunter's vision: the map and the runners are drawn with the
+   * programs that have its code (VISION), made the first time, and the rest of the time with the
+   * ones that do not.
+   */
+  let vision = false;
+  const sighted = new Map<Variant, Variant>();
+  /** Makes a scene program of `kind` for this map: set with the programs, in createRenderer's setup. */
+  let make: (kind: string, names?: string[], sight?: boolean) => Variant;
+  /** The twin of `v` with the vision's code, linked the first time it is asked for. */
+  const sightOf = (v: Variant) => {
+    let w = sighted.get(v);
+    if (!w) {
+      w = { ...make(v.kind, UNIFORMS, true), base: v };
+      sighted.set(v, w);
+      // link() left the new program in use: back to the one the draws go on with.
+      gl.useProgram(live?.p ?? null);
+    }
+    return w;
+  };
+  /** Switches to the programs of a vision frame (or back): the one in use is swapped at once. */
+  const see = (on: boolean) => {
+    if (on != vision) {
+      vision = on;
+      if (live) {
+        const plain = live.base ?? live;
+        live = undefined;
+        use(plain);
+      }
+    }
+  };
   // The mirrors' boxes (MIRROR): the texture, where the eye was when they were chosen, and whether the map has any.
   let mirrorTex: WebGLTexture | null = null;
   let mirrorAt: [number, number] | undefined;
@@ -227,7 +258,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     use(land);
   };
   /** Draws with `v` from now on, given what the uniforms were set to meanwhile. */
-  const use = (v: Variant) => {
+  const use = (plain: Variant) => {
+    const v = vision && plain.kind != 'DEPTH' && plain.kind != 'ORB' ? sightOf(plain) : plain;
     if (v != live) {
       gl.useProgram(v.p);
       live = v;
@@ -447,10 +479,14 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     asides.clear();
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L', 'Dp']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
-    const variant = (kind: string, names = UNIFORMS): Variant => {
-      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock), names);
-      return { p, u: l, sent: new Map() };
+    sighted.forEach(v => gl.deleteProgram(v.p));
+    sighted.clear();
+    vision = false;
+    make = (kind, names = UNIFORMS, sight = false) => {
+      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock, sight), names);
+      return { p, u: l, sent: new Map(), kind };
     };
+    const variant = (kind: string, names = UNIFORMS) => make(kind, names);
     [land, bodies, globed, shade] = [
       variant('LAND'),
       variant('FLESH'),
@@ -855,6 +891,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
           ? [...hunterTargets, ...(activeHunterMode === 1 ? hunterCold : [])].filter(p => !p.down)
           : [];
       prey.length = Math.min(prey.length, 16);
+      see(!!(seeing || activeHunterMode));
       uni('uniform1i', 'Vn', seeing || activeHunterMode ? prey.length + 1 : 0);
       uni('uniform1i', 'Hv', activeHunterMode);
       if (prey.length) {
@@ -1051,6 +1088,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       [builds, looks] = [b, l];
       // Her skins and their armour now, as the man's are built at the start: not in a frame of the match.
       new Set(b.values()).forEach(k => k && dressed(k));
+      for (const look of l.values()) {
+        // The programs of their vision, linked now rather than on the frame it is switched on.
+        if (look.role === ROLE.XENO || look.role === ROLE.HUNTER) {
+          sightOf(land);
+          sightOf(bodies);
+        }
+      }
       for (const look of l.values()) {
         if (look.role === ROLE.HUNTER) {
           warmHunter();

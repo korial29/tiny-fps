@@ -14,8 +14,11 @@ import type { World } from '../shared/world';
  * keeps its prints until they leave the window.
  */
 
-/** Texels a side: 1024 over SPAN 24 m is 2.3 cm a texel, fine enough for a boot's heel and ball. */
-export const N = 1024;
+/**
+ * Texels a side: 2048 over SPAN 24 m is 1.2 cm a texel, fine enough for a sole's edge and lugs
+ * (16 MB). At 1024 the texels showed as steps in a print up close.
+ */
+export const N = 2048;
 /** Metres the map covers a side, centred on the eye. Its last 3 m fade out in the shader. */
 export const SPAN = 24;
 const TEXEL = SPAN / N;

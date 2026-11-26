@@ -18,7 +18,7 @@ import {
 } from '../mesh';
 import { MAX_LIGHTS, MAX_SHADOWS } from '../lights';
 import { GRAIN, SAND, SKY, WATER, WET } from '../shore';
-import { SPAN } from '../prints';
+import { N as PRINT_TEXELS, SPAN } from '../prints';
 import { FRAME } from '../../shared/beach';
 import { PLUME, SMOKE } from '../smoke';
 import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
@@ -189,7 +189,11 @@ export const BRIGHT_METAL = [3, 200];
 // (vn) and blended by it, so no two patches repeat, darkened on slopes; its tone then varies by noise
 // computed here at 11, 4, 1.6 and 77 m (no second fetch of the tile, whose period showed on far
 // hills), and with distance it fades to the tile's mean colour and a flat height, so the horizon
-// carries shading and no pattern. No NaN may leave it: the bloom's blurs spread one into a flat grey
+// carries shading and no pattern. Where a texel spans more than a pixel the two fetches turn bicubic
+// (bc(): a B-spline in four bilinear taps, bqw() its weights), as does every read of the footprints'
+// map (bp()): LINEAR's slope steps at each texel, and the bump lit each one as a square (the user,
+// 2026-11-26). There three octaves of value noise at 2.7, 1.2 and 0.55 cm add the grain the tile is
+// too coarse to hold, each faded out before its cells shrink under 3 pixels. No NaN may leave it: the bloom's blurs spread one into a flat grey
 // rectangle (the user, 2026-11-12). So every pow() has a base in [0, 1] (two unit vectors' dot can
 // round past 1 where a face looks straight at the eye) and nz() normalises the half vectors, which
 // can vanish. F: fog colour and
@@ -305,6 +309,11 @@ float vh(vec2 q){return fract(sin(dot(q,vec2(127.1,311.7)))*43758.5453);}
 float h3(vec3 q){uvec3 u=uvec3(ivec3(floor(q)));uint h=u.x*1597334673u^u.y*3812015801u^u.z*2798796415u;h^=h>>15;h*=2246822519u;h^=h>>13;return float(h)*2.3283064e-10;}
 float vn3(vec3 p){vec3 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(h3(i),h3(i+vec3(1,0,0)),f.x),mix(h3(i+vec3(0,1,0)),h3(i+vec3(1,1,0)),f.x),f.y),mix(mix(h3(i+vec3(0,0,1)),h3(i+vec3(1,0,1)),f.x),mix(h3(i+vec3(0,1,1)),h3(i+vec3(1,1,1)),f.x),f.y),f.z);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(vh(i),vh(i+vec2(1,0)),f.x),mix(vh(i+vec2(0,1)),vh(i+vec2(1,1)),f.x),f.y);}
+void bqw(vec2 u,float n,out vec2 g0,out vec2 a,out vec2 b){vec2 p=u*n-.5,i=floor(p),f=p-i,f2=f*f,f3=f2*f,w0=(1.-3.*f+3.*f2-f3)/6.,w1=(4.-6.*f2+3.*f3)/6.,w2=(1.+3.*f+3.*f2-3.*f3)/6.;g0=w0+w1;a=(i-.5+w1/g0)/n;b=(i+1.5+(f3/6.)/(1.-g0))/n;}
+vec4 bc(sampler2DArray s,vec2 u,float l,float n){vec2 g,a,b;bqw(u,n,g,a,b);return mix(mix(textureLod(s,vec3(b,l),0.),textureLod(s,vec3(a.x,b.y,l),0.),g.x),mix(textureLod(s,vec3(b.x,a.y,l),0.),textureLod(s,vec3(a,l),0.),g.x),g.y);}
+#ifdef PRINTS
+vec4 bp(vec2 u){vec2 g,a,b;bqw(u,${PRINT_TEXELS}.,g,a,b);return mix(mix(textureLod(Fp,b,0.),textureLod(Fp,vec2(a.x,b.y),0.),g.x),mix(textureLod(Fp,vec2(b.x,a.y),0.),textureLod(Fp,a,0.),g.x),g.y);}
+#endif
 void main(){
 #ifdef ORB
 vec3 d=normalize(P);bool t;o=vec4(mg(d,length(fwidth(d))*.5,t),t);
@@ -330,13 +339,18 @@ if(L<-4.5)${WATER(MIST)}
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
 #ifdef PRINTS
 vec2 pro=abs(P.xz-Fc.xy);float prw=1.-smoothstep(${SPAN / 2 - 3}.,${SPAN / 2 - 0.5},max(pro.x,pro.y)),prk=0.,prh=0.;
-if(prw>0.){vec4 prm=texture(Fp,P.xz/${SPAN}.);prk=(1.-prm.r)*prw;prh=((prm.r-1.)*.05+prm.a*.02*prm.r)*prw;}
+if(prw>0.){vec4 prm=bp(P.xz/${SPAN}.);prk=(1.-prm.r)*prw;prh=((prm.r-1.)*.05+prm.a*.02*prm.r)*prw;}
 #endif
 float ks=LD(step(abs(L-${TEX.STONE}.),.5));vec3 cg=vec3(0);
 if(ks>.5){
-vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
-vec4 ta=textureGrad(S,vec3(uv+sin(vec2(3,7)*iq),L),gx,gy),tb=textureGrad(S,vec3(uv+sin(vec2(3,7)*(iq+1.)),L),gx,gy);
+vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q),mg=1.-smoothstep(.6,1.,${SIZE}.*max(length(gx),length(gy)));
+vec2 ua=uv+sin(vec2(3,7)*iq),ub=uv+sin(vec2(3,7)*(iq+1.));vec4 ta=vec4(0),tb=vec4(0);
+if(mg<1.){ta=textureGrad(S,vec3(ua,L),gx,gy);tb=textureGrad(S,vec3(ub,L),gx,gy);}
+if(mg>0.){ta=mix(ta,bc(S,ua,L,${SIZE}.),mg);tb=mix(tb,bc(S,ub,L,${SIZE}.),mg);}
 t=mix(ta,tb,smoothstep(.2,.8,q-iq-.1*dot(ta.rgb-tb.rgb,vec3(1))));
+if(mg>0.){float px=${TILE}.*max(length(gx),length(gy));vec2 r=C.xy;mat2 m=mat2(.8,-.6,.6,.8);
+float d0=(vn(r*37.)-.5)*smoothstep(3.,6.,.027/px);r=m*r;float d1=(vn(r*83.+3.)-.5)*smoothstep(3.,6.,.012/px);r=m*r;float d2=(vn(r*181.+7.)-.5)*smoothstep(3.,6.,.0055/px);
+t.a+=mg*(.027*d0+.012*d1+.0055*d2)*${(0.25 / RELIEF).toFixed(3)};t.rgb*=1.+mg*(.16*d0+.12*d1+.1*d2);}
 float fd=smoothstep(25.,140.,length(P-E)),n1=(vn(C.xy*.09)+.5*vn(C.xy*.23+7.)+.25*vn(C.xy*.61+3.))/1.75-.5,n2=vn(C.xy*.013+11.)-.5;
 t.rgb=mix(t.rgb,textureLod(S,vec3(0,0,L),9.).rgb,.2+.8*fd)*(1.+.42*n1+.5*n2);
 t.a=mix(t.a,.5,fd);

@@ -4,7 +4,7 @@ import { hash, noise } from '../../shared/relief';
 import { TEX } from '../../shared/types';
 import { dress, smooth } from '../mesh';
 import { HEM, HULL, TARP } from '../paint';
-import type { Mat, V } from './types';
+import type { V } from './types';
 import {
   tex,
   ink,
@@ -38,14 +38,11 @@ import { coat, BELL } from './hull';
 // The debris and the camps.
 
 /** The containers' brushed steel and their ribs, brushed upright, bright: the shader's steel shines (SPEC). */
-const [CASE, RIB]: Mat[] = [
-  { ...tex(TEX.STEEL, 1.15), r: true },
-  { ...tex(TEX.STEEL, 0.9), r: true },
-];
+const [CASE, RIB] = [1.15, 0.9].map(k => tex(TEX.STEEL, k, 1, true));
 /** The crates' corner battens, paler than their planks, the grain up them. */
-const BATTEN: Mat = { ...tex(TEX.WOOD, 1.35), r: true };
+const BATTEN = tex(TEX.WOOD, 1.35, 1, true);
 /** The tents' poles: weathered wood, the grain up them, a plank's width across. */
-const POLE: Mat = { ...tex(TEX.WOOD, 1.1, 0.5), r: true };
+const POLE = tex(TEX.WOOD, 1.1, 0.5, true);
 
 /** A wheel lying along -z from its hub's back: 0.6 m in radius, 1 m wide. */
 export const WHEEL = dress(
@@ -163,13 +160,18 @@ export const KIND: Record<
       }
       return;
     }
-    box(a, b, tex(TEX.WOOD), t ? ink(t, 0.75) : tex(TEX.WOOD, 1.1));
+    box(a, b, tex(TEX.WOOD), t && ink(t, 0.75));
     // A batten of paler wood down each corner, the grain up it: its two outer faces and its top
     // only (box()'s skip: the faces x-, x+, y-, y+, z-, z+ are bits 0 to 5).
     for (const i of QUAD) {
       const [x, z] = [i & 1 ? b[0] - 0.09 : a[0] - 0.01, i & 2 ? b[2] - 0.09 : a[2] - 0.01];
-      const keep = (1 << (i & 1)) | (1 << 3) | (1 << (i & 2 ? 5 : 4));
-      box([x, a[1], z], [x + 0.1, b[1] + 0.01, z + 0.1], BATTEN, BATTEN, 63 & ~keep);
+      box(
+        [x, a[1], z],
+        [x + 0.1, b[1] + 0.01, z + 0.1],
+        BATTEN,
+        BATTEN,
+        55 ^ (1 << (i & 1)) ^ (i & 2 ? 32 : 16),
+      );
     }
     for (const u of [0.25, 0.75]) {
       const z = a[2] + (b[2] - a[2]) * u;
@@ -203,29 +205,23 @@ export const KIND: Record<
       b[1] - d - 0.3 * Math.sin((Math.PI * i) / I) * Math.sin((Math.PI * j) / J),
       a[2] + ((b[2] - a[2]) * j) / J,
     ];
-    // Whole: the shader tears its holes and frays its hems (paint.ts TARP_GLSL).
-    const cloth = (i: number) => ink(t, i & 1 ? 0.7 : 0.8, TARP);
+    // Whole: the shader tears its holes and frays its hems (paint.ts TARP_GLSL). Each face twice,
+    // one lit from each side; a hem, HEM deep, hangs down each long edge.
     for (let i = 0; i < I; i++) {
-      for (let j = 0; j < J; j++) {
+      for (let j = 0; j <= J; j++) {
         for (const d of [0, 0.03]) {
-          face([at(i, j, d), at(i + 1, j, d), at(i + 1, j + 1, d), at(i, j + 1, d)], cloth(i), [
-            a[0],
-            d ? 99 : -99,
-            a[2],
-          ]);
-        }
-      }
-    }
-    // The hems: a strip HEM deep down each long edge, as long as the longest tatter.
-    for (const j of [0, J]) {
-      for (let i = 0; i < I; i++) {
-        const [p, q] = [at(i, j, 0), at(i + 1, j, 0)];
-        for (const s of [-1, 1]) {
-          face([p, q, off(q, DOWN, HEM / 99), off(p, DOWN, HEM / 99)], cloth(i), [
-            p[0],
-            p[1],
-            p[2] + s * 9,
-          ]);
+          const [p, q] = [at(i, j, d), at(i + 1, j, d)];
+          const m = ink(t, i & 1 ? 0.7 : 0.8, TARP);
+          if (j < J) {
+            face([p, q, at(i + 1, j + 1, d), at(i, j + 1, d)], m, [a[0], d ? 99 : -99, a[2]]);
+          }
+          if (j % J < 1) {
+            face([p, q, off(q, DOWN, HEM / 99), off(p, DOWN, HEM / 99)], m, [
+              a[0],
+              a[1],
+              d ? 99 : -99,
+            ]);
+          }
         }
       }
     }

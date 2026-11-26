@@ -8,7 +8,7 @@ import { CANOPY, HULL } from '../paint';
 import { SAND } from '../shore';
 import type { V, Mat } from './types';
 
-export const tex = (l: number, k = 1, s = 1): Mat => ({ l, c: [k], s });
+export const tex = (l: number, k = 1, s = 1, r?: boolean): Mat => ({ l, c: [k], s, r });
 export const ink = (c: V, k = 1, l = -1): Mat => ({ l, c: c.map(v => v * k), s: 1 });
 
 export const MID = ZED / 2;

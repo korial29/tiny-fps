@@ -90,6 +90,10 @@ Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from
 
 `PORTHOLES` lists them; none is over a doorway, an airlock or a tube (tested), and nothing stands in the door's way, the airlocks, the tube tops or the middle of a module's roof. No collision: the aerial's mast, the dish and the whips are walked through.
 
+## The dome's wall, in slices (2026-11-26)
+
+The ghost wall round each dome was 20 stepped boxes whose corners stood up to 26.4 m from the centre, 4 m outside the drum drawn at 22.4 m: a runner going round the dome hit air and stuck in the notches between the boxes. `SLICES` in `src/shared/moonbase.ts` now builds it in thin slices from the hall to the drum, each reaching the drum at its near end, so a far corner stands out by `SNUG` (0.3 m) at most, under the body's radius: a runner hugging the wall goes round at 5.6 to 5.9 m/s (5.9 in the open). The slices break at the hall's steps and the sides of the two mouths, and stop flush on the second tube's wall where it comes through the drum. The map has 1,709 brushes (cap raised to 1,800); the bots' nav takes 190 ms to build instead of 105 ms.
+
 ## Rough ground: the field, the mounds, the carved rille (2026-11-11)
 
 The user, after playing: the field is flat, the ravine too regular, the rocks too coarse.

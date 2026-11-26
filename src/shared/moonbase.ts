@@ -56,7 +56,6 @@ const around = (r: number) =>
     [0.71, 0.93],
     [0.39, 1],
   ].map(([a, b]) => [q(a * r), q(b * r)]);
-const [[A0, B0], [A1, B1]] = around(R + 0.2);
 
 /** How thick the walls of the modules and the tubes are. */
 export const WALL = 0.4;
@@ -134,6 +133,77 @@ const turns = (l: number[][]) => [
       .map((p): [string, number[]] => [`${p}`, p]),
   ).values(),
 ];
+
+/**
+ * How far the outer corners of the dome wall's slices stick out of the drawn drum. A runner along
+ * the wall meets each slice's corner this far out of the one it is on: well under PLAYER_R, it
+ * slides round it.
+ */
+export const SNUG = 0.3;
+/**
+ * The dome's wall in its first octant (x >= z >= 0, about the centre), as rectangles (x0, z0, x1,
+ * z1): slices along z, each from the hall to the drum at its near end. A slice's far corner is
+ * then SNUG outside the drum, so z squared grows by 2 R SNUG + SNUG squared a slice. They also
+ * break at the hall's steps, the side of the door and the sides of the tubes' mouth, so a mouth
+ * is a slice of its own.
+ */
+const SLICES = (() => {
+  const top = R / Math.SQRT2;
+  const step = 2 * R * SNUG + SNUG * SNUG;
+  const cuts = [
+    ...Array.from(
+      { length: Math.ceil(top ** 2 / step) },
+      (_, k) => Math.round(Math.sqrt(k * step) * 100) / 100,
+    ),
+    D0,
+    D1,
+    MOUTHS[0][2],
+    q(-MOUTHS[1][1] - MOUTHS[1][2]),
+    q(-MOUTHS[1][1] + MOUTHS[1][2]),
+  ];
+  const zs = [...new Set([...cuts.filter(z => z < top), top])].sort((a, b) => a - b);
+  const rects = [...HALL, ...HALL.map(([a, b]) => [b, a])];
+  const cm = (v: number) => Math.ceil(v * 100) / 100;
+  return zs.slice(1).flatMap((z1, i) => {
+    const z0 = zs[i];
+    const inner = Math.max(...rects.filter(([, b]) => b > z0).map(([a]) => a));
+    const outer = cm(Math.sqrt(R * R - z0 * z0));
+    // Past the hall's corner the slices reach the diagonal: a square on it, the quarter turn of
+    // its own, joins each to its turn without the two overlapping.
+    return inner < z1
+      ? [
+          [z0, z0, z1, z1],
+          [z1, z0, outer, z1],
+        ]
+      : [[inner, z0, outer, z1]];
+  });
+})();
+/**
+ * Where a slice of the dome's wall starts: over a mouth if it is that mouth's slice (across the
+ * mouth's width and at the hall's wall), on the floor otherwise.
+ */
+const mouth = ([x0, z0, x1, z1]: number[]) =>
+  MOUTHS.find(([x, z, w]) =>
+    Math.abs(x) > Math.abs(z)
+      ? x0 <= x && x <= x1 && z - w - 1e-6 <= z0 && z1 <= z + w + 1e-6
+      : z0 <= z && z <= z1 && x - w - 1e-6 <= x0 && x1 <= x + w + 1e-6,
+  )?.[3] ?? 0;
+/**
+ * The ghosts of a slice of the dome's wall, (x0, z0, x1, z1) and the height each starts at: beside
+ * the second tube, where it comes through the drum, the slice reaches the tube's wall (no crack
+ * short of it) and goes on past it only over the tube's roof.
+ */
+const flush = (p: number[]): [number[], number][] => {
+  const [x0, z0, x1, z1] = p;
+  const [u0, w0, w1] = [UX0 - DOME[0], UZ0 - DOME[1], TZ0 - DOME[1]];
+  if (!(x0 < u0 && u0 < x1 + 1 && w0 < z1 && z0 < w1)) {
+    return [[p, mouth(p)]];
+  }
+  return [
+    [[x0, z0, u0, z1], 0],
+    ...(x1 > u0 ? [[[u0, z0, x1, z1], TY] as [number[], number]] : []),
+  ];
+};
 
 /** A ghost box about the dome's centre, (x0, z0, x1, z1) from y0 to y1. */
 const ghost = (
@@ -271,26 +341,8 @@ export const BASE: Brush[] = [
   ...BANDS.slice(2).flatMap((y1, i) =>
     around(shell(BANDS[i + 1]) + 0.2).map(([a, b]) => ghost([-a, -b, a, b], BANDS[i + 1], y1)),
   ),
-  // Its wall, between the stepped boxes that cover the drawn drum and the hall: open at the two mouths.
-  ...turns([
-    [C0, -B0, A0, B0],
-    [C1, D0, A1, B1],
-    [D1, D1, C1, C1],
-  ]).map(p =>
-    ghost(
-      p,
-      // The piece a mouth is in starts over it.
-      MOUTHS.find(([x, z]) => p[0] <= x && x <= p[2] && p[1] <= z && z <= p[3])?.[3] ?? 0,
-      BANDS[1],
-    ),
-  ),
-  // Beside the door, and beside the tubes where they come through.
-  ...[
-    [-B0, -A0, -MOUTHS[0][2], -C0],
-    [MOUTHS[0][2], -A0, B0, -C0],
-    [C1, TZ1 - DOME[1], A1, -D0],
-    [C1, -B1, UX0 - DOME[0], TZ0 - DOME[1]],
-  ].map(p => ghost(p, 0, BANDS[1])),
+  // Its wall, slices between the hall and the drawn drum: open at the two mouths.
+  ...turns(SLICES).flatMap(p => flush(p).map(([r, y]) => ghost(r, y, BANDS[1]))),
   ...FIT,
   ...KIT.map(([, x0, z0, x1, z1, y0, y1]) => ({
     ...box(x0, y0, z0, x1, y1, z1, STEEL),

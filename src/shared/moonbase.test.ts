@@ -2,7 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { EAST, NORTH, Sim, WEST, toward } from '../../test/pilot';
 import { EYE, GRAVITY, JUMP_SPEED, PLAYER_H, PLAYER_R } from './constants';
 import { LAYOUT, MOON, ZED } from './moon';
-import { BASE, DOME, FIT, HALL, HEAD, KIT, MODULES, MOUTHS, ROOM, TUBES, WALL } from './moonbase';
+import {
+  BASE,
+  DOME,
+  FIT,
+  HALL,
+  HEAD,
+  KIT,
+  MODULES,
+  MOUTHS,
+  ROOM,
+  SNUG,
+  TUBES,
+  WALL,
+} from './moonbase';
 import { KEY } from './types';
 import { build, hidden, ray } from './world';
 import type { Brush } from './world';
@@ -30,25 +43,52 @@ const over = (b: { min: number[]; max: number[] }, x: number, z: number, r = 0) 
 describe('MOON, the domes, the modules and the tubes', () => {
   const ghosts = brushes.filter(b => b.ghost);
 
-  it('has a ghost roof over each dome, 3 bands of 4 stepped boxes from 10.5 m, on a ghost wall with two mouths', () => {
+  it('has a ghost roof over each dome, 3 bands of 4 stepped boxes from 10.5 m, on a ghost wall of slices with two mouths', () => {
     const roof = BASE.filter(b => b.ghost && b.min[1] >= 10.5);
     expect(roof).toHaveLength(12);
     expect(Math.max(...roof.map(b => b.max[1]))).toBe(17);
     const wall = BASE.filter(b => b.ghost && b.max[1] === 10.5);
-    expect(wall).toHaveLength(20);
-    // Every piece stands on the floor, but the two over the mouths.
-    expect(wall.map(b => b.min[1]).sort()).toEqual([...Array<number>(18).fill(0), 3, 3.5]);
+    expect(wall.length).toBeGreaterThan(100);
+    expect(wall.length).toBeLessThan(250);
+    // Every slice stands on the floor, but those over the door (3 m) and over the tubes (3.5 m).
     expect(MOUTHS.map(m => m[3])).toEqual([3, 3.5]);
+    const [, , w] = MOUTHS[0];
+    for (const b of wall.filter(b => b.min[1] > 0)) {
+      const [x0, x1, z1] = [b.min[0] - CX, b.max[0] - CX, b.max[2] - CZ];
+      const door = -w <= x0 && x1 <= w && z1 <= -HALL[0][0];
+      const tube = TUBES.some(
+        t =>
+          over(t as Brush, b.min[0] + 1e-6, b.min[2] + 1e-6) ||
+          over(t as Brush, b.max[0] - 1e-6, b.max[2] - 1e-6),
+      );
+      const mouth =
+        b.min[2] - CZ >= MOUTHS[1][1] - MOUTHS[1][2] - 1e-6 &&
+        z1 <= MOUTHS[1][1] + MOUTHS[1][2] + 1e-6;
+      expect(door ? 3 : tube || mouth ? 3.5 : 0, `${b.min}`).toBe(b.min[1]);
+    }
+    // Their corners stand out of the drawn drum by SNUG at most (and a centimetre of rounding),
+    // but where they reach the second tube's wall: no invisible wall round the dome.
+    for (const b of wall) {
+      for (const [x, z] of [
+        [b.min[0], b.min[2]],
+        [b.min[0], b.max[2]],
+        [b.max[0], b.min[2]],
+        [b.max[0], b.max[2]],
+      ]) {
+        const tube = TUBES.some(t => over(t as Brush, x, z, 1e-6));
+        expect(tube || Math.hypot(x - CX, z - CZ) <= 22.4 + SNUG + 0.01, `${x}, ${z}`).toBe(true);
+      }
+    }
     for (const cz of [236, ZED - 236]) {
       const mine = ghosts.filter(
         b => b.max[1] >= 10.5 && Math.abs((b.min[2] + b.max[2]) / 2 - cz) < 23,
       );
-      expect(mine).toHaveLength(32);
+      expect(mine).toHaveLength(roof.length + wall.length);
     }
     // Higher than a double jump from a module roof: 5 + apex + the second jump's rise, with a margin.
     expect(10.5).toBeGreaterThan(5 + APEX + 6 ** 2 / (2 * HALF) + 0.5);
-    // A half of the base stays under 110 brushes, its lab kit in: the map's cap is 450.
-    expect(BASE.length).toBeLessThanOrEqual(110);
+    // A half of the base stays under 320 brushes, its lab kit and the wall's slices in.
+    expect(BASE.length).toBeLessThanOrEqual(320);
   });
 
   it('covers the drawn shell from outside: every point of its surface is in a ghost of the dome, in the door or in the tubes', () => {
@@ -355,11 +395,39 @@ describe('MOON, the base flown with the real physics', () => {
     expect(j.p.y).toBeCloseTo(3.5, 2);
   });
 
+  it('runs round the dome hugging its wall, both ways, at nearly full speed: no invisible corner to stick on', () => {
+    // The west arc, from by the door round to the back: 126 degrees, 0.45 m off the drum.
+    const r = 22.4 + 0.45;
+    const at = (a: number): [number, number] => [CX + r * Math.sin(a), CZ - r * Math.cos(a)];
+    for (const [dir, a0] of [
+      [1, -0.2 * Math.PI],
+      [-1, -0.95 * Math.PI],
+    ]) {
+      const [x, z] = at(a0);
+      const s = Sim.at(world).put(x, 0, z);
+      s.settle();
+      const angle = () => Math.atan2(s.p.x - CX, -(s.p.z - CZ));
+      // Aims 3 m ahead on the circle: a runner leaning into the wall as it turns.
+      const k = s.until(
+        () => Math.abs(angle() - a0) > 0.7 * Math.PI,
+        KEY.FORWARD,
+        p => toward(p.x, p.z, ...at(angle() - dir * (3 / 22.4))),
+        700,
+      );
+      // About 5.9 m/s in the open: 27.6 m in under 560 steps (on master it stuck within 40 degrees).
+      expect(k, `from ${a0.toFixed(2)}`).toBeGreaterThan(0);
+      expect(k).toBeLessThan(560);
+    }
+  });
+
   it('stops a shot at the dome wall and lets it through the door and the tubes', () => {
     // From ahead of the door to the middle of the hall: through the door, not beside it, not over it.
     expect(hidden(world, [80, 1.5, 205], [80, 1.5, 236])).toBe(false);
     expect(hidden(world, [70, 1.5, 205], [70, 1.5, 236])).toBe(true);
-    expect(ray(world, [70, 1.5, 205], [0, 0, 1], 100)).toBeCloseTo(10, 6);
+    // On the drawn drum, within SNUG.
+    const drum = CZ - Math.sqrt(22.4 ** 2 - 10 ** 2) - 205;
+    expect(ray(world, [70, 1.5, 205], [0, 0, 1], 100)).toBeGreaterThan(drum - SNUG - 0.01);
+    expect(ray(world, [70, 1.5, 205], [0, 0, 1], 100)).toBeLessThanOrEqual(drum);
     expect(hidden(world, [80, 4, 205], [80, 4, 236])).toBe(true);
     // From the hall into the first module, along the tube, under its roof.
     expect(hidden(world, [90, 1.5, 225.2], [113, 1.5, 225.2])).toBe(false);

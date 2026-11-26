@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, HULL as SHAPE, LAYOUT, RISE, SHIP, ZED, thick } from '../shared/beach';
+import { BEACH, DECKS, HULL as SHAPE, LAYOUT, RISE, SHIP, ZED, thick } from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
-import { hulk, parts } from './hulk';
-import { HULL } from './paint';
+import { canopy, hulk, parts } from './hulk';
+import { CANOPY, HULL } from './paint';
 import { STRIDE } from './mesh';
 
 const MID = ZED / 2;
@@ -48,10 +48,37 @@ describe('hulk', () => {
     expect(count(made.hull)).toBeLessThan(27_000);
     expect(count(made.ends)).toBeLessThan(2_500);
     expect(count(made.inside)).toBeLessThan(16_000);
+    expect(count(made.cabin)).toBeLessThan(16_000);
     expect(count(made.wings)).toBeLessThan(7_000);
     expect(count(made.debris)).toBeLessThan(18_000);
     expect(count(made.camps)).toBeLessThan(6_000);
     expect(count(hulk(BEACH))).toBeLessThan(90_000);
+  });
+
+  it('keeps the troops’ seats against the flanks, clear of the ways through, the doors and the tears', () => {
+    // Under the upper deck: the flight deck and the nose's lining are over it.
+    const seats = verts(made.cabin).filter(
+      v => v[0] < 95 && v[1] < SHAPE.axis[sectionAt(v[0])] + DECKS[1],
+    );
+    expect(seats.length).toBeGreaterThan(5_000);
+    const bad = seats.filter(v => {
+      const n = sectionAt(v[0]);
+      const c = SHAPE.axis[n];
+      return (
+        Math.abs(v[2] - MID) < 2.9 ||
+        SHIP[n].tears.some(
+          ([x0, x1, a, b]) => v[0] > x0 && v[0] < x1 && v[1] > c + a && v[1] < c + b,
+        )
+      );
+    });
+    expect(bad).toHaveLength(0);
+  });
+
+  it('draws the canopy’s glass apart, in its own layer, only past its arch over the sill', () => {
+    const glass = verts(canopy());
+    expect(glass.length).toBeGreaterThan(300);
+    expect(glass.every(v => v[8] === CANOPY && v[0] >= 91.9 && v[1] > SHAPE.axis[2])).toBe(true);
+    expect(verts(hulk(BEACH)).some(v => v[8] === CANOPY)).toBe(false);
   });
 
   it('draws on boxes the level leaves out: every piece of the map is a ghost', () => {

@@ -39,7 +39,7 @@ import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { mouths, rooms } from '../shared/station';
 import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
 import { PLUME, SMOKE, plumes } from './smoke';
-import { GLOSS as SHEEN, HULL, PANEL } from './paint';
+import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL } from './paint';
 import type { Light } from './lights';
 import type { Vec3 } from './mesh';
 import { battery, cell, kit, racks, rackWeapon, vest, vestMesh } from './props';
@@ -393,6 +393,7 @@ if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=hv(o.rgb);return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 #ifdef BEACH
+if(L<${CANOPY + 0.5})${CANOPY_GLSL(MIST)}
 if(L<${SMOKE + 0.5})${PLUME(MIST)}
 if(L<-4.5)${WATER(MIST)}
 #endif
@@ -886,7 +887,8 @@ export const city = (world: World): World => ({
  * A map's own scenery, loaded with its chunk before the renderer is made (decor()): its ground drawn
  * once, and on the moon the Earth (`sky`, the ground's last vertices) and where it stands.
  */
-export type Decor = { land: number[]; sky: number[]; heavens?: Vec3 };
+/** A map's own scenery: its land, its sky, the Earth's place, and glass drawn blended after the rest (Landfall's canopy). */
+export type Decor = { land: number[]; sky: number[]; heavens?: Vec3; glass?: number[] };
 /** The scenery of a map that has none of its own: the city's is drawn here. */
 export const BARE: Decor = { land: [], sky: [] };
 
@@ -921,6 +923,7 @@ export const scenery = (world: World, d = BARE): number[] =>
           ...d.land,
           ...vision(world.def),
           ...zones(world.def),
+          ...(d.glass ?? []),
           ...plumes(world.def),
           ...lagoon(world.def),
         ]
@@ -1164,11 +1167,16 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const seaN = world.def.scenery === 'beach' ? lagoon(world.def).length / STRIDE : 0;
   /** Its smoke and fires, the last before the sea: drawn apart too, after the sky they rise into. */
   const smokeN = seaN && plumes(world.def).length / STRIDE;
-  /** The ground's opaque vertices, before the Earth, the smoke and the sea. */
-  const opaque = ground.length / STRIDE - heavensN - smokeN - seaN;
+  /** Its canopy's glass, before the smoke: drawn apart, blended, after the sky seen through it. */
+  const glassN = seaN && (d.glass?.length ?? 0) / STRIDE;
+  /** The ground's opaque vertices, before the Earth, the glass, the smoke and the sea. */
+  const opaque = ground.length / STRIDE - heavensN - glassN - smokeN - seaN;
   /** Those cut into runs, each pass drawing those in its view (cells.ts), and the draws of the last one. */
   const runs = cells(ground, opaque);
   const draws = new Int32Array(runs.n * 2);
+  /** The glass, right after them, as one run: its two passes are skipped when it is out of view. */
+  const panes = cells(ground.slice(opaque * STRIDE, (opaque + glassN) * STRIDE), glassN, 1e9);
+  const paned = new Int32Array(2);
   /** Draws the ground's opaque runs in the frustum of `m`, the matrix the pass draws with. */
   const map = (m: Float32Array) => {
     const n = seen(runs, m, draws);
@@ -1920,6 +1928,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         gl.disable(gl.SCISSOR_TEST);
       }
       uni('uniform1f', 'Y', 0);
+      if (glassN && seen(panes, vp, paned)) {
+        // The canopy over what is seen through it, as the sea: what it lets through multiplied
+        // into the frame, then the light it adds; it writes no depth.
+        gl.enable(gl.BLEND);
+        gl.depthMask(false);
+        gl.blendFunc(gl.ZERO, gl.SRC_COLOR);
+        uni('uniform1f', 'Z', 2);
+        gl.drawArrays(gl.TRIANGLES, first - seaN - smokeN - glassN, glassN);
+        gl.blendFunc(gl.ONE, gl.ONE);
+        uni('uniform1f', 'Z', 1);
+        gl.drawArrays(gl.TRIANGLES, first - seaN - smokeN - glassN, glassN);
+        gl.depthMask(true);
+        gl.disable(gl.BLEND);
+      }
       if (smokeN) {
         // The smoke over all of it, its colour already times its alpha; a flame has none and adds.
         gl.enable(gl.BLEND);

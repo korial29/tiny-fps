@@ -98,7 +98,9 @@ const BUDGETS = [
   // 278,400 B: Tranquility's and Landfall's scenery loaded in their own chunks (the user, 2026-11-25: lower it, then 278,400 B after Landfall's reworked ship).
   // 278,528 B: the scene's targets in 11-11-10 bit floats (the user, 2026-11-25).
   // 279,168 B: the map cut into runs that each pass culls (the user, 2026-11-25).
-  { file: 'dist/index.js', max: 279_168 },
+  // 279,296 B: Landfall's see-through canopy, its glass drawn in two blended passes (the user, 2026-11-26).
+  // 279,424 B: with the sand's dunes and the water's chop (#414) (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 279_424 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -127,7 +129,8 @@ const LAZY = {
   // Tranquility's and Landfall's scenery (render.ts decor()), the rounded stones that both draw
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
   tranquility: 18_688,
-  landfall: 12_416,
+  // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
+  landfall: 14_464,
 };
 
 const imports = src => [

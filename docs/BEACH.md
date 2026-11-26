@@ -138,3 +138,44 @@ bots' routes described above.
 - Known: fins and stubs are drawn only; the sand banked under a wing's solid rows is a wall; the
   wing's root is free between x 45 and 55; bots rarely go up inside the hull; no frame time was
   measured with the new ship and the ash.
+
+## The cabin and the canopy (the user, 2026-11-26)
+
+The ship carried troops. Its inside now says so, and the canopy is glass.
+
+- **Troop seats** (`troops()`, `ROWS_OF_SEATS` in `hulk.ts`): fold-down rows along both flanks,
+  facing in, a seat every 0.55 m: a canvas pan and a webbed back slung from three tubes, legs every
+  other seat; down, folded up, hanging broken or gone, a belt's strap dangling now and then. In the
+  middle section's hold (x 44.6..57.1 and 60.9..73.4) and deck (44.6..47.3, 55.3..66.8,
+  70.7..73.4), on the nose's floor (82.6..88.9, 91.1..94.5) and deck (91.2..94.5). The rows leave
+  the doors, the tears, the holes across a deck and the broken ends free, none within 2.9 m of the
+  centre line, and stop short of the wall in the trees. Drawn only: they stand 0.22 to 0.64 m off
+  the lining, so a runner pressed to the wall passes 0.3 to 0.6 m into them.
+- **The flight deck** (`cockpit()`), past x 97 on the upper deck's line, behind the wall in the
+  trees: seen, never reached. A floor to the panel (x 101.4), two pilots' seats with their harnesses
+  (the co-pilot's torn from its rails and tipped against the pedestal), the pedestal with four
+  throttles, two pulled back, the instrument panel under the windscreen and its glare shield, faces
+  dim green, amber or dead, the overhead panel torn from its forward mount and hanging, cables
+  down from it, and on the floor a fallen panel, a cushion and plates against the flanks.
+- **The canopy's glass** (`canopy()`, paint layer `CANOPY` = −7, `CANOPY_GLSL` in `paint.ts`): the
+  panes past the arch (x 92) over the sill, no longer of the skin; one pane on each flank broken
+  (`SHATTER`, x 98.3..101), shards round it. It is `Decor.glass`, the ground's vertices before the
+  smoke and the sea, drawn after the runners in the sea's two blended passes: what it lets through
+  multiplied into the frame (dark blue-green, less at a grazing angle), then the sky it mirrors by a
+  fresnel term and the sun's glint added. Seen from either side; it writes no depth and casts no
+  shadow (the shadow maps draw only the opaque runs).
+- **The skin seen from inside**: the hull paint's inner face is dark and matt (`PANEL` in
+  `paint.ts`), so the nose round the panes reads as the flight deck's lining with no mesh of its own.
+- The nose's front, under and ahead of the canopy, stays opaque skin.
+- **Vertices**: 80,886 opaque (67,722 before; the cabin 13,632, drawn first so the skin and the
+  linings it hides from inside are not shaded twice) and 576 of glass. The map has no level of
+  detail: one count.
+- **Frame** (headless Chrome on Metal, 1600 × 900, three runners at 3 m, before and after
+  alternated in one series on a loaded machine, medians of the runs not slowed by the load): GPU
+  16.6 to 16.9 ms at the spawn (CPU 8.5 to 8.7), 16.7 to 17.1 ms looking down the nose at the flight
+  deck from (90, 11.3, 100) (CPU 8.7 to 8.9). Highline unchanged (12.4 to 12.5 ms); Tranquility's
+  path is untouched. A first version cost about 1 ms of CPU and 2.6 ms of GPU there (measured
+  under load): taking the glass out saved 0.5 ms of GPU, taking the cabin out (with a lining of the
+  nose drawn 5 cm inside the skin, after it) another 0.5 ms, both shading the inside twice. Now that
+  lining is the skin's own dark inner face, the cabin goes first, and the glass is one run of its
+  own whose two passes are skipped when it is out of the frustum.

@@ -105,7 +105,8 @@ const BUDGETS = [
   // 280,960 B: the water's splash and swim sounds (the user, 2026-11-26).
   // 281,344 B: Landfall 25 % longer, its lattice laid on the centre line and its blocks of granite (the user, 2026-11-26).
   // 281,728 B: each class's racks and the Hunter's weapons found on them (the user, 2026-11-26).
-  { file: 'dist/index.js', max: 281_728 },
+  // 284,096 B: the Hunter's pistol, its model, its glyph screen and its slot (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 284_096 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -119,7 +120,8 @@ const BUDGETS = [
   // 58,950 B: Landfall's swimming (the user, 2026-11-26).
   // 59,392 B: Landfall 25 % longer, its lattice on the centre line and its blocks of granite (the user, 2026-11-26).
   // 59,520 B: the bots swimming back to shore (the user, 2026-11-26).
-  { file: 'dist/local.js', max: 59_520 },
+  // 59,776 B: the Hunter's pistol in the step and the snapshot (the user, 2026-11-26).
+  { file: 'dist/local.js', max: 59_776 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured

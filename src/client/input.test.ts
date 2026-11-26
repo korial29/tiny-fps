@@ -109,32 +109,45 @@ describe('the weapon choice', () => {
     expect(order.map(w => turned(w, -1, all))).toEqual([order[4], ...order.slice(0, 4)]);
   });
 
-  it('gives the Hunter his wrist blades on 1 and his harpoon on 2, the wheel in that order (the user, 2026-11-23)', () => {
-    expect(picked(GUN, 'Digit1', true)).toBe(BLADE);
-    expect(picked(BLADE, 'Digit2', true)).toBe(GUN);
-    expect(picked(GUN, 'Digit3', true)).toBe(RAIL);
-    expect(picked(GUN, 'Numpad2', true)).toBe(BLADE);
-    expect(picked(BLADE, 'Numpad3', true)).toBe(GUN);
-    expect([0, 1, 2, 3, 4].map(i => slotted(i, true))).toEqual([BLADE, GUN, RAIL, 3, 4]);
-    const have = owned(player({ ammo: 12, blade: true, rail: 0 }), true);
-    expect(turned(BLADE, 1, have, true)).toBe(GUN);
-    expect(turned(GUN, 1, have, true)).toBe(RAIL);
-    expect(turned(BLADE, -1, have, true)).toBe(RAIL);
-    expect(turned(RAIL, 1, have, true)).toBe(BLADE);
+  it('gives the Hunter his blades on 1, pistol on 2, harpoon on 3, cannon on 4 and disc on 5, the wheel in that order (the user, 2026-11-26)', () => {
+    const SIDE = WEAPON.SIDE;
+    const order = [BLADE, SIDE, GUN, RAIL, WEAPON.RIFLE];
+    expect([0, 1, 2, 3, 4].map(i => slotted(i, true))).toEqual(order);
+    ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].forEach((code, i) =>
+      expect(picked(GUN, code, true), code).toBe(order[i]),
+    );
+    // The numpad is the digits, for him as for the others.
+    ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4', 'Numpad5'].forEach((code, i) =>
+      expect(picked(GUN, code, true), code).toBe(order[i]),
+    );
+    expect(picked(RAIL, 'Digit6', true)).toBe(RAIL);
+    // On the wire: the pistol is KEY.FISTS, which he never has, and the harpoon no weapon key.
+    expect(withWeapon(KEY.FIRE, SIDE)).toBe(KEY.FIRE | KEY.FISTS);
+    expect(withWeapon(KEY.FIRE, GUN)).toBe(KEY.FIRE);
+    const all = owned(player({ ammo: 12, blade: true, rail: 0, rifle: 0, side: 60 }), true);
+    expect(order.map(w => turned(w, 1, all, true))).toEqual([...order.slice(1), order[0]]);
+    expect(order.map(w => turned(w, -1, all, true))).toEqual([order[4], ...order.slice(0, 4)]);
+    // The wheel skips what he has not found: the harpoon and the cannon alone here.
+    const some = owned(player({ ammo: 12, blade: true, rail: 0 }), true);
+    expect(turned(BLADE, 1, some, true)).toBe(GUN);
+    expect(turned(GUN, 1, some, true)).toBe(RAIL);
+    expect(turned(BLADE, -1, some, true)).toBe(RAIL);
+    expect(turned(RAIL, 1, some, true)).toBe(BLADE);
   });
 
-  it('gives the Hunter no fists, his disc on 4, nothing on 5, and his blades first (the user, 2026-11-23)', () => {
-    expect(owned(player({ ammo: 12, blade: true, rail: 0, rifle: 0 }), true)).toEqual([
+  it('gives the Hunter no fists, his pistol his alone, and his blades first (the user, 2026-11-26)', () => {
+    expect(owned(player({ ammo: 12, blade: true, rail: 0, rifle: 0, side: 60 }), true)).toEqual([
       true,
       true,
       true,
       true,
       false,
+      true,
     ]);
-    for (const code of ['Digit5', 'Numpad1']) {
-      expect(picked(RAIL, code, true)).toBe(RAIL);
-    }
-    expect(picked(RAIL, 'Digit4', true)).toBe(WEAPON.RIFLE);
+    expect(owned(player({ blade: true, side: -1 }), true)[WEAPON.SIDE]).toBe(false);
+    // A marine never has it, whatever the field says, and keeps his fists.
+    expect(owned(player({ side: 60 }))[WEAPON.SIDE]).toBe(false);
+    expect(owned(player())[WEAPON.FISTS]).toBe(true);
     expect(chosen(GUN, player({ down: 30 }), player({ down: 1 }), true)).toBe(BLADE);
     const armed = player({ ammo: 12, blade: true, rail: 0, wield: true });
     expect(chosen(WEAPON.FISTS, armed, armed, true)).toBe(BLADE);
@@ -151,6 +164,10 @@ describe('the weapon choice', () => {
     // Bolts again from the rack, or the disc back in his hand: the choice stays.
     expect(chosen(BLADE, player({ blade: true, ammo: 1 }), harpoon, true)).toBe(BLADE);
     expect(chosen(BLADE, player({ ...disc, clip: 40 }), disc, true)).toBe(BLADE);
+    // His pistol from the gun rack.
+    const side = player({ ...disc, side: 60 });
+    expect(chosen(BLADE, disc, side, true)).toBe(WEAPON.SIDE);
+    expect(chosen(BLADE, player({ ...side, side: 3 }), side, true)).toBe(BLADE);
   });
 
   it('sets KEY.BLADE exactly while the katana is chosen, KEY.RAIL while the rail gun is', () => {

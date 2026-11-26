@@ -134,7 +134,7 @@ export const createBalls = (world: World): Balls => {
             ? disk(p)
             : lobbed(p)
               ? lob(p)
-              : launch(p, 0, harpoon && !p.rifled);
+              : launch(p, 0, harpoon && !p.rifled && !p.sided);
       const [o, d]: Vec3[] = [at(b), [b.dx, b.dy, b.dz]];
       const key = (p.id << 8) | b.id;
       if (b.power === NADE) {

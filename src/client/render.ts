@@ -450,9 +450,9 @@ float br=n3(q*vec3(45,1400,45))-.5,s1=smoothstep(.8,.86,n3(q1*vec3(18,520,18))),
 c*=1.+fa*.45*br+.2*(n3(q*30.)-.5);c=mix(c,c*2.1+.06,sc*.75);h+=fa*.00004*br-.00012*sc;}
 #endif
 float wa=FL(min(Wb,1.)*(step(abs(L-(${GLOSS})),.02)+step(abs(L-(${GILT})),.02))),ch=0.,gr=.5,sm=1.;
-if(wa>0.){vec3 q=Rp;float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
+if(wa>0.){vec3 q=Rp*(1.+.8*step(2.5,Wb));float pw=max(length(dx),length(dy)),lowy=smoothstep(1.1,.25,q.y);
 gr=n3(q*9.)*.6+n3(q*23.+3.)*.4;sm=.55+.9*n3(q*31.+9.);
-float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wb)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
+float cv=max(clamp(length(fwidth(N))/max(pw,1e-5)*.02,0.,1.),step(1.5,Wb)*step(Wb,2.5)),ce=n3(q*140.)*.65+n3(q*420.+7.)*.35;
 float zn=smoothstep(.35,.75,n3(q*5.+2.));ch=smoothstep(.87-.14*zn-.2*cv,.9-.14*zn-.2*cv,ce)*(1.-.85*smoothstep(.0006,.0025,pw));
 vec3 cl=floor(q*45.),hh=hs(cl+.5),d=normalize(hs(cl+3.7)-.5),e=q-(cl+.2+.6*hh)/45.;float al=dot(e,d);
 float sc=step(abs(al),.006+.007*hh.z)*step(hh.x,.4)*smoothstep(.0007,.0002,length(e-d*al))*(1.-smoothstep(.3,1.,pw*2500.));
@@ -1133,7 +1133,7 @@ export const warmSteps = (own?: number, hunter = false): Step[] => [
   ),
   () => {
     [0, 2, 3].forEach(kind => rackWeapon(kind));
-    [1, 2, 3].forEach(kind => rackWeapon(kind, 'hunter'));
+    [0, 1, 2, 3].forEach(kind => rackWeapon(kind, 'hunter'));
     vestMesh();
   },
 ];
@@ -1332,7 +1332,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       if (depth && s) {
         continue;
       }
-      uni('uniform1f', 'Ak', +!!w);
+      uni('uniform1f', 'Ak', +(w ?? 0));
       if (f) {
         // Posed by the shader from its texels: no vertex array.
         gl.bindVertexArray(none);
@@ -1989,7 +1989,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         if (bodyPieces.length) {
           gl.bindVertexArray(kept);
           for (const { m, q, t, k, w } of bodyPieces) {
-            uni('uniform1f', 'Ak', +!!w);
+            uni('uniform1f', 'Ak', +(w ?? 0));
             uni('uniform4fv', 'R', [...q, ...t, k]);
             gl.drawArrays(gl.TRIANGLES, m.first, m.count);
           }

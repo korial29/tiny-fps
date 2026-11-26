@@ -270,6 +270,16 @@ export interface PlayerState {
   wield?: boolean;
   /** Bare hands selected explicitly; carried weapons remain available. */
   fists?: boolean;
+  /**
+   * The Hunter's pistol (the user, 2026-11-26: the gun with his own skin, on his key 2, apart from
+   * his harpoon, which keeps `ammo` and `mag`): its shots left, absent or -1 until he finds it on a
+   * gun rack and again once he goes down. Absent reads -1.
+   */
+  side?: number;
+  /** Shots in the Hunter's pistol's battery, of `side` (GUN_MAG at most). Absent reads 0. */
+  sideMag?: number;
+  /** The Hunter's pistol is in hand (KEY.FISTS picks it: he has no fists). Absent reads false. */
+  sided?: boolean;
   /** Ticks left in the katana's swing, CUTS[cut].ticks at its start, 0 when ready. Absent reads 0. */
   swing?: number;
   /** CUT of the running or last swing. Absent reads 0. */

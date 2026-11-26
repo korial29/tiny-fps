@@ -1048,12 +1048,17 @@ describe('the gun on the HUD', () => {
       expect(shown()).toEqual(['1 fists', '2 katana', '3 gun', '4 rifle', '5 rail']);
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
       vitals();
-      // Four slots, the disc on 4, and no fists (the user, 2026-11-23).
-      expect(shown()).toEqual(['1 blades', '2 harpoon', '3 cannon', '4 disc']);
-      // The harpoon in hand lights slot 2, the blades slot 1 (the user, 2026-11-23).
-      expect(lit()).toEqual(['2 harpoon']);
+      // Five slots, his pistol on 2, the disc on 5, and no fists (the user, 2026-11-26).
+      expect(shown()).toEqual(['1 blades', '2 pistol', '3 harpoon', '4 cannon', '5 disc']);
+      // The harpoon in hand lights slot 3, the blades slot 1, the pistol slot 2.
+      expect(lit()).toEqual(['3 harpoon']);
       hud.vitals(5, 30, true, true, 7, false, 6, false, 30);
       expect(lit()).toEqual(['1 blades']);
+      hud.vitals(5, 44, true, false, 7, false, 9, false, 30, false, 0, 0, false, true);
+      expect(lit()).toEqual(['2 pistol']);
+      // His pistol counts as the marine's gun: its shots, and the gun's glyph, not his own.
+      expect(count().textContent).toBe('9');
+      expect(ammo().classList.contains('h')).toBe(false);
     });
 
     it('shows the Hunter’s own glyph of the weapon in hand, and none of his on a marine', () => {
@@ -1077,7 +1082,7 @@ describe('the gun on the HUD', () => {
     it('counts nothing for the Hunter’s shoulder cannon, which spends nothing and is never empty', () => {
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
       hud.vitals(5, 12, true, false, 0, true, 0);
-      expect(lit()).toEqual(['3 cannon']);
+      expect(lit()).toEqual(['4 cannon']);
       expect(count().textContent).toBe('∞');
       expect(ammo().classList.contains('e')).toBe(false);
     });

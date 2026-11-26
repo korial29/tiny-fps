@@ -61,13 +61,16 @@ export const DOUBLE_CLICK_MS = 300;
 /** The wheel swaps the weapon at most this often (ms): a trackpad's flick is a hundred events, one swap. */
 export const WHEEL_MS = 250;
 
-/** The weapon chosen. The values are the wire's and the HUD's, not the keys' order: SLOTS has that. */
-export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4 } as const;
+/**
+ * The weapon chosen. The values are the wire's and the HUD's, not the keys' order: SLOTS has that.
+ * SIDE is the Hunter's pistol, which KEY.FISTS asks for on the wire (he has no fists).
+ */
+export const WEAPON = { GUN: 0, BLADE: 1, RAIL: 2, RIFLE: 3, FISTS: 4, SIDE: 5 } as const;
 
 /**
  * The weapon on each key, 1 to 5. The marine, the ninja and the astronaut: fists, katana, pistol,
- * assault (laser) rifle, Tesla (rail) gun (the user, 2026-11-24). The Hunter: wrist blades,
- * harpoon, shoulder cannon, disc, and no fifth slot (the user, 2026-11-23).
+ * assault (laser) rifle, Tesla (rail) gun (the user, 2026-11-24). The Hunter: wrist blades, his
+ * pistol, harpoon, shoulder cannon, disc (the user, 2026-11-26: the pistol on 2, the rest one key on).
  */
 export const SLOTS: readonly number[] = [
   WEAPON.FISTS,
@@ -78,10 +81,10 @@ export const SLOTS: readonly number[] = [
 ];
 const HUNTER_SLOTS: readonly number[] = [
   WEAPON.BLADE,
+  WEAPON.SIDE,
   WEAPON.GUN,
   WEAPON.RAIL,
   WEAPON.RIFLE,
-  WEAPON.FISTS,
 ];
 const slots = (hunter: boolean) => (hunter ? HUNTER_SLOTS : SLOTS);
 
@@ -94,17 +97,26 @@ export const slotOf = (weapon: number, hunter = false): number => slots(hunter).
 /** The choice after a key: the weapon in its slot (SLOTS), the numpad's keys as the digits'; any other key keeps it. */
 export const picked = (weapon: number, code: string, hunter = false): number => {
   const digit = DIGITS.indexOf(code);
-  // The Hunter's numpad is one key on (2 the blades to 5 the disc), as it was while 1 was the fists.
-  const slot = digit >= 0 ? digit : NUMPAD.indexOf(code) - +hunter;
-  // The Hunter has four slots (the disc on 4), and no fists (the user, 2026-11-23).
-  return slot >= 0 && !(hunter && slot > 3) ? slotted(slot, hunter) : weapon;
+  const slot = digit >= 0 ? digit : NUMPAD.indexOf(code);
+  return slot >= 0 ? slotted(slot, hunter) : weapon;
 };
 
-/** Which of the gun, the katana, the rail gun, the laser rifle and the fists a player has (the Hunter no fists); all of them when there is no state yet. */
+/**
+ * Which weapons a player has, by WEAPON: the gun (the Hunter's harpoon), the katana, the rail gun,
+ * the laser rifle, the fists (never the Hunter's) and the Hunter's pistol (his alone); all he can
+ * have when there is no state yet.
+ */
 export const owned = (p?: PlayerState, hunter = false): boolean[] =>
   p
-    ? [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0, !hunter]
-    : [true, true, true, true, !hunter];
+    ? [
+        p.ammo >= 0,
+        !!p.blade,
+        (p.rail ?? -1) >= 0,
+        (p.rifle ?? -1) >= 0,
+        !hunter,
+        hunter && (p.side ?? -1) >= 0,
+      ]
+    : [true, true, true, true, !hunter, hunter];
 
 /**
  * Follow the spawn's weapon and switch to newly picked-up special weapons unless fists are selected.
@@ -125,13 +137,16 @@ export const chosen = (
   // A weapon just found comes to hand: the katana, the rail gun or the rifle, and for the Hunter,
   // who starts with his blades alone (the user, 2026-11-26), the harpoon, the cannon or the disc.
   const [a, b] = [owned(was, hunter), owned(now, hunter)];
-  const found = (hunter ? [0, 2, 3] : [1, 2, 3]).find(k => b[k] && !a[k]);
+  const found = (hunter ? [0, 2, 3, 5] : [1, 2, 3]).find(k => b[k] && !a[k]);
   return weapon === WEAPON.FISTS ? weapon : (found ?? weapon);
 };
 
-/** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is, KEY.RIFLE while the rifle is. */
+/**
+ * The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun
+ * is, KEY.RIFLE while the rifle is, KEY.FISTS while the fists or the Hunter's pistol are.
+ */
 export const withWeapon = (keys: number, weapon: number): number =>
-  keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE, KEY.FISTS][weapon];
+  keys | [0, KEY.BLADE, KEY.RAIL, KEY.RIFLE, KEY.FISTS, KEY.FISTS][weapon];
 
 /** The choice the wheel turns to, `dir` 1 or -1: the next weapon he has in slot order, including fists. */
 export const turned = (weapon: number, dir: number, have: boolean[], hunter = false): number => {
@@ -264,6 +279,7 @@ export const createInput = (canvas: HTMLCanvasElement, onMute = () => {}): Contr
         now.railed ||
         now.rifled ||
         now.fists ||
+        now.sided ||
         !harpoonReady()
       ) {
         c.scoped = false;

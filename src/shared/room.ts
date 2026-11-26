@@ -934,6 +934,9 @@ export class Room {
       blade: false,
       wield: false,
       fists: false,
+      side: -1,
+      sideMag: 0,
+      sided: false,
       swing: 0,
       lost: LIMB.NONE,
       fell,
@@ -970,7 +973,8 @@ export class Room {
    * grenade (lob()) is flown on the same way, a tick of its arc at a time.
    */
   private shoot(p: Player, view = 0, b?: Flying): void {
-    b ??= launch(p.state, p.info.team, this.kit(p).hunter);
+    // The Hunter's gun shoots his harpoon, his pistol (`sided`) plasma as the marine's.
+    b ??= launch(p.state, p.info.team, this.kit(p).hunter && !p.state.sided);
     // Ticks back, on the u16 circle; a view ahead of now is no lag.
     const lag = (this.ticks - view + 0x10000) % 0x10000;
     this.balls.push(b);

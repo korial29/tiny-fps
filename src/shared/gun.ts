@@ -7,6 +7,8 @@
 // a fall and a respawn the way the host plays them.
 import { cutOf, swingOf } from './blade';
 import {
+  AMMO_MAX,
+  GUN_MAG,
   CHARGE_MAX,
   CHARGE_TAP,
   CHARGE_TICKS,
@@ -136,6 +138,38 @@ export const step = (
   bodies: readonly Body[] = [],
   kit: Kit = KITS[0],
 ): Strike => {
+  swapped = false;
+  const s = act(p, i, w, team, armed, bodies, kit);
+  if (swapped) {
+    sideSwap(p);
+  }
+  return s;
+};
+
+/**
+ * Whether act() put the Hunter's pistol in the gun's fields this step (sideSwap()): step() puts
+ * them back once it returns.
+ */
+let swapped = false;
+
+/**
+ * Swaps the Hunter's pistol (`side`, `sideMag`) with his harpoon (`ammo`, `mag`): while the pistol
+ * is in hand, the step fires, charges, bursts and reloads it as the gun, with the gun's code.
+ */
+const sideSwap = (p: PlayerState) => {
+  [p.ammo, p.side, p.mag, p.sideMag] = [p.side ?? -1, p.ammo, p.sideMag ?? 0, p.mag ?? 0];
+};
+
+/** step() but for putting the Hunter's pistol back in its own fields. */
+const act = (
+  p: PlayerState,
+  i: Input,
+  w: World,
+  team: number,
+  armed: boolean,
+  bodies: readonly Body[],
+  kit: Kit,
+): Strike => {
   const down = p.down > 0;
   const locked = !down && (p.lock ?? 0) > 0;
   // A glory kill, the xenomorph's or an execution: it dashes to its prey over the lock's
@@ -190,8 +224,9 @@ export const step = (
   // `rail` the countdown to its next charge) and the laser rifle rack the disc (the rifle's:
   // `rifle` 0 while carried). He takes no standard weapon. A weapon he has not found reads -1.
   const own = kit.hunter;
-  // His `rack`: inside the circle of the rack that fills the harpoon (the katana's).
-  const inside = near(own ? 'blade' : 'rack');
+  // His `rack`: inside the circle of a rack that fills one of his guns: the katana's, his harpoon,
+  // or the gun's, his pistol (the user, 2026-11-26). The two never overlap.
+  const inside = near('rack') || (!!own && near('blade'));
   if (own) {
     p.nades = 0;
     // His `clip`: the ticks before his thrown disc is in his hand again (DISK_LOST), 0 when it is;
@@ -217,7 +252,12 @@ export const step = (
     }
   }
   if (armed && gear && inside && !p.rack) {
-    [p.ammo, p.mag] = [kit.ammo, kit.mag];
+    if (!own || !near('rack')) {
+      [p.ammo, p.mag] = [kit.ammo, kit.mag];
+    } else {
+      // The Hunter's pistol is the marine's gun: as many shots, as big a battery.
+      [p.side, p.sideMag] = [AMMO_MAX, GUN_MAG];
+    }
   }
   p.rack = inside;
   p.blade = !!kit.katana || !!p.blade || (armed && gear && near('blade'));
@@ -237,8 +277,11 @@ export const step = (
     }
   }
   p.inRifle = inRifle;
-  // Never more than the class carries: a change of class keeps no marine's ammo on a ninja.
+  // Never more than the class carries: a change of class keeps no marine's ammo on a ninja, and
+  // none but the Hunter has his pistol.
   p.ammo = Math.min(p.ammo, kit.ammo);
+  p.side = own ? Math.min(p.side ?? -1, AMMO_MAX) : -1;
+  p.sideMag = Math.min(p.sideMag ?? 0, Math.max(p.side, 0), GUN_MAG);
   p.rail = p.rail === undefined ? p.rail : Math.min(p.rail, kit.rail);
   p.rifle = p.rifle === undefined ? p.rifle : Math.min(p.rifle, kit.rifle);
   [p.mag, p.cap, p.clip] = [
@@ -302,21 +345,45 @@ export const step = (
   // The battery holds no more than the player carries, and nothing without the gun: a shot never
   // spends more than he has.
   p.mag = Math.min(p.mag ?? 0, Math.max(p.ammo, 0));
-  const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0];
-  const want = i.keys & KEY.BLADE ? 1 : i.keys & KEY.RAIL ? 2 : i.keys & KEY.RIFLE ? 3 : 0;
-  // The Hunter has no fists (the user, 2026-11-23): his blades first when the choice is not his.
+  // The hands: 0 the gun (the Hunter's harpoon), 1 the katana (his blades), 2 the rail gun (his
+  // cannon), 3 the laser rifle (his disc), 4 the Hunter's pistol, -1 the fists.
+  const has = [p.ammo >= 0, !!p.blade, (p.rail ?? -1) >= 0, (p.rifle ?? -1) >= 0, p.side >= 0];
+  // The Hunter has no fists (the user, 2026-11-23): KEY.FISTS picks his pistol instead
+  // (the user, 2026-11-26), and his blades come first when the choice is not his.
+  const want =
+    own && i.keys & KEY.FISTS
+      ? 4
+      : i.keys & KEY.BLADE
+        ? 1
+        : i.keys & KEY.RAIL
+          ? 2
+          : i.keys & KEY.RIFLE
+            ? 3
+            : 0;
   const fists = gear && !own && !!(i.keys & KEY.FISTS) && !(p.swing && p.wield);
   const first = own && has[1] ? 1 : has.indexOf(true);
   const hand = p.swing && p.wield ? 1 : fists ? -1 : has[want] ? want : first;
   // A switch of weapon drops the swap under way.
-  if (hand != (p.fists ? -1 : p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
+  if (hand != (p.fists ? -1 : p.sided ? 4 : p.rifled ? 3 : p.railed ? 2 : +!!p.wield)) {
     p.reload = 0;
   }
   // A punch under way ends when a weapon comes to hand.
   if (p.swing && hand >= 0 && !p.wield) {
     p.swing = 0;
   }
-  [p.wield, p.railed, p.rifled, p.fists] = [hand == 1, hand == 2, hand == 3, fists];
+  [p.wield, p.railed, p.rifled, p.fists, p.sided] = [
+    hand == 1,
+    hand == 2,
+    hand == 3,
+    fists,
+    hand == 4,
+  ];
+  // From here the Hunter's pistol in hand is the gun (sideSwap()); his harpoon is the gun otherwise.
+  if (hand == 4) {
+    sideSwap(p);
+    swapped = true;
+  }
+  const harpoon = own && hand == 0;
   if (!armed) {
     [p.charge, p.reload] = [kit.xeno ? p.charge : 0, 0];
     return STRIKE.NONE;
@@ -328,7 +395,7 @@ export const step = (
       ? (['clip', kit.clip, p.rifle!, RIFLE_RELOAD] as const)
       : hand == 2
         ? (['cap', kit.cap, p.rail!, RAIL_RELOAD] as const)
-        : (['mag', kit.mag, p.ammo, GUN_RELOAD] as const);
+        : (['mag', hand == 4 ? GUN_MAG : kit.mag, p.ammo, GUN_RELOAD] as const);
   const [load, full] = [p[key] ?? 0, Math.min(size, carried)];
   if (p.reload) {
     if (!--p.reload) {
@@ -371,7 +438,7 @@ export const step = (
   // G with the pistol in hand: a burst of BURST plain shots, half its cooldown apart, then twice its
   // cooldown. A swap, a reload, busy hands, a charge or an empty battery end it.
   // The Hunter's harpoon has no burst: its special is the scope, the client's alone (input.ts).
-  const pistol = hand == 0 && !kit.hunter && !busy && !p.reload && !p.charge && !!p.mag;
+  const pistol = (hand == 0 || hand == 4) && !harpoon && !busy && !p.reload && !p.charge && !!p.mag;
   p.burst = pistol ? (p.burst ?? 0) : 0;
   if (pistol && !p.cool && (p.burst || i.keys & KEY.SPECIAL)) {
     p.burst = (p.burst || BURST) - 1;
@@ -481,7 +548,7 @@ export const step = (
         return STRIKE.RAIL;
       }
     } else if (!p.wield && !p.cool && p.mag && !p.reload) {
-      if (kit.hunter) {
+      if (harpoon) {
         p.power = 1;
         p.ammo--;
         p.mag--;

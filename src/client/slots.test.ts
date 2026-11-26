@@ -59,7 +59,8 @@ describe('the weapon keys', () => {
     expect(SLOTS).toEqual([FISTS, BLADE, GUN, RIFLE, RAIL]);
     for (const hunter of [false, true]) {
       const all = [0, 1, 2, 3, 4].map(slot => slotted(slot, hunter));
-      expect([...all].sort()).toEqual([0, 1, 2, 3, 4]);
+      // The Hunter has no fists (4) but his pistol (WEAPON.SIDE, 5) (the user, 2026-11-26).
+      expect([...all].sort()).toEqual(hunter ? [0, 1, 2, 3, 5] : [0, 1, 2, 3, 4]);
       expect(all.map(w => slotOf(w, hunter))).toEqual([0, 1, 2, 3, 4]);
     }
   });

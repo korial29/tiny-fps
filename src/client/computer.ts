@@ -15,7 +15,7 @@ import type { Vec3 } from './mesh';
 export const SHOTS = [4, 4, 4, 3];
 
 /** A glyph's dash: where its middle is in its cell (to the right, up, 0 to 1) and its angle. */
-type Dash = [number, number, number];
+export type Dash = [number, number, number];
 
 /** `n` dashes on a circle of radius `r` from the angle `from`, each turned `turn` off its radius. */
 const round = (n: number, r: number, from: number, turn: (k: number) => number): Dash[] =>
@@ -26,7 +26,7 @@ const round = (n: number, r: number, from: number, turn: (k: number) => number):
 
 const ACROSS = Math.PI / 2;
 /** The four glyphs, each its dashes in the order they are lit, two a shot: the last go out first. */
-const GLYPHS: Dash[][] = [
+export const GLYPHS: Dash[][] = [
   [...round(6, 0.31, 0, () => ACROSS), [0.42, 0.5, 1], [0.58, 0.5, -1]],
   [...round(6, 0.31, 0.52, k => (k % 2 ? ACROSS : 0.5)), [0.5, 0.41, 0], [0.5, 0.59, 0]],
   [...round(4, 0.33, 0.79, () => ACROSS), ...round(4, 0.14, 0, () => 0)],

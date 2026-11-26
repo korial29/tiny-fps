@@ -2121,7 +2121,9 @@ export const createBody = (world?: World): Body => {
     discBack = discOut && !out ? 0 : discBack + dt;
     discOut = out;
     const now = handOf(p);
-    harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / HARPOON_DRAW) : 0;
+    // His pistol (`sided`) is held in the right hand alone, as the marine's: no harpoon pose.
+    harpoonDraw =
+      hunter && now === 0 && !p.sided ? Math.min(1, harpoonDraw + dt / HARPOON_DRAW) : 0;
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
@@ -3083,13 +3085,15 @@ export const createBody = (world?: World): Body => {
         );
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.
+          // The Hunter's pistol keeps its battery apart from his harpoon's (`sideMag`).
+          const mag = me?.sided ? me.sideMag : me?.mag;
           const level =
-            me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), me.mag ?? 0) : 0;
+            me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), mag ?? 0) : 0;
           const kind = me ? kindOf(me) : 0;
           const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
           const on = since - Math.max(pressOf(kind), 0);
-          if (hunter && kind === 0) {
+          if (hunter && kind === 0 && !me?.sided) {
             // In close detail (lod 2): the round scope and the lit buttons (harpoonFine()).
             drawHarpoon(
               out,
@@ -3122,7 +3126,7 @@ export const createBody = (world?: World): Body => {
               s.rot[J.HAND_R],
               1,
               clamp(hold * 1.5 - 0.5),
-              kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0) : me?.mag,
+              kind == 3 ? me!.clip : rail ? charge(me!.cap ?? 0) : mag,
               level,
               kind,
               clock,
@@ -3133,7 +3137,7 @@ export const createBody = (world?: World): Body => {
                 light:
                   sp < 0 ? power(on, kind ? undefined : GUN_ON.lit) : 1 - ease(span(sp, 0.1, 0.2)),
                 swap: sp,
-                empty: !(kind == 3 ? me?.clip : rail ? me?.cap : me?.mag),
+                empty: !(kind == 3 ? me?.clip : rail ? me?.cap : mag),
                 screen: sp < 0 ? span(on, GUN_ON.from, GUN_ON.up) : 1 - ease(span(sp, 0.1, 0.2)),
                 digits: sp < 0 && on >= GUN_ON.digits,
                 press: sp < 0 && kind != 2 ? span(poke(since, pressOf(kind)), 0.8, 1) : 0,
@@ -3146,6 +3150,9 @@ export const createBody = (world?: World): Body => {
                 cells: me && cellsOf(me),
                 heat: (me?.heat ?? 0) / HEAT_MAX,
                 hot: me?.hot,
+                skin: hunter && !!me?.sided,
+                // The Hunter's pistol is drawn from the store, worn (its scuffs on its own frame).
+                list: hunter && me?.sided ? pieces : undefined,
               },
             );
           }

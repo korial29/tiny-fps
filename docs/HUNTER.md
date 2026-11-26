@@ -88,12 +88,25 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
 
 ## Blades, harpoon and slots (the user, 2026-11-23)
 
-- **Slots.** The wrist blades are on 1, the harpoon on 2, the cannon on 3 and the disc on 4. He spawns
-  with the blades alone, in hand, and finds the other three on the racks (the user, 2026-11-26); a
-  slot he has not filled leaves the blades in hand. He has no fists: key 5 does nothing and the HUD
-  shows four slots. Only the
-  client's key and wheel order change (`slotted()`, `src/client/input.ts`); the wire's `KEY.BLADE`
-  is the same.
+- **Slots.** The wrist blades are on 1, his pistol on 2, the harpoon on 3, the cannon on 4 and the
+  disc on 5 (the user, 2026-11-26). He spawns with the blades alone, in hand, and finds the other
+  four on the racks; a slot he has not filled leaves the blades in hand, and the HUD shows all five.
+  The client's key and wheel order is `HUNTER_SLOTS` (`slotted()`, `src/client/input.ts`). On the
+  wire the harpoon is the gun (no weapon key), the cannon `KEY.RAIL`, the disc `KEY.RIFLE`, and the
+  pistol `KEY.FISTS`: he has no fists, so the bit is free for it (`WEAPON.SIDE` on the client).
+- **Pistol (the user, 2026-11-26).** A model of its own (`hunterPistol()`, `src/client/pistol.ts`)
+  on the plasma gun's marks (grip, muzzle, battery, button, screen face), so the hands, the swap and
+  the shot need nothing new: angular after his shoulder cannon, its shells smooth (vertex normals
+  averaged, rounded corners), worn bronze with bone-paint tribal marks (chevrons, tally marks, a
+  band of teeth, diamonds on the spine) and leather round the grip. Drawn worn at level 3
+  (`Draw.w`): the armour's scuffs from the shader, 1.8 times as dense. Its screen sits in the back
+  face behind a raised bezel, no lit outline, and counts the battery in his wrist computer's four
+  glyphs, two dashes a shot (`readout()` with `glyphs`). Held in the right hand alone. 2,742
+  vertices near, 1,686 far. It keeps its own shots, battery and
+  in-hand flag (`side`, `sideMag`, `sided`, two bytes more per player on the wire) apart from the
+  harpoon's `ammo` and `mag`. While it is in hand, `step()` swaps them into the gun's fields and
+  fires, charges, bursts (G) and reloads it with the gun's own code, then swaps them back
+  (`sideSwap()`): it shoots plasma as the marine's, step for step (`hunter.test.ts`).
 - **Disc.** It takes the laser rifle's slot (`KEY.RIFLE`, `rifled`, `rifle` 0: carried, nothing
   to spend), so the wire is unchanged. FIRE throws it (`STRIKE.DISK`) only while it is in his hand:
   it flies out and comes back to him like a boomerang (`Room.fly()`). His `clip` counts the ticks
@@ -190,7 +203,7 @@ All in `src/client/hunter.ts`; nothing here is on the wire.
   the rest when he dies. On arrival at a rack he takes his own weapon and no standard one: the
   katana rack gives the harpoon and refills its bolts, the rail gun rack the shoulder cannon with a
   full battery, the rifle rack the disc (one: no second while the first is out). The gun rack gives
-  him nothing yet, and he does not see it: his pistol comes next. A weapon he has not found reads -1 in its field (`ammo`, `rail`, `rifle`); one
+  him his pistol, with the marine's shots and battery. A weapon he has not found reads -1 in its field (`ammo`, `rail`, `rifle`); one
   just found comes to hand (`chosen()`, `src/client/input.ts`). Ammo packs fill his harpoon only,
   and rail cells are not his (`Room.heal()`). Bots go to his racks as to the others
   (`harpoon rack`, `cannon rack`, `disc rack` in `src/shared/bot.ts`).

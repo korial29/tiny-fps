@@ -4,7 +4,7 @@ import { DASH_SPEED, DASH_TICKS, SNAP_EVERY, SPRINT_SPEED, TICK_HZ } from './con
 import { DOOR, shut, swing } from './doors';
 import { HIGHLINE } from './map';
 import { MOON, ZED } from './moon';
-import { DOORS } from './moonbase';
+import { DOME as CENTRE, DOORS } from './moonbase';
 import { floorAt, spawn } from './physics';
 import { fly, launch } from './plasma';
 import { SNAP_HEAD, decodeSnapshot, encodeSnapshot } from './protocol';
@@ -178,7 +178,10 @@ describe('doors, shots and sight', () => {
     expect(ray(world(1), o, [0, 0, 1], 60)).toBeGreaterThan(20);
     // Over it and beside it the wall stops the ray as before, and from inside it stops too.
     expect(ray(world(0), [80, 1.5, Z + 8], [0, 0, -1], 60)).toBeCloseTo(8 - 0.15, 6);
-    expect(ray(world(1), [70, 1.5, Z - 8], [0, 0, 1], 60)).toBeLessThan(9);
+    // Beside it, 10 m west, the wall is on the drawn drum.
+    expect(ray(world(1), [70, 1.5, Z - 8], [0, 0, 1], 60)).toBeLessThanOrEqual(
+      CENTRE[1] - Math.sqrt(22.4 ** 2 - 10 ** 2) - (Z - 8),
+    );
     // A ball is a sphere: it stops its radius early.
     expect(ray(world(0), o, [0, 0, 1], 60, 0.2)).toBeCloseTo(8 - 0.35, 6);
   });

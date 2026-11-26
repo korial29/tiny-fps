@@ -99,11 +99,12 @@ describe('MOON', () => {
     expect(MOON.floor).toBe(-26);
   });
 
-  it('has brushes with min below max, known textures and tints, under 1300 of them', () => {
+  it('has brushes with min below max, known textures and tints, under 1800 of them', () => {
     expect(brushes.length).toBeGreaterThan(60);
     // Room for a base with an inside (its walls are brushes too) and for the lips of the rille, in strips half a metre deep.
     // And the three pits' walls, floors and steps, and the boxes that fit each of the sixteen boulders: 1,214 (3,252 with the rocks of before).
-    expect(brushes.length).toBeLessThan(1300);
+    // And the domes' walls in slices that follow the drum: 1,709.
+    expect(brushes.length).toBeLessThan(1800);
     const tex: number[] = Object.values(TEX);
     for (const [i, b] of brushes.entries()) {
       for (let a = 0; a < 3; a++) {
@@ -1252,7 +1253,11 @@ describe('MOON, the field, the mounds and the carved rille', () => {
         }
       }
     }
-    const sills = brushes.filter(b => b.ghost && b.min[1] === 0 && b.max[2] - b.min[2] === 0.5);
+    const sills = brushes.filter(
+      // The rille, not the slices of the domes' walls.
+      b =>
+        b.ghost && b.min[1] === 0 && b.max[2] - b.min[2] === 0.5 && Math.abs(b.min[2] - 140) < 40,
+    );
     // Seven under the west mound, five under the east one, whose flank stops at the closing end.
     expect(sills).toHaveLength(2 * (7 + 5));
     for (const b of sills) {

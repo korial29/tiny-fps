@@ -4,4 +4,6 @@ export interface Mat {
   l: number;
   c: V;
   s: number;
+  /** Swaps the texture's u and v: wood's grain then runs up an upright face, along a pole. */
+  r?: boolean;
 }

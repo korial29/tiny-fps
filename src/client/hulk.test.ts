@@ -1,9 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, DECKS, HULL as SHAPE, LAYOUT, RISE, SHIP, ZED, thick } from '../shared/beach';
+import {
+  AWNING,
+  BEACH,
+  DECKS,
+  HULL as SHAPE,
+  LAYOUT,
+  RISE,
+  SHIP,
+  ZED,
+  thick,
+} from '../shared/beach';
 import { TEAM_TINT } from '../shared/map';
 import { canopy, hulk, parts } from './hulk';
-import { CANOPY, HULL } from './paint';
+import { CANOPY, HULL, TARP } from './paint';
 import { STRIDE } from './mesh';
+import { TEX } from '../shared/types';
 
 const MID = ZED / 2;
 const made = parts(BEACH);
@@ -51,7 +62,8 @@ describe('hulk', () => {
     expect(count(made.cabin)).toBeLessThan(16_000);
     expect(count(made.wings)).toBeLessThan(7_000);
     expect(count(made.debris)).toBeLessThan(18_000);
-    expect(count(made.camps)).toBeLessThan(6_000);
+    // The tarpaulins' hems and the crates' corner battens (2026-11-26): 6,348.
+    expect(count(made.camps)).toBeLessThan(7_000);
     expect(count(hulk(BEACH))).toBeLessThan(90_000);
   });
 
@@ -245,12 +257,33 @@ describe('hulk', () => {
 
   it('paints each camp in its team’s colour: the flag’s step, the tarpaulins, the pod’s band', () => {
     TEAM_TINT.forEach((tint, k) => {
-      const mine = verts(made.camps).filter(v => v[8] === -1 && v[2] > MID === !k);
+      const mine = verts(made.camps).filter(
+        v => (v[8] === -1 || v[8] === TARP) && v[2] > MID === !k,
+      );
       const hue = (v: number[]) => [v[6], v[7], v[9]].map(c => c / Math.max(v[6], v[7], v[9]));
       const want = tint.map(c => c / Math.max(...tint));
       const team = mine.filter(v => hue(v).every((c, i) => Math.abs(c - want[i]) < 1e-6));
-      // Two tarpaulins of 288 vertices, the step's top twice, the band of eight faces, two lids.
-      expect(team.length).toBeGreaterThanOrEqual(2 * 288 + 12 + 48 + 12);
+      // Two tarpaulins of 432 vertices (their roofs both faces, their hems), the step's top twice, the band of eight faces, two lids.
+      expect(team.length).toBeGreaterThanOrEqual(2 * 432 + 12 + 48 + 12);
     });
+  });
+
+  it('draws the containers in brushed steel, the tents’ poles in wood and their tarpaulins in cloth up at AWNING', () => {
+    const inside = (kind: string) =>
+      of(kind).map(({ min, max }) =>
+        verts(made.camps.concat(made.debris)).filter(v =>
+          [0, 1, 2].every(i => v[i] > min[i] - 0.06 && v[i] < max[i] + 0.06),
+        ),
+      );
+    for (const c of inside('container')) {
+      expect(c.filter(v => v[8] === TEX.STEEL).length / c.length).toBeGreaterThan(0.7);
+    }
+    const tents = of('shelter');
+    const poles = tents.filter(p => p.max[1] - p.min[1] > 1);
+    expect(poles).toHaveLength(16);
+    for (const p of inside('shelter')) {
+      expect(p.every(v => [TEX.WOOD, TARP].includes(v[8]))).toBe(true);
+    }
+    expect(Math.min(...tents.filter(p => !poles.includes(p)).map(p => p.max[1]))).toBe(AWNING);
   });
 });

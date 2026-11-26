@@ -718,10 +718,12 @@ const DAIS = note(
 );
 const crate = (x: number, z: number, h = 0.4, tint?: Vec3) =>
   lay('crate', x - 1.5, z - 1.5, x + 1.5, z + 1.5, h, WOOD, tint);
-/** A tarpaulin on four poles, wider than deep: no pole on a diagonal of the crate under it, where it would hide the rack from a spawn. */
+/** The top of the camps' tarpaulins: their hems hang from it (client paint.ts TARP_GLSL). */
+export const AWNING = CAMP + 3.75;
+/** A tarpaulin on four poles 3.6 m high (the user, 2026-11-26: taller), wider than deep: no pole on a diagonal of the crate under it, where it would hide the rack from a spawn. */
 const shelter = (x: number, z: number): Brush[] =>
   [
-    box(x - 2.6, CAMP + 2.6, z - 2.1, x + 2.6, CAMP + 2.75, z + 2.1, PAINT, RED),
+    box(x - 2.6, AWNING - 0.15, z - 2.1, x + 2.6, AWNING, z + 2.1, PAINT, RED),
     ...[-1, 1].flatMap(a =>
       [-1, 1].map(b =>
         box(
@@ -729,7 +731,7 @@ const shelter = (x: number, z: number): Brush[] =>
           CAMP - 0.5,
           z + 2 * b - 0.1,
           x + 2.5 * a + 0.1,
-          CAMP + 2.6,
+          CAMP + 3.6,
           z + 2 * b + 0.1,
           STEEL,
         ),

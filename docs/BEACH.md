@@ -247,3 +247,24 @@ the gaps crossed on foot and the hold walked into described above.
 - Drawn (`hulk.ts`, `heap`, `jam` alike): a dark core, plates of skin and metal leaning on it
   with torn tops, a deck plate in the stripe's colour on the heap; a jam's plates face the gap.
 - **Vertices**: the wreck 80,928 → 81,156 (debris 16,476 → 17,040, wings 5,688 → 5,328).
+
+## The camps' materials (the user, 2026-11-26)
+
+- **The tents**: the tarpaulins rise to `AWNING` (3.75 m over the camp's sand, poles 3.6 m high),
+  their collision with them. They are lit cloth in the team's colour on a layer of their own
+  (`paint.ts` `TARP`, -1.098: between the sand's band and GLOSS's spec, under the runners'
+  layers): a 4 mm canvas weave that fades before it aliases, sun-bleach and dirt. The shader tears
+  them: holes through the roof where a slow noise peaks, frayed and scorched at the edge, and the
+  hems (`HEM`, 1 m drawn) cut to tatters and slit up from the foot. The holes are not in the shadow
+  maps' program: a tent's shadow is whole.
+- **Wood with the grain up** (`Mat.r` swaps a face's u and v): the tents' poles and the crates'
+  corner battens (their two outer faces and their top only).
+- **The containers**: brushed steel, upright, its ribs darker; the iron lock bars stay. They
+  mirror the sky: Landfall's boxes are all ghosts, so the mirrors (MIRROR) trace none of them.
+  Tracing the ghosts too was tried and dropped (the user, 2026-11-26): grey boxes, stair-stepped
+  under the wing, for a cost nobody could measure. Instead Landfall's steel and plates shine
+  (`BRIGHT_METAL`, 3 and 200) and mirror more of the sky, less where the sun does not reach (the
+  hold).
+- **The floors' grating** (`inside.ts` `FLOOR`): brighter, 12.5 cm bars, and on Landfall its
+  relief stands out `GRATE_RELIEF` (4) times more than RELIEF.
+- **Vertices**: the wreck 81,156 → 83,244 (camps 4,476 → 6,348, debris 17,040 → 17,256).

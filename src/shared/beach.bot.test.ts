@@ -243,7 +243,10 @@ describe('LANDFALL, a bot alone with the real physics', () => {
         expect([team, name, f.at, f.put]).toEqual([team, name, name, false]);
         // Waist deep in the flooded furrow of the west gap and in the shallows by the first float.
         expect(f.low).toBeGreaterThan(DEPTH + 0.4);
-        expect(f.seconds).toBeLessThan(name === 'lagoon' ? 37 : 25);
+        // 26 s: red's east run is 24.6 to 25.7 s by how it leaves its camp (round the crate under
+        // the tent or over it, since the tents rose, 2026-11-26), which decides whether it jumps
+        // the wreck's step at x 75.5 or pulls itself up it.
+        expect(f.seconds).toBeLessThan(name === 'lagoon' ? 37 : 26);
         // The high road is the gallery, up the wing by a rail over each of its two breaks (no
         // jump to miss) and down the other wing by its rails or off its edge, unhurt.
         if (!id) {

@@ -647,6 +647,7 @@ export const createCombat = (
           me.armor ?? 0,
           !!me.fists,
           side,
+          side ? me.ammo : (me.side ?? -1),
         );
         cuts.forEach(c => swish(c, undefined, hunter(me.id) && c < FIST_CUE));
         hud.down(fx.lie, me.down / TICK_HZ);

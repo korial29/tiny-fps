@@ -118,6 +118,8 @@ export const held = (
   const from = out.length;
   // The spent one thrown out as the swap passes its release, once for each player.
   const rel = rail ? RAIL_RELEASE : RELEASE;
+  // The Hunter's pistol takes a battery of its own bronze (the user, 2026-11-26).
+  const sideCell = (l: number) => battery(l, skin);
   if (id !== undefined) {
     const was = swaps.get(id) ?? -1;
     swaps.set(id, swap);
@@ -126,7 +128,7 @@ export const held = (
       // Out of the grip or the well and ahead, in sight as it falls; the capsule up off its socket.
       const o = rail ? fax[2].map(v => 2.4 * v) : [0, -0.6, 0];
       drop(
-        rail ? capsule(1, 0) : [battery, cell, capsule, cell][w](1),
+        rail ? capsule(1, 0) : [sideCell, cell, capsule, cell][w](1),
         foot,
         fax,
         [0, 1, 2].map(i => vel[i] + o[i] + (rail ? 0.8 : 1.2) * ax[2][i] + 0.2 * ax[0][i]) as Vec3,
@@ -144,7 +146,7 @@ export const held = (
       out,
       rail
         ? capsule(lod, swap < 0 ? cells[0] : +(swap > 0.42))
-        : [battery, cell, capsule, cell][w](lod),
+        : [sideCell, cell, capsule, cell][w](lod),
       ...seat,
       [0, 0, 0],
       k,

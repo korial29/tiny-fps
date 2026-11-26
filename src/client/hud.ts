@@ -26,7 +26,7 @@ import { FLAG, MODE } from '../shared/types';
 import type { Choice, PlayerState, Rover, Snapshot } from '../shared/types';
 import { LEVELS, mix } from './audio';
 import { TONES } from './features';
-import { slotted } from './input';
+import { slotted, WEAPON } from './input';
 import { ROLE } from '../shared/kit';
 import { FH, FW, LOOK, PALETTE, sprite } from './face';
 import { VISOR } from './helmet';
@@ -595,6 +595,11 @@ export interface Hud {
     fists?: boolean,
     /** The Hunter's pistol is in hand: `ammo` and `loaded` are its own. */
     sided?: boolean,
+    /**
+     * The Hunter's other gun, out of hand: his harpoon's bolts when `sided`, else his pistol's
+     * shots; -1 when he has not found it.
+     */
+    other?: number,
   ): void;
   /** The health the own player's class has at most (Kit.hp): as many pips. */
   life(max: number): void;
@@ -1087,6 +1092,7 @@ export const createHud = (
         armor = 0,
         fists = false,
         sided = false,
+        other = -1,
       ] = values;
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
@@ -1137,8 +1143,16 @@ export const createHud = (
         const w = slotted(i, hunter);
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];
-        // The Hunter shows his five slots and has no fists (the user, 2026-11-26).
-        (kbd as HTMLElement).hidden = !hunter && w < 4 && !have[w];
+        // The Hunter shows the weapons he has found and no others, and has no fists (the user,
+        // 2026-11-26). His pistol and his harpoon share `rounds`: the one out of hand is `other`.
+        const got = hunter
+          ? w == WEAPON.SIDE
+            ? (sided ? rounds : other) >= 0
+            : w == WEAPON.GUN
+              ? (sided ? other : rounds) >= 0
+              : have[w]
+          : w > 3 || have[w];
+        (kbd as HTMLElement).hidden = !got;
         kbd.classList.toggle('a', w == held);
       });
     },

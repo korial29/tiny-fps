@@ -1,9 +1,10 @@
 // The ammunition models: the rifle cell, the rail gun battery and the capsule.
 import { TAU } from '../../shared/physics';
 import { tri } from '../flag';
+import { GLOSS } from '../mesh';
 import type { Vec3 } from '../mesh';
 import { tube } from './loft';
-import type { Station } from './loft';
+import type { Paint, Station } from './loft';
 import { DARK, copper, core, glow, metal, shade, steel } from './paint';
 import { olive, red } from './rifle';
 
@@ -64,8 +65,8 @@ export const WELL_HOLE = (() => {
  * The gun's battery (the user, 2026-11-08), built once: a gunmetal cell in the grip, along its own
  * forward from its foot, which stands out under the lower shell with a band of glow round it.
  */
-export const battery = (lod: number): number[] =>
-  (cells[lod] ??= ((out: number[]) => {
+export const battery = (lod: number, bronze = false): number[] =>
+  ((bronze ? bronzes : cells)[lod] ??= ((out: number[]) => {
     const n = lod ? 10 : 6;
     tube(
       out,
@@ -76,7 +77,7 @@ export const battery = (lod: number): number[] =>
         [0.092, 0, 0, 0],
       ],
       n,
-      metal(0.35),
+      bronze ? worn : metal(0.35),
     );
     tube(
       out,
@@ -85,11 +86,24 @@ export const battery = (lod: number): number[] =>
         [0.018, 0, 0.0168, 0.0168],
       ],
       n,
-      glow,
+      bronze ? ember : glow,
     );
     return out;
   })([]));
 export const cells: number[][] = [];
+/**
+ * The battery of the Hunter's pistol (the user, 2026-11-26: the pistol's colour, not the marine's
+ * violet): its worn bronze, the band an ember as the pistol's lights (pistol.ts).
+ */
+const bronzes: number[][] = [];
+const BRONZE = [0.34, 0.25, 0.15];
+const BRONZE_RIM = [0.21, 0.155, 0.1];
+/** On GLOSS as the pistol: polished metal's layer would reflect the sky and turn it violet again. */
+const worn: Paint = (p, n) => {
+  const [r, g, , b] = shade(BRONZE_RIM, BRONZE)(p, n);
+  return [r, g, GLOSS, b];
+};
+const ember: Paint = () => [2.2, 0.48, -2, 0.13];
 
 /**
  * The rail gun's cell (the user, 2026-11-08: its batteries in view), built once for each of 9 steps

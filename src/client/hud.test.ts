@@ -1043,7 +1043,8 @@ describe('the gun on the HUD', () => {
     });
 
     it('labels the Hunter weapon slots by their loadout', () => {
-      const vitals = () => hud.vitals(5, 30, true, false, 7, false, 6, false, 30);
+      const vitals = () =>
+        hud.vitals(5, 30, true, false, 7, false, 6, false, 30, false, 0, 0, false, false, 44);
       vitals();
       expect(shown()).toEqual(['1 fists', '2 katana', '3 gun', '4 rifle', '5 rail']);
       hud.wear(BODY.MALE, { role: ROLE.HUNTER });
@@ -1054,11 +1055,32 @@ describe('the gun on the HUD', () => {
       expect(lit()).toEqual(['3 harpoon']);
       hud.vitals(5, 30, true, true, 7, false, 6, false, 30);
       expect(lit()).toEqual(['1 blades']);
-      hud.vitals(5, 44, true, false, 7, false, 9, false, 30, false, 0, 0, false, true);
+      hud.vitals(5, 44, true, false, 7, false, 9, false, 30, false, 0, 0, false, true, 30);
+      expect(shown()).toEqual(['1 blades', '2 pistol', '3 harpoon', '4 cannon', '5 disc']);
       expect(lit()).toEqual(['2 pistol']);
       // His pistol counts as the marine's gun: its shots, and the gun's glyph, not his own.
       expect(count().textContent).toBe('9');
       expect(ammo().classList.contains('h')).toBe(false);
+    });
+
+    it('shows the Hunter only the weapons he has found (the user, 2026-11-26)', () => {
+      hud.wear(BODY.MALE, { role: ROLE.HUNTER });
+      // As he spawns: his blades alone.
+      hud.vitals(5, -1, true, true);
+      expect(shown()).toEqual(['1 blades']);
+      // The cannon found, then the disc.
+      hud.vitals(5, -1, true, true, 0);
+      expect(shown()).toEqual(['1 blades', '4 cannon']);
+      hud.vitals(5, -1, true, true, 0, false, 0, false, 0);
+      expect(shown()).toEqual(['1 blades', '4 cannon', '5 disc']);
+      // The pistol alone, out of hand and then in hand with no harpoon behind it.
+      hud.vitals(5, -1, true, true, -1, false, 0, false, -1, false, 0, 0, false, false, 44);
+      expect(shown()).toEqual(['1 blades', '2 pistol']);
+      hud.vitals(5, 44, true, false, -1, false, 9, false, -1, false, 0, 0, false, true, -1);
+      expect(shown()).toEqual(['1 blades', '2 pistol']);
+      // The harpoon alone.
+      hud.vitals(5, 4, true, false);
+      expect(shown()).toEqual(['1 blades', '3 harpoon']);
     });
 
     it('shows the Hunter’s own glyph of the weapon in hand, and none of his on a marine', () => {

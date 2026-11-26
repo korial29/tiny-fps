@@ -1,8 +1,8 @@
-// The things lying on the roofs: a team's gun rack (a stand in its colour with a gun turning over
+// The things lying on the roofs: a gun rack (a yellow stand with a gun turning over
 // it), the health packs (a white box with a glowing green cross, bobbing) and the armour. Pure functions of the
 // place and the clock, in the renderer's vertex format. Lit and shadowed, but the glow parts.
 import { RACK_R } from '../shared/constants';
-import { GLOW, glow, ring, teamRgb, tri } from './flag';
+import { GLOW, glow, ring, tri } from './flag';
 import { gun, railgun, rifle } from './gun';
 import { sword } from './katana';
 import { GILT, GLOSS, STRIDE, basis, dim, place, segment, solid } from './mesh';
@@ -70,6 +70,12 @@ export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0, pie
   }
 };
 
+/**
+ * The stand's colour: every rack serves both teams, so it is a neutral yellow rather than a team's
+ * red or blue.
+ */
+export const RACK_RGB = [1, 0.78, 0.12];
+
 /** Each team's gun rack, katana rack, rail gun rack and laser rifle rack, where it has them. */
 export const racks = (
   out: Out,
@@ -81,7 +87,7 @@ export const racks = (
   pieces?: Pieces,
 ) =>
   [guns, blades, rails, rifles].forEach((list, kind) =>
-    list.forEach((at, team) => at && rack(out, at, teamRgb(team), t, kind, pieces)),
+    list.forEach(at => at && rack(out, at, RACK_RGB, t, kind, pieces)),
   );
 
 /** The faces of a cube: the normal and the two edges. */

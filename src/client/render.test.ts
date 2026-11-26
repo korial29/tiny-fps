@@ -702,6 +702,18 @@ describe('pack', () => {
     expect(pk.maps).toBe(1);
   });
 
+  it('reuses its arrays and clears what an earlier frame left in them', () => {
+    const first = pack([spot(), spot()]);
+    const kept = first.a;
+    expect(first.n).toBe(2);
+    const second = pack([spot({ p: [7, 8, 9], range: 3 })]);
+    expect(second.a).toBe(kept);
+    expect(second.n).toBe(1);
+    expect([...second.a.slice(0, 4)]).toEqual([7, 8, 9, 3]);
+    expect([...second.a.slice(4, 8)]).toEqual([0, 0, 0, 0]);
+    expect([...second.m.slice(16)].every(v => v == 0)).toBe(true);
+  });
+
   it('stores each slot matrix at 16 floats a slot', () => {
     const [a, b] = [spot({ p: [1, 1, 1] }), spot({ p: [5, 1, 5], d: [1, 0, 0] })];
     const pk = pack([a, b]);
@@ -928,7 +940,10 @@ describe('no NaN out of the shaders', () => {
     expect(FRAG).not.toMatch(/normalize\((O\+V|d\+V|n\+m)\)/);
     expect(FRAG).toContain('nz(O+V)');
     expect(FRAG).toContain('nz(d+V)');
-    expect(FRAG).toContain('d/=max(r,1e-4);');
+    expect(FRAG).toContain('d/=max(sqrt(dd),1e-4);');
+    // A light out of range, or behind the surface, is skipped before its root, cone and shadow taps.
+    expect(FRAG).toContain('if(dd>=rr)continue;');
+    expect(FRAG).toContain('if(nd<=0.)continue;');
   });
 
   it('keeps the fog finite in float32 at a point extrapolated kilometres off a thin face', () => {

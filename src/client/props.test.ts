@@ -314,10 +314,10 @@ describe('the racks each class sees', () => {
     expect(rackSetOf(KITS[ROLE.XENO])).toBe('none');
   });
 
-  it('shows the Hunter no gun rack, his pistol not made yet, and his three other racks', () => {
+  it('shows the Hunter his four racks, his bronze pistol on the gun rack', () => {
     const one = (set: 'gear' | 'hunter', kind: number) =>
       drawn(out => rack(out, at, [1, 0.78, 0.12], 0, kind, undefined, set)).length;
-    expect(all('hunter').length).toBe([1, 2, 3].reduce((n, k) => n + one('hunter', k), 0));
+    expect(all('hunter').length).toBe([0, 1, 2, 3].reduce((n, k) => n + one('hunter', k), 0));
   });
 
   it('draws nothing for the xenomorph', () => {

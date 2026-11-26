@@ -794,6 +794,34 @@ export const insulators = (lod: number, heat = 0): number[] => {
   })([]));
 };
 
+/**
+ * The Hunter's pistol (the user, 2026-11-26: the gun with a skin of its own): the gun's model, its
+ * violet and teal turned to his bronze, the glow (layer -2) to a red ember. Same shape, same
+ * vertices, cached per level of detail.
+ */
+export const hunterGun = (lod: number): number[] => {
+  if (bronzed[lod]) {
+    return bronzed[lod];
+  }
+  const v = gun(lod).slice();
+  bronzeVerts(v, 0, v.length);
+  return (bronzed[lod] = v);
+};
+const bronzed: number[][] = [];
+/** Turns the vertices of `v` from `from` to `to` to the Hunter's bronze, their glow to his ember. */
+const bronzeVerts = (v: { [i: number]: number }, from: number, to: number) => {
+  for (let i = from; i < to; i += STRIDE) {
+    const [r, g, b] = [v[i + 6], v[i + 7], v[i + 9]];
+    if (v[i + 8] == -2) {
+      const k = Math.max(r, g, b);
+      [v[i + 6], v[i + 7], v[i + 9]] = [k, 0.22 * k, 0.06 * k];
+    } else {
+      const l = 0.3 * r + 0.59 * g + 0.11 * b;
+      [v[i + 6], v[i + 7], v[i + 9]] = [Math.min(1, 1.3 * l), Math.min(1, 1.02 * l), 0.6 * l];
+    }
+  }
+};
+
 /** The weapon a gun model is, from a player or a flag: 0 the gun, 2 the rail gun (or true), 3 the laser rifle. */
 export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | number): number =>
   typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
@@ -1384,11 +1412,24 @@ export const GUN_ON = { lit: 0.95, from: 0.05, up: 0.45, digits: 1.05 };
  */
 export const PRESS = 0.45;
 export const pressAt = (kind: number) => (kind == 2 ? PRESS / 1.4 : PRESS);
-/** The selected weapon slot, or -1 when bare-handed or down. */
+/**
+ * The selected weapon slot, or -1 when bare-handed or down: 0 the gun, which is also the Hunter's
+ * pistol (`sided`) beside his harpoon.
+ */
 export const handOf = (
-  p: Pick<PlayerState, 'down' | 'fists' | 'wield' | 'rifled' | 'railed' | 'ammo'>,
+  p: Pick<PlayerState, 'down' | 'fists' | 'wield' | 'rifled' | 'railed' | 'ammo' | 'sided'>,
 ): number =>
-  p.down || p.fists ? -1 : p.wield ? 1 : p.rifled ? 3 : p.railed ? 2 : p.ammo >= 0 ? 0 : -1;
+  p.down || p.fists
+    ? -1
+    : p.wield
+      ? 1
+      : p.rifled
+        ? 3
+        : p.railed
+          ? 2
+          : p.sided || p.ammo >= 0
+            ? 0
+            : -1;
 
 /**
  * A tracker of the weapons each player has had in hand since taking them: true when the weapon in
@@ -2080,6 +2121,8 @@ const smoke = (out: Out, at: Vec3, [r, u, f]: Vec3[], k: number, t: number) => {
 export interface Lit {
   /** The frame's pieces of the store: the gun's body, lit, goes there (store.ts). */
   list?: Pieces;
+  /** The gun in the Hunter's bronze (hunterGun()): his pistol. */
+  skin?: boolean;
   light?: number;
   swap?: number;
   empty?: boolean;
@@ -2144,6 +2187,7 @@ export const held = (
     vel = [0, 0, 0],
     carry,
     list,
+    skin = false,
   }: Lit = {},
 ) => {
   const [at, ax] = [grip(pos, q, kind), axes(q, kind)];
@@ -2210,11 +2254,15 @@ export const held = (
       smoke(out, at, ax, k, t);
     }
   }
-  // The gun's body, lit: made once into the store and placed there (store.ts).
-  const model = [gun, gun, railgun, rifle][w](lod);
+  // The gun's body, lit: made once into the store and placed there (store.ts). The Hunter's
+  // pistol is the gun in his skin.
+  const bronze = !w && skin;
+  const model = bronze ? hunterGun(lod) : [gun, gun, railgun, rifle][w](lod);
   if (list && d == 1) {
     list.push({
-      m: mesh(`gun ${w} ${lod}`, o => place(o, model, ORIGIN, axes(ID, w), [0, 0, 0], 1)),
+      m: mesh(`gun ${w} ${lod}${bronze ? ' hunter' : ''}`, o =>
+        place(o, model, ORIGIN, axes(ID, w), [0, 0, 0], 1),
+      ),
       q,
       t: at,
       k,
@@ -2239,13 +2287,17 @@ export const held = (
   // The button that switches it on; the rail gun is switched on by its capsule (tune()).
   if (!rail) {
     const knob: number[] = [];
-    button(knob, w, press, light, w == 3 ? [1, 0.25, 0.15] : [0.25, 0.9, 1]);
+    button(knob, w, press, light, w == 3 || bronze ? [1, 0.25, 0.15] : [0.25, 0.9, 1]);
     place(out, knob, at, ax, [0, 0, 0], k);
   }
   // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;
     place(out, readout(ammo, level), at, ax, [0, 0, 0], k);
+    if (bronze) {
+      // The Hunter's counter glows his ember too.
+      bronzeVerts(room(out, 0), c, out.length);
+    }
     dimmed(out, c, screen);
   }
 };

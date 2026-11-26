@@ -3,7 +3,7 @@
 // place and the clock, in the renderer's vertex format. Lit and shadowed, but the glow parts.
 import { RACK_R } from '../shared/constants';
 import { GLOW, glow, ring, tri } from './flag';
-import { gun, railgun, rifle } from './gun';
+import { gun, hunterGun, railgun, rifle } from './gun';
 import { discVertices, hunter as hunterModel, hunterHarpoon } from './hunter';
 import { sword } from './katana';
 import { GILT, GLOSS, STRIDE, basis, dim, place, segment, solid } from './mesh';
@@ -56,12 +56,12 @@ const fit = (v: readonly number[], length: number): number[] => {
 
 /**
  * The Hunter's weapon over a rack of `kind`, centred, at its size on the rack (scale 1): his
- * pistol (the gun for now), the harpoon, the shoulder cannon and the disc.
+ * pistol (the gun in his bronze), the harpoon, the shoulder cannon and the disc.
  */
 const hunterWeapon = (kind: number): number[] =>
   (hunterBuilt[kind] ??=
     kind == 0
-      ? fit(gun(0), 0.42)
+      ? fit(hunterGun(0), 0.42)
       : kind == 1
         ? fit(hunterHarpoon(0), 0.8)
         : kind == 2
@@ -156,11 +156,8 @@ export const racks = (
   set: RackSet = 'gear',
 ) =>
   set != 'none' &&
-  [guns, blades, rails, rifles].forEach(
-    (list, kind) =>
-      // The Hunter's pistol, for the gun rack, is not made yet: he sees no gun rack until then.
-      (set != 'hunter' || kind > 0) &&
-      list.forEach(at => at && rack(out, at, RACK_RGB, t, kind, pieces, set)),
+  [guns, blades, rails, rifles].forEach((list, kind) =>
+    list.forEach(at => at && rack(out, at, RACK_RGB, t, kind, pieces, set)),
   );
 
 /** The faces of a cube: the normal and the two edges. */

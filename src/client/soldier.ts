@@ -1603,7 +1603,10 @@ export const soldier = (
         blendHunter(out, band, joints, s.rot);
       }
       for (const piece of rig.pieces) {
-        if ((piece.harpoon && handOf(p) === 0) || (piece.disc && (p.rifled || !!p.clip))) {
+        if (
+          (piece.harpoon && handOf(p) === 0 && !p.sided) ||
+          (piece.disc && (p.rifled || !!p.clip))
+        ) {
           continue;
         }
         if (piece.cannon) {
@@ -1914,7 +1917,7 @@ export const soldier = (
       const at = grip(s.pos[J.HAND_R], q);
       const hold = [0, 1, 2].map(i => fwd[i] * DISC_HOLD[0] - ax[i] * DISC_HOLD[1]) as Vec3;
       drawDisc(out, add(at, hold), fwd, up, ax);
-    } else if (isHunter && handOf(p) === 0) {
+    } else if (isHunter && handOf(p) === 0 && !p.sided) {
       const q = s.rot[J.HAND_R];
       drawHarpoon(
         out,
@@ -1949,6 +1952,7 @@ export const soldier = (
           vel: [p.vx, p.vy, p.vz],
           carry,
           list: gpu,
+          skin: isHunter && !!p.sided,
         },
       );
     }

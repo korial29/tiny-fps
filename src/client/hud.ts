@@ -345,7 +345,7 @@ export const ROLES: [name: string, pros: string, cons: string, where: string][] 
   ],
   [
     'Hunter',
-    'Slot 1 has twin wrist blades, which slash and never thrust. Slot 2 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 3 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. Slot 4 is his disc: left click throws it (3 HP) and it comes back like a boomerang. He spawns with the blades alone and finds the rest on the racks. No fists.',
+    "Slot 1 has twin wrist blades, which slash and never thrust. Slot 2 is his pistol, as the marine's gun. Slot 3 unfolds the harpoon rifle: hold right click or G to zoom through its scope, left click fires. Each bolt deals 4 HP and reloads in 1.3 seconds. Slot 4 unfolds the shoulder cannon: each click fires a beam for 3 HP; keep a foe in its sight for 3 seconds to lock on and its shots home in. Slot 5 is his disc: left click throws it (3 HP) and it comes back like a boomerang. He spawns with the blades alone and finds the rest on the racks. No fists.",
     'Press V to cycle thermal vision and alien detection.',
     'Every map',
   ],
@@ -593,6 +593,8 @@ export interface Hud {
     nades?: number,
     armor?: number,
     fists?: boolean,
+    /** The Hunter's pistol is in hand: `ammo` and `loaded` are its own. */
+    sided?: boolean,
   ): void;
   /** The health the own player's class has at most (Kit.hp): as many pips. */
   life(max: number): void;
@@ -1084,6 +1086,7 @@ export const createHud = (
         nades = 0,
         armor = 0,
         fists = false,
+        sided = false,
       ] = values;
       pips.forEach((li, i) => li.classList.toggle('e', i >= hp));
       plates.forEach((li, i) => li.classList.toggle('e', i >= armor));
@@ -1103,14 +1106,21 @@ export const createHud = (
       ammo.classList.toggle('w', swapping);
       // The Hunter's glyph, by his slot: the blades, the harpoon, the cannon, the disc.
       const glyph = k ? 0 : railed ? 2 : rifled ? 3 : 1;
-      ammo.classList.toggle('h', hunter);
+      // His pistol counts as the marine's gun, with the gun's glyph.
+      ammo.classList.toggle('h', hunter && !sided);
       for (let i = 0; i < 4; i++) {
         ammo.classList.toggle(`h${i}`, hunter && glyph == i);
       }
       set(count, cannon ? '∞' : `${m}`);
       // The rest as the magazines it makes, full ones and an open one for a part, over its count.
       const rest = cannon ? 0 : Math.max(n - m, 0);
-      const size = rifled ? mags[2] : railed ? (mags[1] * 99) / RAIL_MAX : mags[0];
+      const size = rifled
+        ? mags[2]
+        : railed
+          ? (mags[1] * 99) / RAIL_MAX
+          : sided
+            ? GUN_MAG
+            : mags[0];
       const dots = rifled
         ? `  ${'●'.repeat(nades)}${'○'.repeat(Math.max(NADE_MAX - nades, 0))}`
         : '';
@@ -1119,16 +1129,16 @@ export const createHud = (
         cannon ? '' : `${'▮'.repeat(rest / size)}${rest % size ? '▯' : ''}\n${rest}${dots}`,
       );
       const names = hunter
-        ? ['1 blades', '2 harpoon', '3 cannon', '4 disc', '']
+        ? ['1 blades', '2 pistol', '3 harpoon', '4 cannon', '5 disc']
         : ['1 fists', '2 katana', '3 gun', '4 rifle', '5 rail'];
       // The keys in slot order; each shows the weapon in that slot (the Hunter's blades are first).
-      const held = fists ? 4 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
+      const held = fists ? 4 : sided ? 5 : k ? 1 : rifled ? 3 : railed ? 2 : 0;
       [...slots.children].forEach((kbd, i) => {
         const w = slotted(i, hunter);
         kbd.textContent = names[i];
         (kbd as HTMLElement).title = names[i];
-        // The Hunter has his four slots and no fists (the user, 2026-11-23).
-        (kbd as HTMLElement).hidden = hunter ? i > 3 : w < 4 && !have[w];
+        // The Hunter shows his five slots and has no fists (the user, 2026-11-26).
+        (kbd as HTMLElement).hidden = !hunter && w < 4 && !have[w];
         kbd.classList.toggle('a', w == held);
       });
     },

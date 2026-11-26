@@ -593,7 +593,7 @@ describe('prediction against the room', () => {
         kitOf(ROLE.HUNTER, ROOFTOPS),
       );
       strikes.add(struck);
-      pistol += +(p.sided && struck === STRIKE.SHOT);
+      pistol += +(!!p.sided && struck === STRIKE.SHOT);
       hands.add(
         p.sided
           ? 'pistol'

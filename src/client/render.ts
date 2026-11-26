@@ -1133,7 +1133,7 @@ export const warmSteps = (own?: number, hunter = false): Step[] => [
   ),
   () => {
     [0, 2, 3].forEach(kind => rackWeapon(kind));
-    [1, 2, 3].forEach(kind => rackWeapon(kind, 'hunter'));
+    [0, 1, 2, 3].forEach(kind => rackWeapon(kind, 'hunter'));
     vestMesh();
   },
 ];

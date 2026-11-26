@@ -558,8 +558,9 @@ export const createCombat = (
         }
         const f = fresh(me) ? handOf(me) : -1;
         if (was) {
+          // The Hunter's pistol (`sided`) sounds as the marine's gun.
           shing(was, me, undefined, f, hunter(me.id));
-          reloads(was, me, undefined, f, hunter(me.id));
+          reloads(was, me, undefined, f, hunter(me.id) && !me.sided);
         }
         // A hit on the armour hurts as one on the health. Each pickup has its sound: an armour,
         // a health pack, an ammo pack (more rounds in a gun he had); a gun taken is the gun's.
@@ -619,9 +620,11 @@ export const createCombat = (
         // The Hunter's `rail` counts down to his cannon's next shot back and `cap` holds its shots
         // (gun.ts): the shots left, nothing in reserve.
         const own = hunter(me.id);
+        // The Hunter's pistol in hand shows its own shots and battery (`side`, `sideMag`).
+        const side = !!me.sided;
         hud.vitals(
           me.hp,
-          me.ammo,
+          side ? (me.side ?? -1) : me.ammo,
           !!me.blade,
           !!me.wield,
           rail < 0 ? -1 : own ? 0 : charge(rail),
@@ -634,13 +637,16 @@ export const createCombat = (
               ? own
                 ? (me.cap ?? 0)
                 : charge(me.cap ?? 0)
-              : (me.mag ?? 0),
+              : side
+                ? (me.sideMag ?? 0)
+                : (me.mag ?? 0),
           !!me.reload,
           me.rifle ?? -1,
           !!me.rifled,
           me.nades ?? 0,
           me.armor ?? 0,
           !!me.fists,
+          side,
         );
         cuts.forEach(c => swish(c, undefined, hunter(me.id) && c < FIST_CUE));
         hud.down(fx.lie, me.down / TICK_HZ);
@@ -683,7 +689,8 @@ export const createCombat = (
             discharge(p);
             continue;
           }
-          const harpoon = hunter(p.id) && !discShot;
+          // The Hunter's pistol fires plasma, as the marine's gun.
+          const harpoon = hunter(p.id) && !discShot && !p.sided;
           balls.fire(p, now, harpoon, discShot);
           if (discShot) {
             audio.play(SOUND.HUNTER_DISC_THROW, undefined, -2.3, rate());
@@ -726,7 +733,7 @@ export const createCombat = (
           const c = charges.get(p.id) ?? 0;
           const power = c >= CHARGE_TAP ? Math.min(powerOf(c), CHARGE_MAX) : 1;
           tracer.flash(gun(p), false, heat(power));
-          laser(at, power, hunter(p.id));
+          laser(at, power, hunter(p.id) && !p.sided);
         }
         seen.set(p.id, p.shots);
         const lived = lives.get(p.id);
@@ -767,7 +774,7 @@ export const createCombat = (
         const f = fresh(p) ? handOf(p) : -1;
         if (old) {
           shing(old, p, at, f, hunter(p.id));
-          reloads(old, p, at, f, hunter(p.id));
+          reloads(old, p, at, f, hunter(p.id) && !p.sided);
         }
         blades.set(p.id, {
           swing: p.swing,

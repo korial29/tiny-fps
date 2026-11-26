@@ -94,8 +94,15 @@ user, 2026-11-26): see [Radio, racks and HUD](#radio-racks-and-hud-the-user-2026
   The client's key and wheel order is `HUNTER_SLOTS` (`slotted()`, `src/client/input.ts`). On the
   wire the harpoon is the gun (no weapon key), the cannon `KEY.RAIL`, the disc `KEY.RIFLE`, and the
   pistol `KEY.FISTS`: he has no fists, so the bit is free for it (`WEAPON.SIDE` on the client).
-- **Pistol (the user, 2026-11-26).** The marine's gun in his bronze, its glow and counter an ember
-  red (`hunterGun()`, `skin` in `held()`, `src/client/gun.ts`). It keeps its own shots, battery and
+- **Pistol (the user, 2026-11-26).** A model of its own (`hunterPistol()`, `src/client/pistol.ts`)
+  on the plasma gun's marks (grip, muzzle, battery, button, screen face), so the hands, the swap and
+  the shot need nothing new: angular after his shoulder cannon, its shells smooth (vertex normals
+  averaged, rounded corners), worn bronze with bone-paint tribal marks (chevrons, tally marks, a
+  band of teeth, diamonds on the spine) and leather round the grip. Drawn worn at level 3
+  (`Draw.w`): the armour's scuffs from the shader, 1.8 times as dense. Its screen sits in the back
+  face behind a raised bezel, no lit outline, and counts the battery in his wrist computer's four
+  glyphs, two dashes a shot (`readout()` with `glyphs`). Held in the right hand alone. 2,742
+  vertices near, 1,686 far. It keeps its own shots, battery and
   in-hand flag (`side`, `sideMag`, `sided`, two bytes more per player on the wire) apart from the
   harpoon's `ammo` and `mag`. While it is in hand, `step()` swaps them into the gun's fields and
   fires, charges, bursts (G) and reloads it with the gun's own code, then swaps them back

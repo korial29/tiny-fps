@@ -61,7 +61,7 @@ const fit = (v: readonly number[], length: number): number[] => {
 const hunterWeapon = (kind: number): number[] =>
   (hunterBuilt[kind] ??=
     kind == 0
-      ? fit(hunterGun(0), 0.42)
+      ? fit(hunterGun(1), 0.42)
       : kind == 1
         ? fit(hunterHarpoon(0), 0.8)
         : kind == 2
@@ -129,6 +129,8 @@ export const rack = (
       q: [0, Math.sin(half), 0, Math.cos(half)],
       t: over,
       k: scaleOf(kind, set),
+      // The Hunter's pistol, scuffed as in his hand.
+      w: set == 'hunter' && kind == 0 && 3,
     });
   } else {
     place(out, weaponOf(kind, set), over, ax, [0, 0, 0], scaleOf(kind, set));

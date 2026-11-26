@@ -2121,7 +2121,9 @@ export const createBody = (world?: World): Body => {
     discBack = discOut && !out ? 0 : discBack + dt;
     discOut = out;
     const now = handOf(p);
-    harpoonDraw = hunter && now === 0 ? Math.min(1, harpoonDraw + dt / HARPOON_DRAW) : 0;
+    // His pistol (`sided`) is held in the right hand alone, as the marine's: no harpoon pose.
+    harpoonDraw =
+      hunter && now === 0 && !p.sided ? Math.min(1, harpoonDraw + dt / HARPOON_DRAW) : 0;
     const f = fresh(p);
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
@@ -3149,6 +3151,8 @@ export const createBody = (world?: World): Body => {
                 heat: (me?.heat ?? 0) / HEAT_MAX,
                 hot: me?.hot,
                 skin: hunter && !!me?.sided,
+                // The Hunter's pistol is drawn from the store, worn (its scuffs on its own frame).
+                list: hunter && me?.sided ? pieces : undefined,
               },
             );
           }

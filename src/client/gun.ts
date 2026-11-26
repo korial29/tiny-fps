@@ -36,6 +36,8 @@ import { axis, turn } from './rig';
 import type { Quat } from './rig';
 import { room } from './verts';
 import type { Out } from './verts';
+import { GLYPHS, SHOTS } from './computer';
+import { WINDOW, hunterPistol } from './pistol';
 import { ID, ORIGIN, mesh } from './store';
 import type { Pieces } from './store';
 
@@ -187,8 +189,8 @@ const built: number[][] = [];
  * piece, cut by a straight leaning face): the face through BACK, facing BACK_N, back and up toward
  * the player. The counter's support, a glossy black rounded trapezoid, sits on it (readout()).
  */
-const BACK: Vec3 = [0, 0.125, 0.04];
-const BACK_N = unit([0, 0.469, 0.883]);
+export const BACK: Vec3 = [0, 0.125, 0.04];
+export const BACK_N = unit([0, 0.469, 0.883]);
 /** Glossy black, the cut face and the screen's support on it: [r, g, layer, b]. */
 const GLOSS = [0.012, 0.012, SHINE, 0.018];
 /** The smooth outline over the cut: its middle up the face from BACK, its half width and half height, holding the cut's polygon. */
@@ -794,34 +796,8 @@ export const insulators = (lod: number, heat = 0): number[] => {
   })([]));
 };
 
-/**
- * The Hunter's pistol (the user, 2026-11-26: the gun with a skin of its own): the gun's model, its
- * violet and teal turned to his bronze, the glow (layer -2) to a red ember. Same shape, same
- * vertices, cached per level of detail.
- */
-export const hunterGun = (lod: number): number[] => {
-  if (bronzed[lod]) {
-    return bronzed[lod];
-  }
-  const v = gun(lod).slice();
-  bronzeVerts(v, 0, v.length);
-  return (bronzed[lod] = v);
-};
-const bronzed: number[][] = [];
-/** Turns the vertices of `v` from `from` to `to` to the Hunter's bronze, their glow to his ember. */
-const bronzeVerts = (v: { [i: number]: number }, from: number, to: number) => {
-  for (let i = from; i < to; i += STRIDE) {
-    const [r, g, b] = [v[i + 6], v[i + 7], v[i + 9]];
-    if (v[i + 8] == -2) {
-      const k = Math.max(r, g, b);
-      [v[i + 6], v[i + 7], v[i + 9]] = [k, 0.22 * k, 0.06 * k];
-    } else {
-      const l = 0.3 * r + 0.59 * g + 0.11 * b;
-      [v[i + 6], v[i + 7], v[i + 9]] = [Math.min(1, 1.3 * l), Math.min(1, 1.02 * l), 0.6 * l];
-    }
-  }
-};
-
+/** The Hunter's pistol: its own model (pistol.ts), on the gun's marks. */
+export const hunterGun = (lod: number): number[] => hunterPistol(Math.min(lod, 1));
 /** The weapon a gun model is, from a player or a flag: 0 the gun, 2 the rail gun (or true), 3 the laser rifle. */
 export const kindOf = (p: Pick<PlayerState, 'railed' | 'rifled'> | boolean | number): number =>
   typeof p == 'number' ? p : typeof p == 'boolean' ? +p * 2 : p.rifled ? 3 : p.railed ? 2 : 0;
@@ -1790,9 +1766,9 @@ export const TRACKS = [
  * strength the shot would have; all orange at the full charge. Not `shown`: the block and the dark
  * screen only, the gun still booting.
  */
-export const readout = (ammo: number, level = 0, shown = true): number[] => {
+export const readout = (ammo: number, level = 0, shown = true, glyphs = false): number[] => {
   const n = Math.min(Math.max(Math.floor(ammo), 0), 99);
-  const key = (n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +shown;
+  const key = ((n * 8 + Math.min(Math.max(level, 0), CHARGE_MAX)) * 2 + +shown) * 2 + +glyphs;
   let out = readouts.get(key);
   if (!out) {
     const v: number[] = (out = []);
@@ -1804,7 +1780,8 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
       BACK[1] + slope[1] * b + N[1] * k,
       BACK[2] + slope[2] * b + N[2] * k,
     ];
-    const rgb = n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
+    // The Hunter's signs glow his ember, as his wrist computer's.
+    const rgb = glyphs ? [1, 0.22, 0.06] : n > 4 ? [0.25, 0.9, 1] : [1, 0.18, 0.12];
     /** The gauge's cells, the lit ones or the dim ones, while it charges. */
     const gauge = (on: boolean) => {
       const w = ((2 * DW + DGAP) * DK - (CHARGE_MAX - 1) * GGAP) / CHARGE_MAX;
@@ -1813,18 +1790,46 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
           const x = (-DW - DGAP / 2) * DK + c * (w + GGAP);
           const p = (a: number, b: number) => at(a, b, 0.0027);
           const rgb = !on
-            ? [0.04, 0.12, 0.16]
+            ? glyphs
+              ? [0.12, 0.03, 0.01]
+              : [0.04, 0.12, 0.16]
             : level >= CHARGE_MAX
               ? [1.3, 0.6, 0.15]
-              : [0.25, 0.9, 1];
-          tri(v, p(x, GFROM), p(x + w, GFROM), p(x + w, GTO), rgb);
-          tri(v, p(x, GFROM), p(x + w, GTO), p(x, GTO), rgb);
+              : glyphs
+                ? [1, 0.22, 0.06]
+                : [0.25, 0.9, 1];
+          // The Hunter's gauge lies in his screen's window, under his signs.
+          const [g0, g1] = glyphs ? [WINDOW[2] - 0.0145, WINDOW[2] - 0.0115] : [GFROM, GTO];
+          tri(v, p(x, g0), p(x + w, g0), p(x + w, g1), rgb);
+          tri(v, p(x, g0), p(x + w, g1), p(x, g1), rgb);
         }
       }
     };
     gauge(false);
     const from = v.length;
-    [...(shown ? `${n}`.padStart(2, '0') : '')].forEach((ch, i) => {
+    if (glyphs && shown) {
+      // The Hunter's pistol counts in the signs of his wrist computer (computer.ts, the user,
+      // 2026-11-26): four cells across the screen, two dashes a shot, lit from the left; the
+      // battery's GUN_MAG is the computer's HUNTER_CELLS. The dark dashes are drawn too, dim.
+      const [cw, cg] = [0.015, 0.0025];
+      const x0 = -(4 * cw + 3 * cg) / 2;
+      const y0 = WINDOW[2] - cw / 2 + 0.004;
+      let left = n;
+      GLYPHS.forEach((glyph, g) => {
+        const on = 2 * Math.min(SHOTS[g], left);
+        left -= on / 2;
+        glyph.forEach(([right, up, a], i) => {
+          const [c, s] = [0.1 * cw * Math.cos(a), 0.1 * cw * Math.sin(a)];
+          const [w, h] = [0.05 * cw * -Math.sin(a), 0.05 * cw * Math.cos(a)];
+          const [x, y] = [x0 + g * (cw + cg) + right * cw, y0 + up * cw];
+          const p = (dx: number, dy: number) => at(x + dx, y + dy, 0.0027);
+          const tone = i < on ? rgb : rgb.map(k => k * 0.12);
+          tri(v, p(-c - w, -s - h), p(c - w, s - h), p(c + w, s + h), tone);
+          tri(v, p(-c - w, -s - h), p(c + w, s + h), p(-c + w, -s + h), tone);
+        });
+      });
+    }
+    [...(shown && !glyphs ? `${n}`.padStart(2, '0') : '')].forEach((ch, i) => {
       const x0 = (-DW - DGAP / 2 + i * (DW + DGAP)) * DK;
       for (const seg of DIGITS[+ch]) {
         const [a, b, d, e] = SEGMENTS[seg];
@@ -1850,9 +1855,12 @@ export const readout = (ammo: number, level = 0, shown = true): number[] => {
         tri(v, slash[0], slash[2], slash[3], rgb);
       }
     });
-    // The lit cells and the frame glow with the digits.
+    // The lit cells and the frame glow with the digits. The Hunter's screen is set into his
+    // pistol (pistol.ts): no frame of light round it, and no tracks.
     if (shown) {
       gauge(true);
+    }
+    if (shown && !glyphs) {
       // Round, 2 mm inside the cut's smooth outline (the user, 2026-11-09), a band 2.4 mm wide (the user, 2026-11-09: wider), 1 mm
       // out of the face, clear of the outline 0.2 mm out.
       const ring = (j: number, g: number) =>
@@ -2266,6 +2274,8 @@ export const held = (
       q,
       t: at,
       k,
+      // The Hunter's pistol is drawn worn: the shader scuffs it (pistol.ts).
+      w: bronze && 3,
     });
   } else {
     place(out, model, at, ax, [0, 0, 0], k);
@@ -2293,11 +2303,7 @@ export const held = (
   // The gun's counter fades in on its own, with the boot sound, without the gun's flicker (the user, 2026-11-09).
   if (ammo !== undefined && w < 2) {
     const c = out.length;
-    place(out, readout(ammo, level), at, ax, [0, 0, 0], k);
-    if (bronze) {
-      // The Hunter's counter glows his ember too.
-      bronzeVerts(room(out, 0), c, out.length);
-    }
+    place(out, readout(ammo, level, true, bronze), at, ax, [0, 0, 0], k);
     dimmed(out, c, screen);
   }
 };

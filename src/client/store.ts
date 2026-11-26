@@ -20,8 +20,11 @@ export interface Draw {
   t: Vec3;
   k: number;
   f?: Flesh;
-  /** Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold parts. */
-  w?: boolean;
+  /**
+   * Worn: armour, which the shader scuffs (grime, chipped paint, scratches) on its glossy and gold
+   * parts. 3 is heavy wear (the Hunter's pistol): the scuffs 1.8 times as dense.
+   */
+  w?: boolean | 3;
   /** Thin: too fine for a shadow, left out of the depth passes (the xenomorph's teeth and hoses). */
   s?: boolean;
   /** Close hair (hair.ts), coloured `rgb`, swung by `sw` in the head's frame at the time `t`: the shader sways it (swayOf()). */

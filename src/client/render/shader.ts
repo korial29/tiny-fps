@@ -163,6 +163,8 @@ export const PITCH = 620;
 export const RELIEF = 0.06;
 /** Landfall's floors' grating stands out this much more than RELIEF (the user, 2026-11-26: a bump map on it); no other map's GRATE changes. */
 export const GRATE_RELIEF = 4;
+/** Landfall's steel and plates, shiny (the user, 2026-11-26): their Blinn-Phong strength and exponent, sharper than SPEC's; they mirror the sky more too, in shade as in the sun. */
+export const BRIGHT_METAL = [3, 200];
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
 // and layers -2 and -3, which glow: no light, no shade. Layer -3 is smoke: grey C.x (and C.w for
@@ -445,6 +447,7 @@ vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)]
 #ifdef BEACH
 if(bs)R=mix(vec2(.05,10.),vec2(.8,140.),bw);
 if(hk>0.)R=vec2(1.6*hk,260.);
+if(abs(L-${TEX.STEEL}.)<.5||abs(L-${TEX.METAL}.)<.5)R=vec2(${BRIGHT_METAL});
 #endif
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
@@ -482,6 +485,7 @@ c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 #ifdef BEACH
 ${WET}
 ${SHEEN}
+c+=(step(abs(L-${TEX.STEEL}.),.5)+step(abs(L-${TEX.METAL}.),.5))*k*(.25+.6*fr)*(.15+.85*sv);
 #endif
 #ifdef MIRROR
 vec3 kk=k;

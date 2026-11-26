@@ -261,6 +261,10 @@ the gaps crossed on foot and the hold walked into described above.
   corner battens (their two outer faces and their top only).
 - **The containers**: brushed steel, upright, its ribs darker; the iron lock bars stay. They
   mirror the sky: Landfall's boxes are all ghosts, so the mirrors (MIRROR) trace none of them.
+  Tracing the ghosts too was tried and dropped (the user, 2026-11-26): grey boxes, stair-stepped
+  under the wing, for a cost nobody could measure. Instead Landfall's steel and plates shine
+  (`BRIGHT_METAL`, 3 and 200) and mirror more of the sky, less where the sun does not reach (the
+  hold).
 - **The floors' grating** (`inside.ts` `FLOOR`): brighter, 12.5 cm bars, and on Landfall its
   relief stands out `GRATE_RELIEF` (4) times more than RELIEF.
 - **Vertices**: the wreck 81,156 → 83,244 (camps 4,476 → 6,348, debris 17,040 → 17,256).

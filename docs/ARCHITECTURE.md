@@ -176,7 +176,7 @@ runs to `rules.scoreLimit` (3) captures or `rules.timeLimit` (480 s), the most c
 
 ### Orbit
 
-(`ORBIT` in `constants.ts`, `WorldDef.seam`, `altitude()` in `ship.ts`, the globe, craters and stars in the scene shader of `render.ts`, `MOON.md`, the user 2026-11-14): on the moon a ship climbs past the seam (300 m) into space, up to `SHIP.CEIL` = `ORBIT.TOP` (960 m, under the wire's 1024 m for a ball's height). A shot that crosses the seam either way bursts there (`fly()`), so the ground and the sky never hit each other. Over it the crater fades into a globe drawn with the sky, seen from `altitude()` (250 km at the top); from 20 m up that globe is the ground past the relief. The stars are the sky shader's, at infinity; the Earth goes with the eye. The sky is drawn after the world: the globe is the costliest pixel of a frame.
+(`ORBIT` in `constants.ts`, `WorldDef.seam`, `altitude()` in `ship.ts`, the globe, craters and stars in the scene shader (`render/shader.ts`), `MOON.md`, the user 2026-11-14): on the moon a ship climbs past the seam (300 m) into space, up to `SHIP.CEIL` = `ORBIT.TOP` (960 m, under the wire's 1024 m for a ball's height). A shot that crosses the seam either way bursts there (`fly()`), so the ground and the sky never hit each other. Over it the crater fades into a globe drawn with the sky, seen from `altitude()` (250 km at the top); from 20 m up that globe is the ground past the relief. The stars are the sky shader's, at infinity; the Earth goes with the eye. The sky is drawn after the world: the globe is the costliest pixel of a frame.
 
 ### Footprints
 

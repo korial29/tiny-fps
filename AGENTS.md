@@ -28,6 +28,25 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   live in [scripts/size.mjs](scripts/size.mjs). Raise a budget only with the
   user's agreement.
 
+## Code layout
+
+`src/client` holds more than 200 flat files, and many run over 2 000 lines. Keep
+new code small and in folders.
+
+- Put each new feature in a folder named after it (`src/client/render/`,
+  `src/client/hunter/`), not in a new flat file.
+- When a file you touch passes 600 lines, split it by responsibility in the same
+  PR, unless the user says otherwise. Split along existing seams (shaders,
+  geometry, maths, state, types) and keep each piece under about 400 lines.
+- Keep the old path as a thin entry that re-exports the folder (`export * from
+'./render/camera'`). Imports elsewhere then stay valid, and tests keep
+  importing `./render`. Move a test next to the piece it covers when you split.
+- Keep a split a pure move: no behaviour change, no renamed symbol. Check it
+  with `tsc`, ESLint, Prettier and the narrow tests of that module.
+- Avoid import cycles between the pieces: shared constants and types go in
+  their own file (`constants.ts`, `types.ts`) that the others import.
+- Update the paths in `docs/` and `scripts/size.mjs` when a file moves.
+
 ## Working on a subsystem
 
 - **Simulation and networking.** Start in `src/shared/room.ts`,
@@ -46,7 +65,7 @@ Tooling, CI and transport follow `korial29/air-hockey` (`~/dev/air-hockey`).
   judging a bot change. See [weapons](docs/WEAPON.md) for combat and
   [Hunter](docs/HUNTER.md) for that class.
 - **Client.** `src/client/index.ts` owns the entry point, `hud.ts` the HUD and
-  menus, and `render.ts` the WebGL renderer. See [characters](docs/CHARACTERS.md)
+  menus, and `render.ts` the WebGL renderer (its shaders, camera maths, world data and shots live in `src/client/render/`). See [characters](docs/CHARACTERS.md)
   and [graphics](docs/GRAPHICS.md) for their specific work, and
   [design tools](docs/CHARACTERS.md#design-tools) for the turntable page and
   Blender, which sketches shapes but never ships them. Before modelling a

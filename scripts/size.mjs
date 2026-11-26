@@ -139,7 +139,7 @@ const LAZY = {
   'cast-mp3': 365_824,
   // The ships' predictive targeting (index.ts).
   targeting: 1_792,
-  // Tranquility's and Landfall's scenery (render.ts decor()), the rounded stones that both draw
+  // Tranquility's and Landfall's scenery (render/scene.ts decor()), the rounded stones that both draw
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
   tranquility: 18_688,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).

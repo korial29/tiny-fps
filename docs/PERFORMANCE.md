@@ -367,7 +367,7 @@ cells in place of 27 saved only 0.4 ms: the rest was the loop's weight on the wh
 ## Rules for every change
 
 1. **Count the vertices of what you add, at every level.** A runner is drawn at lod 3 within 4 m
-   (`CLOSE`), lod 1 within 10 m (`NEAR`), lod 0 beyond (`render.ts`); most runners in a match are
+   (`CLOSE`), lod 1 within 10 m (`NEAR`), lod 0 beyond (`render/constants.ts`, drawn by `render.ts`); most runners in a match are
    lod 0. Any new piece on a runner takes the level (or a `far` flag) and its far version has about
    a quarter of the vertices or fewer. Say the counts in the PR. A test pins the far ninja under
    12 000 vertices (`soldier.test.ts`); keep it passing, lower it when you can.

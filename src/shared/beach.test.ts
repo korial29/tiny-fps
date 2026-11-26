@@ -38,6 +38,9 @@ import {
   EYE,
   FLAG_H,
   FLAG_REACH,
+  GRAB_MAX,
+  GRAVITY,
+  JUMP_SPEED,
   PLAYER_H,
   PLAYER_R,
   SNAP_EVERY,
@@ -165,6 +168,7 @@ describe('LANDFALL', () => {
       'shelter',
       'float',
       'raft',
+      'jam',
     ];
     let stood = 0;
     for (const [i, b] of solid.entries()) {
@@ -324,7 +328,7 @@ describe('LANDFALL, the sand and the seabed', () => {
       src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|fround|PI)\w+/g) ?? [],
     ).toEqual([]);
     expect(at(61.5, 143.25)).toBe(at(61.5, 143.25));
-    expect(checksum(relief)).toBe(660310480);
+    expect(checksum(relief)).toBe(4016036397);
   });
 
   it('is never steeper than 30 degrees, node to node', () => {
@@ -699,7 +703,9 @@ describe('LANDFALL, the wreck', () => {
             const crate = crates.some(
               ([a, d]) => d === k - 1 && x > a - 0.5 && x < a + 2 && Math.abs(v) < 1.2,
             );
-            if (!hole && !crate) {
+            const jam =
+              k === 0 && pieces('jam', false).some(p => x > p.min[0] - 0.5 && x < p.max[0] + 0.5);
+            if (!hole && !crate && !jam) {
               const room = k < 2 ? ys[k + 1] - ys[k] - 0.3 : 2.5;
               expect(
                 free(x, ys[k], MID + v, room - 1e-3),
@@ -714,7 +720,7 @@ describe('LANDFALL, the wreck', () => {
           }
         }
       }
-      expect(stood).toBeGreaterThan(50);
+      expect(stood).toBeGreaterThan(45);
     }
     // The hold as it was: its floor, 9 m wide inside, and over the sand under it.
     expect(HOLD.half).toBeCloseTo(section(SHIP[1].floor) - HULL.skin, 1);
@@ -726,7 +732,7 @@ describe('LANDFALL, the wreck', () => {
     }
   });
 
-  it('is open at its broken ends on every level, onto the two gaps, and shut at the stern', () => {
+  it('is open at its broken ends over the lowest floor, onto the two gaps, jammed shut on it, and shut at the stern', () => {
     const [tail, mid, nose] = HULL.sections;
     for (const [n, x, open] of [
       [0, tail[0] + 0.5, false],
@@ -737,19 +743,30 @@ describe('LANDFALL, the wreck', () => {
     ] as const) {
       const ys = floors(n);
       // (The middle's gallery is torn away at its west end: the deck under it shows there.)
-      for (const y of n === 1 && x < 48 ? [ys[0], ys[1]] : ys.slice(0, 3)) {
-        const up = Math.max(y, ground(world, x, MID));
-        expect(free(x, up, MID), `section ${n} at ${x}, ${y}`).toBe(open);
+      for (const y of n === 1 && x < 48 ? [ys[1]] : ys.slice(1, 3)) {
+        expect(free(x, y, MID), `section ${n} at ${x}, ${y}`).toBe(open);
         if (open) {
-          expect(free(x + (x < HULL.sections[n][0] + 1 ? -1 : 1), up, MID)).toBe(true);
+          expect(free(x + (x < HULL.sections[n][0] + 1 ? -1 : 1), y, MID)).toBe(true);
         }
       }
+      // The lowest floor: crushed shut from it to the deck over it, skin to skin.
+      expect(free(x, ys[0], MID, 0.5), `section ${n} at ${x}, ${ys[0]}`).toBe(false);
     }
-    // From the sand of each gap the hold's floor is a jump or a pull up; from the east gap the nose's too.
-    expect(HOLD.floor - ground(world, 43.5, MID)).toBeLessThan(2.4);
-    expect(HOLD.floor - ground(world, 74.5, MID)).toBeLessThan(1.2);
-    expect(floors(2)[0] - ground(world, 81.5, MID)).toBeLessThan(2.4);
-    expect(Math.abs(floors(0)[0] - ground(world, 36.5, MID))).toBeLessThan(STEP_H);
+    const jams = pieces('jam', false);
+    expect(jams.map(p => [p.min[0], p.max[0]])).toEqual([
+      [35, 36],
+      [44, 45],
+      [73, 74],
+      [82, 83],
+    ]);
+    for (const p of jams) {
+      const n = HULL.sections.findIndex(([a, b]) => p.min[0] >= a && p.max[0] <= b);
+      expect(p.min[1]).toBe(floors(n)[0]);
+      expect(p.max[1]).toBeCloseTo(HULL.axis[n] + LINES[1], 6);
+      for (const v of [-4, 0, 4]) {
+        expect(free((p.min[0] + p.max[0]) / 2, p.min[1], MID + v, 0.5)).toBe(false);
+      }
+    }
   });
 
   it('is torn in both flanks at the height of a deck: each tear a way through the skin for a body, the hold with its two doors', () => {
@@ -757,9 +774,10 @@ describe('LANDFALL, the wreck', () => {
     for (const [n, { tears, floor }] of SHIP.entries()) {
       const c = HULL.axis[n];
       for (const [x0, x1, h0, h1] of tears) {
+        const door = n === 1 && x0 === HOLD.door[0];
         expect(x1 - x0).toBeGreaterThanOrEqual(3);
-        expect(h1 - h0).toBeGreaterThan(PLAYER_H + 0.6);
-        expect([floor, ...DECKS]).toContain(h0);
+        expect(h1 - h0).toBeGreaterThan(door ? PLAYER_H + 0.1 : PLAYER_H + 0.6);
+        expect(door ? LINES : [floor, ...DECKS]).toContain(h0);
         expect(LINES).toContain(h1);
         for (const side of [1, -1]) {
           for (let v = 4; v <= 7.5; v += 0.25) {
@@ -772,16 +790,20 @@ describe('LANDFALL, the wreck', () => {
         }
       }
     }
-    // The doors of the hold, and the sand before each within a step of its floor.
-    expect(HOLD.door).toEqual([57.5, 60.5, SHIP[1].floor, LINES[1]]);
+    // The doors of the hold, their sills a metre over its floor and out of a jump's reach from the
+    // sand before them: a jump and a pull up (the user, 2026-11-26).
+    expect(HOLD.door).toEqual([57.5, 60.5, LINES[0], LINES[1]]);
+    const sill = HULL.axis[1] + LINES[0];
+    expect(sill - HOLD.floor).toBe(1);
     for (const side of [1, -1]) {
       const out = ground(world, 59, MID + side * 7);
-      expect(HOLD.floor - out).toBeGreaterThan(0);
-      expect(HOLD.floor - out).toBeLessThanOrEqual(STEP_H);
+      expect(sill - out).toBeGreaterThan(STEP_H + JUMP_SPEED ** 2 / (2 * GRAVITY));
+      expect(sill - out).toBeLessThan(GRAB_MAX);
     }
     // A container against the middle's flank under the tear of its lower deck, and a float under the tail's.
     const [box] = pieces('container').filter(p => p.min[2] < MID + 8);
-    expect(box.max[1]).toBeGreaterThan(4.5 - 1.2);
+    // (The deck a jump from its top: the sand before the hold's door is lower, and it with it.)
+    expect(box.max[1]).toBeGreaterThan(4.5 - STEP_H - JUMP_SPEED ** 2 / (2 * GRAVITY));
     expect(box.max[1] - ground(world, 51, MID + 11)).toBeLessThan(2.8);
     expect(pieces('float').filter(p => p.min[2] < MID + 8)).toHaveLength(1);
   });
@@ -904,11 +926,10 @@ describe('LANDFALL, the wreck', () => {
         }
       }
     }
-    // Nobody is caught under it: where a body does not fit, it is solid to the ground.
+    // Free of the sand: no bank under it, every row as thin as the wing, 0.6 m at most (the user, 2026-11-26).
     for (const p of rows) {
-      const room =
-        p.min[1] - Math.max(ground(world, p.min[0], p.min[2]), ground(world, 56, p.min[2]));
-      expect(room < 0 || room >= PLAYER_H + 0.3, `row at z ${p.min[2]}`).toBe(true);
+      expect(p.max[1] - p.min[1], `row at z ${p.min[2]}`).toBeLessThanOrEqual(0.6 + 1e-9);
+      expect(p.max[1] - p.min[1], `row at z ${p.min[2]}`).toBeGreaterThanOrEqual(0.15 - 1e-9);
     }
     // The outline is the map's: every row between its two edges at its span, less its shear.
     for (const l of [WING.lead, WING.trail]) {
@@ -948,14 +969,38 @@ describe('LANDFALL, the wreck', () => {
   });
 });
 
-/** The ways across on the sand, each from red's spawn to the centre line. */
+/** The heap across each gap: its top. */
+const HEAP = pieces('heap', false).map(p => p.max[1]);
+/** The ways across low down, each from red's spawn to the centre line: nothing is walked through (the user, 2026-11-26). */
 const WAYS = {
-  // Through the gap by the trees, between the heap of ribs and the nose.
-  east: [g(66, 224), g(66, 190), g(75, 153), g(80.7, 138), g(80.7, MID)],
-  // Between the fallen engine and the wing, then through the gap at the waterline, wading the flooded furrow.
-  west: [g(55, 224), g(47.5, 177), g(48.2, 159), g(43, 139), g(42.75, MID)],
-  // Under the wing to the door, and into the hold.
-  hold: [g(55, 224), g(47.5, 177), g(48.2, 159), g(59, 143), g(59, 133), go(59, MID, HOLD.floor)],
+  // Up the heap across the gap by the trees, from its red side: a jump and a pull up.
+  east: [
+    g(66, 224),
+    g(66, 190),
+    g(75, 153),
+    g(78, 138),
+    g(78, 130.5, false),
+    leap([78, 127.7], [78, MID], HEAP[1], W),
+  ],
+  // Between the fallen engine and the wing, wading the flooded furrow, then up the heap across the gap at the waterline.
+  west: [
+    g(55, 224),
+    g(47.5, 177),
+    g(48.2, 159),
+    g(43, 139),
+    g(40, 131, false),
+    leap([40, 127.7], [40, MID], HEAP[0], W),
+  ],
+  // Under the wing to the door, up onto its sill, and down into the hold.
+  hold: [
+    g(55, 224),
+    g(47.5, 177),
+    g(48.2, 159),
+    g(59, 143),
+    g(59, 134.5, false),
+    leap([59, 131.6], [59, 130.1], 2.25, W),
+    go(59, MID, HOLD.floor, false),
+  ],
 };
 /** The high road, red's half: up the wing from the spawn to the fairing's ledge, a jump over each break. */
 const WING_UP = [
@@ -1032,38 +1077,58 @@ const CLIMB = [
 ];
 
 describe('LANDFALL, the ways across, flown with the real physics', () => {
-  it('walks through each gap between the sections, round the heap of ribs, with no jump', () => {
+  it('climbs over each gap by the heap across it, a jump and a pull up from either side: no gap is walked', () => {
     for (const way of [WAYS.east, WAYS.west]) {
       const s = red();
       const f = fly(s, across(way));
       expect(f.failed).toBeUndefined();
       expect(s.p.z).toBeLessThan(30);
-      expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
-      expect(s.modes).toEqual(new Set([MODE.GROUND]));
+      expect(s.ev & EV.RESPAWN).toBe(0);
+      expect(s.modes.has(MODE.HANG)).toBe(true);
       expect(f.seconds).toBeGreaterThan(22);
-      expect(f.seconds).toBeLessThan(29);
+      expect(f.seconds).toBeLessThan(31);
     }
-    // The west one is waded: knee to waist deep, never out of depth.
-    const s = red();
-    fly(s, across(WAYS.west));
-    expect(s.low).toBeLessThan(-0.6);
-    expect(s.low).toBeGreaterThan(DEPTH + 0.4);
-    // Each gap is 8 m of open furrow with a heap in its middle and a frame against one end.
-    for (const [n, x] of [40, 78].entries()) {
+    // Each gap is 8 m of furrow with a heap across it, end to end; a frame against one end.
+    for (const [n, [x0, x1]] of [
+      [36, 44],
+      [74, 82],
+    ].entries()) {
       expect(HULL.sections[n + 1][0] - HULL.sections[n][1]).toBe(8);
-      expect(pieces('heap', false)[n].min[0]).toBe(x - 1.5);
+      expect([pieces('heap', false)[n].min[0], pieces('heap', false)[n].max[0]]).toEqual([x0, x1]);
     }
     expect(pieces('frame', false)).toHaveLength(4);
+    // Run at, the heap stops a runner.
+    for (const x of [40, 78]) {
+      const s = red().put(x, ground(world, x, 131), 131, NORTH);
+      s.run(120, KEY.FORWARD | KEY.SPRINT, NORTH);
+      expect(s.p.z).toBeGreaterThan(MID + 1.5);
+    }
+    // Nor is it gone round inside the hull: each broken end's lowest floor is jammed shut.
+    expect(pieces('jam', false)).toHaveLength(4);
+    for (const [x, yaw, end] of [
+      [37, WEST, 36],
+      [43, EAST, 44],
+      [75, WEST, 74],
+      [81, EAST, 82],
+    ]) {
+      const s = red().put(x, ground(world, x, 127.5), 127.5, yaw);
+      s.run(120, KEY.FORWARD | KEY.SPRINT, yaw);
+      expect((s.p.x - end) * (x - end)).toBeGreaterThan(0);
+    }
   });
 
-  it('walks through the hold: in by the red door under the wing, out by the blue one', () => {
+  it('climbs into the hold: up onto the sill of the red door under the wing, out by the blue one', () => {
     const s = red();
     const f = fly(s, across(WAYS.hold));
     expect(f.failed).toBeUndefined();
     expect(s.p.z).toBeLessThan(30);
-    expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
-    expect(s.modes).toEqual(new Set([MODE.GROUND]));
-    expect(f.seconds).toBeLessThan(26);
+    expect(s.ev & EV.RESPAWN).toBe(0);
+    expect(s.modes.has(MODE.HANG)).toBe(true);
+    expect(f.seconds).toBeLessThan(37);
+    // Walked at, the door stops a runner: its sill is out of a step's reach.
+    const w = red().put(59, ground(world, 59, 134), 134, NORTH);
+    w.run(120, KEY.FORWARD | KEY.SPRINT, NORTH);
+    expect(w.p.z).toBeGreaterThan(130.75);
   });
 
   it('takes the high road: up the wing with a jump over each break, along the ledge, through the gallery and down the other wing', () => {
@@ -1149,7 +1214,6 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
       go(57, 127, 4.5, false),
       go(55.5, 127, HOLD.floor, false),
       go(59, MID, HOLD.floor),
-      go(59, MID - 8, 1),
     ]);
     expect(d.failed).toBeUndefined();
     expect(t.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
@@ -1177,7 +1241,7 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(s.hard).toBeLessThan(12);
   });
 
-  it('crosses on the lower deck of the nose and of the tail, tear to tear, and climbs each from its floor to its back', () => {
+  it('crosses on the lower deck of the nose and of the tail, tear to tear, and climbs each from the heap across its gap to its back', () => {
     // The nose: a pull up from the sand, across west of the hole, and down.
     const n = red().put(85.8, ground(world, 85.8, 137), 137);
     expect(
@@ -1188,16 +1252,11 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(n.p.z).toBeLessThan(89);
     expect(n.p.y).toBeLessThan(4.5);
     expect(n.hard).toBeLessThan(10);
-    // From the east gap: onto its floor, then a crate and a hole at each level.
-    const up = red().put(80, ground(world, 80, MID), MID);
+    // From the heap across the east gap: a pull up onto the lower deck over its jammed floor, then a crate and a hole at each level.
+    const up = red().put(79.5, HEAP[1], 126.8);
     const f = fly(up, [
-      leap([81.3, MID], [84, MID], 2.5, W),
-      go(87, MID, 2.5, false),
-      leap([87.9, MID], [89, MID], 3.5, W),
-      go(88.5, MID, 3.5, false),
-      leap([89.1, MID], [92, MID], 5.75, W),
-      go(91, 127, 5.75, false),
-      go(86, 127, 5.75, false),
+      leap([81.5, 126.8], [83.2, 126.8], 5.75, W),
+      go(85.5, 127.6, 5.75, false),
       go(84, 126.8, 5.75, false),
       leap([84, 126.2], [84, MID], 7.15, W),
       go(83.5, MID, 7.15, false),
@@ -1219,14 +1278,10 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     t.settle();
     expect(t.ev & EV.RESPAWN).toBe(0);
     expect(t.p.y).toBeLessThan(0);
-    // From the west gap: along its floor awash, then a crate and a hole at each level.
-    const w = red().put(40, ground(world, 40, 128), 128);
+    // From the heap across the west gap: up onto the lower deck over the jammed floor, then a crate and a hole at each level.
+    const w = red().put(38, HEAP[0], 126.8);
     const c = fly(w, [
-      go(22, 127, -0.75, false),
-      go(17.5, MID, -0.75, false),
-      leap([17.8, MID], [19, MID], 0.25, W),
-      go(18.5, MID, 0.25, false),
-      leap([19.1, MID], [22, MID], 2.25, W),
+      go(34, 126.8, 2.25, false),
       go(24, 127, 2.25, false),
       go(27, 126.8, 2.25, false),
       go(27, MID, 2.25, false),

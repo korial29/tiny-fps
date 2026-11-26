@@ -117,9 +117,15 @@ export const inside = (n: number) => {
     const y = c + h - 0.33;
     for (let x = xa + 2; x < xb; x += 5) {
       const z = MID + (d > 1 ? 2.1 : 3.9) * form(n, x)[0] * (hash(x, d, 43) < 0.5 ? -1 : 1);
-      if (!holes.some(([e, p, q, half]) => e == d && x > p - 0.8 && x < q + 0.8 && half > 3.5)) {
+      const at = [x + 1.6, y + 0.03, MID + 4 * (hash(x, d, 41) - 0.5)];
+      // Neither the lamp nor its cable's top under a hole: nothing would hold them.
+      const over = (px: number, pz: number, r: number) =>
+        holes.some(
+          ([e, p, q, half]) =>
+            e == d && px > p - r && px < q + r && Math.abs(pz - MID) < half + 0.3,
+        );
+      if (!over(x, z, 0.8) && !over(at[0], at[2], 0.3)) {
         face(flat(x - 0.5, x + 0.5, y, z - 0.07, z + 0.07), LAMP, UP);
-        const at = [x + 1.6, y + 0.03, MID + 4 * (hash(x, d, 41) - 0.5)];
         bar(at, off(at, [0.2, -0.3 - 0.8 * hash(x, d, 42), 0.25]), 0.05, SOOT);
       }
     }

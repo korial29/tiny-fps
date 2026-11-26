@@ -9,6 +9,7 @@ import {
   SKIN,
   GIRDER,
   IRON,
+  RAW,
   BELT,
   PANE,
   sm,
@@ -219,6 +220,9 @@ export const lining = (n: number, x: number, i: number, sg: number): V => [
   MID + sg * inner(n, x, i),
 ];
 
+/** Whether h is a deck's line. */
+const deck = (h: number) => DECKS.some(e => Math.abs(e - h) < 1e-6);
+
 /** Whether the map leaves the skin open between two heights of a flank, from one station to the next. */
 export const open = (n: number, xa: number, xb: number, ha: number, hb: number) =>
   SHIP[n].tears.some(
@@ -356,7 +360,7 @@ export const skin = (n: number, only?: 'glass') => {
   }
   const l = lines(n);
   for (const sg of [-1, 1]) {
-    // The tears, in the thickness: frames and stringers between the skin and its lining, bent teeth outside.
+    // The tears, in the thickness: bare steel between the skin and its lining, bent teeth outside.
     for (const [p, q, a, b] of SHIP[n].tears) {
       const hs = l.map((h, i) => [h, i]).filter(([h]) => h >= a && h <= b);
       const mid = [(p + q) / 2, c + (a + b) / 2, MID + sg * 6];
@@ -368,7 +372,7 @@ export const skin = (n: number, only?: 'glass') => {
         loft(
           out,
           hs.map(([, i]) => lining(n, x, i, sg)),
-          j => (j & 1 ? GIRDER : IRON),
+          () => RAW,
           mid,
           undefined,
           undefined,
@@ -381,11 +385,13 @@ export const skin = (n: number, only?: 'glass') => {
         [hs[0], 0.35],
         [hs[hs.length - 1], -0.35],
       ] as [number[], number][]) {
-        const out = along.map(x => shell(n, x, h, sg));
+        // A sill on a deck's top or a lintel on its underside goes 2 cm into the deck: it does not fight its face.
+        const y = deck(h) ? -0.02 : deck(h + 0.3) ? 0.02 : 0;
+        const out = along.map(x => off(shell(n, x, h, sg), [0, y, 0]));
         loft(
           out,
-          along.map(x => lining(n, x, i, sg)),
-          j => (j & 1 ? GIRDER : IRON),
+          along.map(x => off(lining(n, x, i, sg), [0, y, 0])),
+          () => RAW,
           mid,
           undefined,
           undefined,

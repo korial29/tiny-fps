@@ -8,6 +8,8 @@ import { AWNING } from '../shared/beach';
  * material's band holds it.
  */
 export const HULL = -1.05;
+/** Added to STEEL's layer, the same texture barely shiny on Landfall (the user, 2026-11-26: the steel cases): the shader's DULL_METAL. */
+export const DULL = 0.25;
 /**
  * The hull paint's pixel, in main(), before the light: `c` its colour, `n` its normal, `pw` the
  * pixel's size on it. Panel lines every 2 m along the hull and round it, gone where a pixel no
@@ -32,7 +34,7 @@ export const CANOPY_GLSL = (fog: string) =>
 if(Z>1.5){o=vec4(vec3(.56,.7,.68)*(1.-fr)*(1.-fz),1);return;}
 vec3 c=(K1(reflect(-V,n),0.)+X*3.*pow(max(dot(n,nz(O+V)),0.),300.))*fr;c=mix(c,F.rgb,fz);if(Vn>0)c=hv(c);o=vec4(c,1);return;}`;
 /** Its mirror, in main(), after the light: `k` the sky its normal `m` reflects (the lit sand under the horizon), `fr` the fresnel term; and the sand's light thrown back up under it. */
-export const GLOSS = `c+=hk*(mix(vec3(.8,.72,.56),k,smoothstep(-.3,.05,r.y))*(.15+.6*fr)+vec3(.3,.27,.21)*clamp(.5-m.y,0.,1.));`;
+export const GLOSS = `c+=hk*(mix(vec3(.8,.72,.56),k,smoothstep(-.3,.05,r.y))*(.06+.35*fr)+vec3(.15,.135,.105)*clamp(.5-m.y,0.,1.));`;
 /**
  * The camps' tarpaulins (debris.ts shelter()): lit cloth in the team's colour (c.x, c.y, c.w), matt.
  * Between SAND's band and -1.1, where the GLOSS spec starts, and under -1.08, where the runners'

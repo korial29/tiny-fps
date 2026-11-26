@@ -21,7 +21,7 @@ import { GRAIN, SAND, SKY, WATER, WET } from '../shore';
 import { N as PRINT_TEXELS, SPAN } from '../prints';
 import { FRAME } from '../../shared/beach';
 import { PLUME, SMOKE } from '../smoke';
-import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
+import { CANOPY, CANOPY_GLSL, DULL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
 import { JOINTS } from '../rig';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT } from '../skin';
 import { CLOTH } from '../mask';
@@ -165,6 +165,10 @@ export const RELIEF = 0.06;
 export const GRATE_RELIEF = 4;
 /** Landfall's steel and plates, shiny (the user, 2026-11-26): their Blinn-Phong strength and exponent, sharper than SPEC's; they mirror the sky more too, in shade as in the sun. */
 export const BRIGHT_METAL = [3, 200];
+/** Landfall's floors' grating, lightly shiny (the user, 2026-11-26): a highlight between SPEC's and BRIGHT_METAL's, and a little of the sky on its bars, none in its gaps. */
+export const BRIGHT_GRATE = [3, 180];
+/** Landfall's dull steel (paint.ts DULL): a soft highlight and a quarter of the sky the shiny steel mirrors. */
+export const DULL_METAL = [0.5, 60];
 
 // s: 1 on a texture, 0 on a flat colour. g: lava (which also drifts)
 // and layers -2 and -3, which glow: no light, no shade. Layer -3 is smoke: grey C.x (and C.w for
@@ -457,11 +461,14 @@ if(bs){float pr=smoothstep(.1,.45,P.y-${FRAME.water}.);h+=prh*pr;c*=1.-.38*prk*p
 if(abs(L-(${HULL}))<.005)${PANEL}
 #endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
+float dm=step(abs(L-${TEX.STEEL + DULL}),.01);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);
 #ifdef BEACH
 if(bs)R=mix(vec2(.05,10.),vec2(.8,140.),bw);
-if(hk>0.)R=vec2(1.6*hk,260.);
+if(hk>0.)R=vec2(.7*hk,260.);
 if(abs(L-${TEX.STEEL}.)<.5||abs(L-${TEX.METAL}.)<.5)R=vec2(${BRIGHT_METAL});
+if(abs(L-${TEX.GRATE}.)<.5)R=vec2(${BRIGHT_GRATE});
+if(dm>0.)R=vec2(${DULL_METAL});
 #endif
 vec3 y=mix(vec3(1),G[int(min(I,${MAX_TINTS - 1}.))]*(C.w-2.*I),s),V=normalize(E-P),w=nz(n+m);
 float sd=max(dot(m,O),0.)*smoothstep(0.,.1,dot(n,O)),sv=1.;
@@ -499,11 +506,12 @@ c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 #ifdef BEACH
 ${WET}
 ${SHEEN}
-c+=(step(abs(L-${TEX.STEEL}.),.5)+step(abs(L-${TEX.METAL}.),.5))*k*(.25+.6*fr)*(.15+.85*sv);
+c+=(step(abs(L-${TEX.STEEL}.),.5)*(1.-.75*dm)+step(abs(L-${TEX.METAL}.),.5))*k*(.25+.6*fr)*(.15+.85*sv);
+c+=step(abs(L-${TEX.GRATE}.),.5)*step(.3,t.a)*k*(.15+.5*fr)*(.15+.85*sv);
 #endif
 #ifdef MIRROR
 vec3 kk=k;
-float mw=step(abs(L-${TEX.GLASS}.),.5)*(.3+.7*fr)+step(abs(L-${TEX.STEEL}.),.5)*(.2+.5*fr);
+float mw=step(abs(L-${TEX.GLASS}.),.5)*(.3+.7*fr)+step(abs(L-${TEX.STEEL}.),.5)*(1.-.75*dm)*(.2+.5*fr);
 float mf=(1.-smoothstep(${MIRROR_NEAR[0]}.,${MIRROR_NEAR[1]}.,length(P-E)))*smoothstep(.05,.15,mw);
 if(mf>0.&&Bn>0){int bi;vec3 bn;rt(P+m*.03,r,bi,bn);if(bi>=0)kk=mix(k,texelFetch(Bx,ivec2(2,bi),0).rgb*(K1(bn,0.)*.4+X*max(dot(bn,O),0.)*.8),mf);}
 c+=kk*mw;

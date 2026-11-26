@@ -3,7 +3,7 @@ import { TEAM_TINT } from '../../shared/map';
 import { hash, noise } from '../../shared/relief';
 import { TEX } from '../../shared/types';
 import { dress, smooth } from '../mesh';
-import { HEM, HULL, TARP } from '../paint';
+import { DULL, HEM, HULL, TARP } from '../paint';
 import type { V } from './types';
 import {
   tex,
@@ -38,7 +38,8 @@ import { coat, BELL } from './hull';
 // The debris and the camps.
 
 /** The containers' brushed steel and their ribs, brushed upright, bright: the shader's steel shines (SPEC). */
-const [CASE, RIB] = [1.15, 0.9].map(k => tex(TEX.STEEL, k, 1, true));
+// Dull steel: the shader's DULL variant of STEEL, barely shiny.
+const [CASE, RIB] = [0.85, 0.7].map(k => tex(TEX.STEEL + DULL, k, 1, true));
 /** The crates' corner battens, paler than their planks, the grain up them. */
 const BATTEN = tex(TEX.WOOD, 1.35, 1, true);
 /** The tents' poles: weathered wood, the grain up them, a plank's width across. */

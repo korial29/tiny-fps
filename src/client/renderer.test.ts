@@ -310,7 +310,8 @@ describe('createRenderer', () => {
       expect([h2.from[0], v2.from[0]]).toEqual([v1.to, h2.to]);
       expect(new Set([scene, v0.to, h0.to, v1.to, h1.to, v2.to, h2.to]).size).toBe(7);
       expect(compose.to).toBeNull();
-      expect(compose.from).toEqual([scene, v0.to, v1.to, v2.to]);
+      // Units 0 to 3: the units above hold the store's data, the footprints and the mirrors' boxes, which no pass reads here.
+      expect(compose.from.slice(0, 4)).toEqual([scene, v0.to, v1.to, v2.to]);
     });
 
     it('unbinds units 1 to 3 after the composite: the next frame draws into the blurs', () => {

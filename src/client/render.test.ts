@@ -810,6 +810,19 @@ const block = (src: string, open: string) => {
 };
 
 describe('what a pixel pays for', () => {
+  it('mirrors the boxes in glass and steel only where the map has some', () => {
+    // A ray a pixel against every box near the eye: the programs that draw runners, and the maps
+    // without glass or steel, keep none of it (the same frame, 2.0 ms of GPU on Tranquility).
+    expect(fragOf(HIGHLINE, 'LAND')).toContain('\n#define MIRROR\n');
+    expect(fragOf(HIGHLINE, 'FLESH')).not.toContain('#define MIRROR');
+    expect(fragOf(HIGHLINE, 'DEPTH')).not.toContain('#define MIRROR');
+    const flat = {
+      ...HIGHLINE,
+      brushes: HIGHLINE.brushes.map(b => ({ ...b, top: TEX.CONCRETE, side: TEX.CONCRETE })),
+    };
+    expect(fragOf(flat, 'LAND')).not.toContain('#define MIRROR');
+  });
+
   it('compiles the moon only into a map that has it', () => {
     expect(fragOf(HIGHLINE)).not.toContain('#define MOON');
     expect(fragOf(MAPS.tranquility)).toContain('\n#define MOON\n');

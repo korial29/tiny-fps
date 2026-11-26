@@ -103,7 +103,8 @@ const BUDGETS = [
   // 279,552 B: the Hunter's disc reaching bodies 0.5 m off its line (the user, 2026-11-26).
   // 280,704 B: Landfall's swimming, its breaststroke and the view under the water (the user, 2026-11-26: raise; 280,400 B before the merged changes of #413 and #414).
   // 280,960 B: the water's splash and swim sounds (the user, 2026-11-26).
-  { file: 'dist/index.js', max: 280_960 },
+  // 281,344 B: Landfall 25 % longer, its lattice laid on the centre line and its blocks of granite (the user, 2026-11-26).
+  { file: 'dist/index.js', max: 281_344 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -115,7 +116,8 @@ const BUDGETS = [
   // 58,000 B until Landfall's hollow hull and the bots' pull ups through its decks (the user, 2026-11-25: 58,500 B).
   // 58,500 B until that hull rebased on the ws-free room entry (#399) and the fires' damage (#400) (the user, 2026-11-25: 58,700 B).
   // 58,950 B: Landfall's swimming (the user, 2026-11-26).
-  { file: 'dist/local.js', max: 58_950 },
+  // 59,392 B: Landfall 25 % longer, its lattice on the centre line and its blocks of granite (the user, 2026-11-26).
+  { file: 'dist/local.js', max: 59_392 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
@@ -134,7 +136,8 @@ const LAZY = {
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
   tranquility: 18_688,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
-  landfall: 14_464,
+  // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
+  landfall: 15_616,
 };
 
 const imports = src => [

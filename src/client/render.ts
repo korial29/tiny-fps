@@ -414,6 +414,9 @@ t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));
 if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}
 #endif
 }
+#ifdef BEACH
+//ROCK
+#endif
 vec3 c=mix(vec3(C.xy,C.w),t.rgb,s);
 vec3 n=normalize(normalize(N)+cg),dx=dFdx(P),dy=dFdy(P),a=cross(dy,n),b=cross(n,dx);
 float kb=FL(clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5)),pw=max(length(dx),length(dy));
@@ -633,16 +636,18 @@ type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
  * effects (no regolith), `ORB` the globe alone, `DEPTH` the shadow maps' depth (a few lines: the
  * colour's registers kept every shadow map's pixels from running as many at once); with none, all of it. Left in where it never runs,
  * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
- * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon.
+ * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon. `rock` is the GLSL of the
+ * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk).
  */
 export const fragOf = (
   def: Pick<WorldDef, 'scenery' | 'seam' | 'relief' | 'helmets'>,
   kind = 'LAND\n#define FLESH',
+  rock = '',
 ) =>
   FRAG.replace(
     '\n',
     `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
-  );
+  ).replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`);
 
 /** A map with the moon's sky: its globe, stars and craters. Not the beach, whose sand is a relief too. */
 const moonly = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
@@ -890,8 +895,15 @@ export const city = (world: World): World => ({
  * A map's own scenery, loaded with its chunk before the renderer is made (decor()): its ground drawn
  * once, and on the moon the Earth (`sky`, the ground's last vertices) and where it stands.
  */
-/** A map's own scenery: its land, its sky, the Earth's place, and glass drawn blended after the rest (Landfall's canopy). */
-export type Decor = { land: number[]; sky: number[]; heavens?: Vec3; glass?: number[] };
+/** A map's own scenery: its land, its sky, the Earth's place, glass drawn blended after the rest (Landfall's canopy), and its rocks' GLSL. */
+export type Decor = {
+  land: number[];
+  sky: number[];
+  heavens?: Vec3;
+  glass?: number[];
+  /** GLSL for the map's rocks (TEX.ROCK) under BEACH, spliced in by fragOf(): Landfall's granite, which its chunk brings. */
+  rock?: string;
+};
 /** The scenery of a map that has none of its own: the city's is drawn here. */
 export const BARE: Decor = { land: [], sky: [] };
 
@@ -1465,7 +1477,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L', 'Dp']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
     const variant = (kind: string, names = UNIFORMS): Variant => {
-      const [p, l] = link(VERT, fragOf(world.def, kind), names);
+      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock), names);
       return { p, u: l, sent: new Map() };
     };
     [land, bodies, globed, shade] = [

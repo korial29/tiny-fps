@@ -1,18 +1,19 @@
 // Landfall, the beach level (docs/BEACH.md): a capture the flag on a Caribbean beach cut in two by
-// a crashed ship. Red's half (z 100 to 200) is written and flipped across z = 100; the wreck lies
+// a crashed ship. Red's half (z 125 to 250) is written and flipped across z = 125; the wreck lies
 // along x on that line, which is its own plane of symmetry, and is written once.
 // The sand and the seabed are relief (relief.ts); everything else is grey boxes for now.
 // No DOM, no Node API.
 import { TEAM_TINT } from './map';
-import { rockMid, rockOf } from './moon';
+import { rockMid } from './moon';
 import { hash, noise } from './relief';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
 type Vec3 = [number, number, number];
+type V3 = Vec3;
 
-/** The beach is 200 m long: a point at z has its twin at ZED - z. */
-export const ZED = 200;
+/** The beach is 250 m long: a point at z has its twin at ZED - z. */
+export const ZED = 250;
 const MID = ZED / 2;
 const [RED, BLUE] = TEAM_TINT;
 const { METAL, STEEL, PAINT, WOOD, STONE, GRATE } = TEX;
@@ -22,10 +23,11 @@ const YELLOW: Vec3 = [0.95, 0.75, 0.1];
 /**
  * The frame every piece is laid on, metres. Across x, from the sea to the forest: the water is too
  * deep at `sea`, the waterline is at `shore` (the sand is at `water` there), the first trees stand
- * at `trees`, nothing is walked past `east`. Along z the headlands' rocks close the beach before
- * `cape` and after ZED - `cape`.
+ * at `trees`, nothing is walked past `east`. Along z the sand runs on past each camp, among rocks,
+ * to the headland's mass of rock, which closes the beach before z = `cape` and after ZED - `cape`:
+ * past the ends of the 250 m, `cape` being negative.
  */
-export const FRAME = { sea: 0, shore: 30, trees: 90, east: 110, cape: 8, water: 0 };
+export const FRAME = { sea: 0, shore: 30, trees: 90, east: 110, cape: -6, water: 0 };
 
 /**
  * Feet under this have gone under: the runner is put back at a spawn (WorldDef.floor, the fall of
@@ -33,8 +35,8 @@ export const FRAME = { sea: 0, shore: 30, trees: 90, east: 110, cape: 8, water: 
  * at 1.4 m of water a standing runner still looks over it.
  */
 export const DEPTH = -1.4;
-/** Where nobody goes, x and z: the ghost wall behind the first palms and the one in each headland. */
-export const EDGE = { east: FRAME.trees + 5, cape: FRAME.cape / 2 };
+/** Where nobody goes, x and z: the ghost wall behind the first palms, and the one in each headland's mass, 4 m into it (z = cape and ZED - cape). */
+export const EDGE = { east: FRAME.trees + 5, cape: FRAME.cape - 4 };
 
 /**
  * The wreck, a hull along x on the centre line, broken in three: each section's x0 and x1. The
@@ -219,40 +221,95 @@ export const WING = {
  * it. The second lies along z in the lagoon off the tail's end, awash, stood on.
  */
 export const ENGINES = [
-  [38.5, 125.3, 2.7, 19, 0.78],
-  [4.5, 112, 2.5, 9],
+  [38.5, 150.3, 2.7, 19, 0.78],
+  [4.5, 137, 2.5, 9],
 ];
 
 /** Red's camp: the escape pod its flag stands by (x, z, radius). */
-export const POD = [60, 174, 4];
+export const POD = [60, 219, 4];
 /** The camp's ground, level. */
 export const CAMP = 1.25;
 
 /**
- * Red's headland, the rocks that close the beach past z = ZED - FRAME.cape, from the sea to the
- * trees: each x, z, radius, height and seed, a form of moon.ts rockOf(). Blue's are their twins.
- * The map makes them solid and the scenery draws them, both from this list.
+ * Red's headland: each rock's x, z, radius, height and seed, a form of blockOf(). Blue's are their
+ * twins. The map makes them solid and the scenery draws them, both from this list. Low and
+ * scattered on the sand behind the camp, open sand between them, and along the waterline none: the
+ * strand runs on past the headland's wall (EDGE.cape), which stands on open sand there, to rocks
+ * in the sea that are only drawn. Bigger toward the trees, where the headland's mass begins.
  */
 export const ROCKS = [
-  [-4, 190, 7, 9, 1],
-  [6, 196, 8, 11, 2],
-  [18, 193, 6, 7, 3],
-  [28, 198, 9, 13, 4],
-  [40, 195, 7, 9, 5],
-  [51, 199, 8, 12, 6],
-  [62, 196, 6, 8, 7],
-  [72, 199, 9, 14, 8],
-  [83, 195, 7, 10, 9],
-  [94, 198, 8, 12, 10],
-  [105, 194, 7, 9, 11],
+  // Out on the sand, low.
+  [38, 237, 3.5, 2.6, 1],
+  [57, 242, 3, 2.2, 2],
+  [47, 251, 4, 3, 3],
+  [66, 254, 4.5, 3.6, 4],
+  [78, 241, 4, 3.4, 5],
+  [33, 256, 2.8, 1.8, 6],
+  // Toward the trees, bigger: the foot of the mass.
+  [87, 250, 5.5, 5, 7],
+  [97, 243, 6, 6.5, 8],
+  [100, 256, 7.5, 9, 9],
+  [89, 262, 7, 7, 10],
 ];
+
+/**
+ * The form of a block of granite of radius R and height H from a seed, as rockOf() in moon.ts: how
+ * far it reaches from its middle (rockMid() over the ground) along a unit vector. A rounded box
+ * (superellipsoids of the powers 4 and 8 blended: flat faces, rounded edges), turned and stretched by the seed, split
+ * by two planes (a corner or a side sheared off, the edge softened), its faces dented by a low
+ * noise. Under its middle it goes straight down, as wide as at its middle, to under the ground.
+ * Only + - * /, Math.sqrt and the hash: the map's boxes come from it on every side.
+ */
+export const blockOf = (s: number, R: number, H: number) => {
+  const h = (k: number) => hash(s, k, 151);
+  // A turn about y with no Math.cos: the point of a circle by its rational parameter.
+  const t = 2 * h(1) - 1;
+  const [cx, sx] = [(1 - t * t) / (1 + t * t), (2 * t) / (1 + t * t)];
+  const c = H - rockMid(H);
+  const [a, b] = [R * (0.85 + 0.3 * h(2)), R * (0.6 + 0.3 * h(3))];
+  const deep = rockMid(H) + 0.7 * H;
+  /** The split planes: a unit normal and how far out of the middle along it, of what the box reaches there. */
+  const cuts = [4, 8].map(k => {
+    const [nx, ny, nz] = [2 * h(k) - 1, 0.35 * h(k + 1), 2 * h(k + 2) - 1];
+    const l = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    return [nx / l, ny / l, nz / l, 0.7 + 0.2 * h(k + 3)];
+  });
+  const box = (u: V3): number => {
+    const x = (u[0] * cx + u[2] * sx) / a;
+    const z = (u[2] * cx - u[0] * sx) / b;
+    const y = u[1] / c;
+    const [x4, y4, z4] = [x * x * x * x, y * y * y * y, z * z * z * z];
+    // A quarter of the power 4, three of 8: flat faces, the edges rounded but not soft.
+    const p4 = Math.sqrt(Math.sqrt(x4 + y4 + z4));
+    const p8 = Math.sqrt(Math.sqrt(Math.sqrt(x4 * x4 + y4 * y4 + z4 * z4)));
+    return 0.25 / p4 + 0.75 / p8;
+  };
+  const reach = (u: V3): number => {
+    if (u[1] < 0) {
+      const l = Math.sqrt(u[0] * u[0] + u[2] * u[2]);
+      return l < 1e-6 ? deep : Math.min(reach([u[0] / l, 0, u[2] / l]) / l, deep / -u[1]);
+    }
+    let r = box(u);
+    for (const [nx, ny, nz, k] of cuts) {
+      const d = u[0] * nx + u[1] * ny + u[2] * nz;
+      if (d > 1e-3) {
+        // Where the plane is, softened over 0.2 m: min(r, p) less a round fillet.
+        const p = (k * box([nx, ny, nz])) / d;
+        const w = Math.max(0.2 - Math.abs(r - p), 0) / 0.2;
+        r = Math.min(r, p) - 0.05 * w * w;
+      }
+    }
+    return r * (0.95 + 0.08 * noise(1.3 * u[0] + s, 1.3 * u[2] + 1.1 * u[1], s + 3));
+  };
+  return { reach };
+};
 
 /**
  * Red's first row of palms, the trunks a runner can touch: each x, z and radius at the foot. The
  * map makes them solid and the scenery draws a palm on each; the forest behind is drawn only.
  * The first stands clear of the nose's flank.
  */
-export const TRUNKS = Array.from({ length: 21 }, (_, i) => [
+export const TRUNKS = Array.from({ length: 28 }, (_, i) => [
   FRAME.trees + 3 * hash(i, 1, 7),
   MID + 9 + 4 * i + 2 * hash(i, 2, 7),
   0.22 + 0.1 * hash(i, 3, 7),
@@ -267,15 +324,17 @@ const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
 
 /** Metres between two nodes of the lattice. */
 export const CELL = 4;
+/** Where its rows of nodes lie along z: one on the centre line, so that every node has its twin (ZED / CELL is not whole). */
+export const NODE = MID % CELL;
 /**
  * Where the ground is level, x0, z0, x1, z1 (z in red's half) and the height: the way in to the
  * hold's door through the bank, the sand under the tip of the wing, the camp. Level for 6 m round each, so that
  * the lattice's triangles are, and back to the sand 6 m further; none within 12 m of the next.
  */
 export const FLATS = [
-  [57, 107, 61, 113, HOLD.floor - 0.25],
-  [56, 146, 66, 150, 1.3],
-  [44, 164, 76, 184, CAMP],
+  [57, 132, 61, 138, HOLD.floor - 0.25],
+  [56, 171, 66, 175, 1.3],
+  [44, 209, 76, 229, CAMP],
 ];
 /** The furrow the hull ploughed: how deep on its line, and how high the bank of sand thrown up on each side, 12 m off it. */
 export const FURROW = [1.5, 1.2];
@@ -306,9 +365,9 @@ export const at = (x: number, z: number): number => {
 
 /** The ground as it is walked on: at()'s lattice in float32, each square two triangles, as ground() in relief.ts reads it. */
 export const walked = (x: number, z: number): number => {
-  const [i, j] = [Math.floor(x / CELL), Math.floor(z / CELL)];
-  const [fu, fv] = [x / CELL - i, z / CELL - j];
-  const h = (u: number, v: number) => Math.fround(at(CELL * (i + u), CELL * (j + v)));
+  const [i, j] = [Math.floor(x / CELL), Math.floor((z - NODE) / CELL)];
+  const [fu, fv] = [x / CELL - i, (z - NODE) / CELL - j];
+  const h = (u: number, v: number) => Math.fround(at(CELL * (i + u), NODE + CELL * (j + v)));
   const [a, e] = [h(0, 0), h(1, 1)];
   return fu >= fv
     ? a + (h(1, 0) - a) * fu + (e - h(1, 0)) * fv
@@ -517,7 +576,7 @@ const centre: Brush[] = [
   ...FRAMES.map(b => note(line, 'frame', b)),
   note(line, 'raft', RAFT),
   // Behind the first palms, from one headland to the other and through the nose.
-  ghost(box(EDGE.east, -10, 0, EDGE.east + 2, 40, ZED, STONE)),
+  ghost(box(EDGE.east, -10, EDGE.cape - 2, EDGE.east + 2, 40, ZED - EDGE.cape + 2, STONE)),
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -625,9 +684,9 @@ const ENGINE = (() => {
  * hands reach the deck from it and the hanging body clears it.
  */
 const FLOATS = [
-  note(mine, 'float', box(16, -1.6, 116, 22, 0.35, 119, METAL)),
-  note(mine, 'float', box(10, -0.2, 113, 13, 0.5, 116, METAL)),
-  note(mine, 'float', box(23, -1.6, 107.6, 26, 0.2, 110, METAL)),
+  note(mine, 'float', box(16, -1.6, 141, 22, 0.35, 144, METAL)),
+  note(mine, 'float', box(10, -0.2, 138, 13, 0.5, 141, METAL)),
+  note(mine, 'float', box(23, -1.6, 132.6, 26, 0.2, 135, METAL)),
 ];
 
 /** The camp: the pod, the flag's step by it, a crate under each rack with a tarpaulin over it. */
@@ -662,46 +721,49 @@ const shelter = (x: number, z: number): Brush[] =>
       ),
     ),
   ].map(b => note(mine, 'shelter', b));
-const [GUNS, BLADES] = [crate(49, 176), crate(71, 176)];
-const [RIFLES, RAILS] = [crate(84, 150, 0.4, RED), crate(33, 128, 0.4, RED)];
+const [GUNS, BLADES] = [crate(49, 221), crate(71, 221)];
+const [RIFLES, RAILS] = [crate(84, 185, 0.4, RED), crate(33, 153, 0.4, RED)];
 
 /** The debris between the camp and the wing, a line to run: a panel, a container, the landing gear, a second container, the wing. */
-const PANEL = lay('panel', 67, 159.5, 70.5, 163, 0.9, METAL);
-const CONTAINER = lay('container', 68.5, 151, 71.1, 157, 2, METAL, ORANGE);
-const GEAR = lay('gear', 68.6, 145.6, 71, 148, 2.9, STEEL, YELLOW);
+// The panel and the first container are lower than they were on the camp's level sand: the dunes
+// stand higher here, and the jumps keep their steps.
+const PANEL = lay('panel', 67, 184.5, 70.5, 188, 0.65, METAL);
+const CONTAINER = lay('container', 68.5, 176, 71.1, 182, 1.875, METAL, ORANGE);
+const GEAR = lay('gear', 68.6, 170.6, 71, 173, 2.9, STEEL, YELLOW);
 /** A second container, between the landing gear and the wing's second break. */
-const LAST = lay('container', 64, 139.5, 67.5, 143, 2.6, METAL, ORANGE);
-const BOGIE = lay('gear', 67.6, 144.6, 72, 145.6, 1.2, STEEL);
+const LAST = lay('container', 64, 164.5, 67.5, 168, 2.6, METAL, ORANGE);
+const BOGIE = lay('gear', 67.6, 169.6, 72, 170.6, 1.2, STEEL);
 
 /** What else lies about red's half, most with a pack on it. */
 const SCRAP = {
-  camp: [crate(76, 168), crate(40, 172)],
+  camp: [crate(76, 213), crate(40, 217)],
   west: [
-    lay('panel', 44.5, 156.5, 47.5, 159.5, 0.5, METAL),
-    lay('container', 33, 148.7, 39, 151.3, 2.2, METAL, ORANGE),
-    lay('panel', 41, 138.5, 44, 141.5, 0.4, METAL),
-    lay('panel', 25.5, 134.5, 28.5, 137.5, 0.5, METAL),
-    lay('panel', 50.5, 114.5, 53.5, 117.5, 0.4, METAL),
+    // On the open strand between the camp and the field of debris.
+    lay('panel', 44.5, 191.5, 47.5, 194.5, 0.5, METAL),
+    lay('container', 33, 173.7, 39, 176.3, 2.2, METAL, ORANGE),
+    lay('panel', 41, 163.5, 44, 166.5, 0.4, METAL),
+    lay('panel', 25.5, 159.5, 28.5, 162.5, 0.5, METAL),
+    lay('panel', 50.5, 139.5, 53.5, 142.5, 0.4, METAL),
     // Against the flank under the tear of the lower deck: the way up to it.
-    lay('container', 49.5, 107.4, 52.5, 110, 2.6, METAL, ORANGE),
+    lay('container', 49.5, 132.4, 52.5, 135, 2.6, METAL, ORANGE),
   ],
   east: [
-    lay('panel', 62.5, 120.5, 65.5, 123.5, 0.4, METAL),
-    crate(80, 146),
-    crate(85.5, 140),
-    crate(84, 128),
-    lay('panel', 84.5, 110.5, 87.5, 113.5, 0.4, METAL),
+    lay('panel', 62.5, 145.5, 65.5, 148.5, 0.4, METAL),
+    crate(80, 171),
+    crate(85.5, 165),
+    crate(84, 153),
+    lay('panel', 84.5, 135.5, 87.5, 138.5, 0.4, METAL),
   ],
   // Skin standing in the sand: cover on the open strand, nothing to stand on.
   cover: [
-    lay('panel', 78, 131.6, 83, 132, 2.6, METAL),
-    lay('panel', 30, 141.6, 35, 142, 2.2, METAL),
-    lay('container', 76, 155, 82, 157.6, 2.6, METAL, ORANGE),
+    lay('panel', 78, 156.6, 83, 157, 2.6, METAL),
+    lay('panel', 30, 166.6, 35, 167, 2.2, METAL),
+    lay('container', 76, 190, 82, 192.6, 2.6, METAL, ORANGE),
   ],
 };
 
 /**
- * The boxes a headland rock collides with, inside what rockOf() draws: layers `tall` high, each cut
+ * The boxes a headland rock collides with, inside what blockOf() draws: layers `tall` high, each cut
  * across x in strips `wide` wide that run from the rock's face toward the beach back to its far
  * side or to `back`. Coarser than moon.ts fitted(), which would make 3000 boxes of red's eleven
  * rocks: these stand at the end of the beach, behind the spawns.
@@ -714,7 +776,7 @@ const massed = (
   s: number,
   back: number,
 ): number[][] => {
-  const { reach } = rockOf(s, R, H);
+  const { reach } = blockOf(s, R, H);
   const g = under(x - 0.8 * R, z - 0.8 * R, x + 0.8 * R, z + 0.8 * R);
   const mid = walked(x, z) + rockMid(H);
   const top = mid + reach([0, 1, 0]) - 0.1;
@@ -745,7 +807,9 @@ const massed = (
     return [edge(-1), edge(1)];
   };
   const out: number[][] = [];
-  const [wide, tall] = [2, 2];
+  // Finer across a boulder that stands out on the sand, which is walked round; coarser in the
+  // headland's mass, whose great rocks are only met at their feet.
+  const [wide, tall] = [R < 5 ? 1 : R < 8 ? 2 : 3, H < 5 ? 1 : H < 12 ? 2 : 3];
   for (let y0 = g[1] - 0.5; y0 < top - 0.3; y0 += tall) {
     const y1 = Math.min(y0 + tall, top);
     for (let x0 = -1.5 * R; x0 < 1.5 * R; x0 += wide) {
@@ -769,7 +833,7 @@ const CRAGS = ROCKS.map(([x, z, R, H, s]) => ({
   R,
   H,
   s,
-  parts: massed(x, z, R, H, s, ZED - EDGE.cape + 2),
+  parts: massed(x, z, R, H, s, ZED - EDGE.cape),
 }));
 
 const half: Brush[] = [
@@ -781,8 +845,8 @@ const half: Brush[] = [
   DAIS,
   GUNS,
   BLADES,
-  ...shelter(49, 176),
-  ...shelter(71, 176),
+  ...shelter(49, 221),
+  ...shelter(71, 221),
   RIFLES,
   RAILS,
   PANEL,
@@ -835,8 +899,8 @@ export const LAYOUT = {
 
 /** Eight, behind the pod, facing the other camp. */
 const SPAWNS: Spawn[] = [46, 54, 62, 70].flatMap((x): Spawn[] => [
-  [x, CAMP, 181, 0],
-  [x + 4, CAMP, 184, 0],
+  [x, CAMP, 226, 0],
+  [x + 4, CAMP, 229, 0],
 ]);
 
 const team = (red: boolean) => {
@@ -900,7 +964,7 @@ export const BEACH: WorldDef = {
   ]),
   // The sand and the bed, out to an ellipse round the beach that nobody reaches: the walls and
   // the depth close it first. No hole: every brush stands on the ground.
-  relief: { hole: [0, 0, 0, 0], bound: [56, MID, 100, 160], cell: CELL, at },
+  relief: { hole: [0, 0, 0, 0], bound: [56, MID, 100, 185], cell: CELL, origin: [0, NODE], at },
   // High over the sea, warm; a blue sky paling to the horizon and a light haze.
   sun: { dir: [-0.47, 0.83, 0.3], color: [3.2, 3, 2.6] },
   sky: [

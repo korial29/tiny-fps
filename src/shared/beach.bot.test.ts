@@ -240,7 +240,7 @@ describe('LANDFALL, a bot alone with the real physics', () => {
         expect([team, name, f.at, f.put]).toEqual([team, name, name, false]);
         // Waist deep in the flooded furrow of the west gap and in the shallows by the first float.
         expect(f.low).toBeGreaterThan(DEPTH + 0.4);
-        expect(f.seconds).toBeLessThan(name === 'lagoon' ? 32 : 20);
+        expect(f.seconds).toBeLessThan(name === 'lagoon' ? 37 : 25);
         // The high road is the gallery, up the wing by a rail over each of its two breaks (no
         // jump to miss) and down the other wing by its rails or off its edge, unhurt.
         if (!id) {
@@ -254,10 +254,12 @@ describe('LANDFALL, a bot alone with the real physics', () => {
 
   it('crosses on the lower deck from tear to tear, and drops out of it onto the sand', () => {
     for (const team of [0, 1]) {
-      const f = flight(1, team, 20, { from: [50, DECK, MID + (team ? -5 : 5)] });
+      // A bot of the high road's: one of the hold's, whose camp is 20 m further since the beach
+      // grew, now drops through the deck's hole into the hold, its own way.
+      const f = flight(0, team, 20, { from: [50, DECK, MID + (team ? -5 : 5)] });
       expect([f.at, f.y, f.put]).toEqual(['high', DECK, false]);
-      expect(f.state.hp).toBe(spawn(1, world, 0, team).hp);
-      expect(f.seconds).toBeLessThan(11);
+      expect(f.state.hp).toBe(spawn(0, world, 0, team).hp);
+      expect(f.seconds).toBeLessThan(14);
     }
   });
 
@@ -310,16 +312,16 @@ describe('LANDFALL, a bot alone with the real physics', () => {
 
   it('stays out of the deep water: a flag out of its depth is waited for at the edge of the shallows', () => {
     // Dropped where nobody stands, 8 m past the last bed that is waded.
-    const lost: FlagState = { state: FLAG.DROPPED, by: 0, x: 8, y: -2.2, z: 150, left: 600 };
+    const lost: FlagState = { state: FLAG.DROPPED, by: 0, x: 8, y: -2.2, z: 175, left: 600 };
     const f = flight(2, 0, 30, {
-      from: [30, walked(30, 150), 150],
+      from: [30, walked(30, 175), 175],
       sight: { flags: [home, lost] },
       done: () => false,
     });
     expect(f.put).toBe(false);
     expect(f.low).toBeGreaterThan(DEPTH + 0.2);
     expect(f.state.x).toBeLessThan(22);
-    expect(Math.abs(f.state.z - 150)).toBeLessThan(4);
+    expect(Math.abs(f.state.z - 175)).toBeLessThan(4);
   });
 
   it('jumps onto a box a little too high to step onto: the pack on the panel by the hold’s door', () => {
@@ -328,7 +330,7 @@ describe('LANDFALL, a bot alone with the real physics', () => {
     // 0.59 m over the level sand east of it: more than a step.
     expect(pack[1] - ground(world, x + 2, z)).toBeGreaterThan(STEP_H + 0.05);
     const f = flight(1, 0, 10, {
-      from: [58, ground(world, 58, 118), 118],
+      from: [58, ground(world, 58, 143), 143],
       hp: 2,
       sight: { packs: [pack] },
       done: p =>

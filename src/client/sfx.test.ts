@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIRES } from '../shared/beach';
+import { FIRES, ZED } from '../shared/beach';
 import {
   AIRS,
   LAYERS,
@@ -1002,7 +1002,7 @@ describe('Landfall\u2019s ambience', () => {
       expect(x).toBeLessThanOrEqual(30);
       expect(y).toBeGreaterThan(10);
       expect(z).toBeGreaterThanOrEqual(0);
-      expect(z).toBeLessThanOrEqual(200);
+      expect(z).toBeLessThanOrEqual(ZED);
     }
   });
 });

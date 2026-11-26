@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BEACH, EDGE, FRAME, HULL, ROCKS, TRUNKS, ZED, walked } from '../shared/beach';
-import { rockMid, rockOf } from '../shared/moon';
+import { BEACH, EDGE, FRAME, HULL, ROCKS, TRUNKS, ZED, blockOf, walked } from '../shared/beach';
+import { rockMid } from '../shared/moon';
 import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
 import { jungle, parts } from './jungle';
@@ -20,7 +20,7 @@ const [RED, BLUE] = [false, true];
 
 /** How many vertices of `rocks` lie on the form of the rock [x, z, R, H, seed] standing on the ground at g, or on its twin's. */
 const onForm = (rocks: number[][], [x, z, R, H, s]: number[], g: number, twin: boolean) => {
-  const { reach } = rockOf(s, R, H);
+  const { reach } = blockOf(s, R, H);
   const mid = g + rockMid(H);
   return rocks.filter(v => {
     const [dx, dy, dz] = [v[0] - x, v[1] - mid, (twin ? ZED - v[2] : v[2]) - z];
@@ -41,23 +41,23 @@ describe('jungle', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share of the level: under 150,000 vertices in all', () => {
-    expect(count(made.rocks)).toBeLessThan(53_000);
-    expect(count(made.palms)).toBeLessThan(32_000);
-    expect(count(made.forest)).toBeLessThan(33_000);
-    expect(count(made.brush)).toBeLessThan(21_000);
-    expect(count(made.canopy)).toBeLessThan(12_500);
+  it('keeps each part within its share of the level: under 145,000 vertices in all', () => {
+    expect(count(made.rocks)).toBeLessThan(45_500);
+    expect(count(made.palms)).toBeLessThan(40_000);
+    expect(count(made.forest)).toBeLessThan(22_500);
+    expect(count(made.brush)).toBeLessThan(16_500);
+    expect(count(made.canopy)).toBeLessThan(15_500);
     expect(count(made.snags)).toBeLessThan(4_000);
-    expect(count(jungle(BEACH))).toBeLessThan(150_000);
+    expect(count(jungle(BEACH))).toBeLessThan(145_000);
   });
 
-  it('draws every rock of ROCKS and its twin on the form the map collides with, in basalt', () => {
+  it('draws every rock of ROCKS and its twin on the form the map collides with, in granite', () => {
     const rocks = verts(made.rocks);
     expect(rocks.every(v => v[8] === TEX.ROCK)).toBe(true);
     for (const r of ROCKS) {
       for (const twin of [RED, BLUE]) {
-        // A sphere of 320 triangles at least, each corner written with its triangle, less what is under the sand.
-        expect(onForm(rocks, r, walked(r[0], r[1]), twin)).toBeGreaterThan(500);
+        // A sphere of 320 triangles, each corner written with its triangle, less what is under the sand (most of a low block).
+        expect(onForm(rocks, r, walked(r[0], r[1]), twin)).toBeGreaterThan(r[2] < 5 ? 300 : 500);
       }
     }
   });
@@ -131,7 +131,7 @@ describe('jungle', () => {
     expect(leaves(mid).every(v => v[6] > v[7])).toBe(true);
     expect(leaves(mid + 60).every(v => v[7] > v[6])).toBe(true);
     // The first row is collision: every palm of it still stands (the test above), singed at most.
-    expect(count(made.palms)).toBe(29_736);
+    expect(count(made.palms)).toBe(39_648);
   });
 
   it('stands on the relief where there is one', () => {
@@ -145,7 +145,7 @@ describe('jungle', () => {
     const rocks = verts(sloped.rocks);
     for (const r of ROCKS) {
       for (const twin of [RED, BLUE]) {
-        expect(onForm(rocks, r, 0.03 * r[0], twin)).toBeGreaterThan(500);
+        expect(onForm(rocks, r, 0.03 * r[0], twin)).toBeGreaterThan(r[2] < 5 ? 300 : 500);
       }
     }
   });

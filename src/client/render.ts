@@ -842,6 +842,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       if (prints && !posing) {
         prints.pass(dt, eye[0], eye[2]);
         gl.bindVertexArray(main);
+        // A stamped print leaves its own queue bound: the next frame's vertices would go into it,
+        // be refused for its size, and the bodies be drawn from the frame before the first step.
+        gl.bindBuffer(gl.ARRAY_BUFFER, frameBuf);
         live = undefined;
         use(land);
       }

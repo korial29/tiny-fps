@@ -1,70 +1,115 @@
-from art import Pic
+from art import ALL, Pic, box, ell, poly, stroke
 
 PAL = {
-    'o': '#0a0c12',
-    'wh': '#ffffff', 'w': '#dfe4ec', 'wd': '#a8b0be', 'wx': '#6a7282',  # white armour
-    'r': '#ff3d4f', 'rd': '#b0202e',  # stripes
-    'v': '#101a2c', 'vm': '#203a62', 'vh': '#4a8ae0', 'vy': '#ffb04a', 'vs': '#ffffff',  # visor
-    'kh': '#4a4e5a', 'k': '#2a2c34', 'kd': '#16171c',  # suit joints, gun
-    'g': '#5cf0ff', 'gb': '#d8ffff',  # gun glow
-    'l': '#ffd24a',  # helmet lamp
+    'o': '#06060e',
+    'k0': '#080818', 'k1': '#100e2a', 'k2': '#1c1440', 'k3': '#30205c', 'k4': '#4c2c78', 'k5': '#7c4494',  # space, a nebula across it
+    'st': '#ffffff', 'sb': '#8cc8ff',  # stars
+    'e0': '#3a3c50', 'e1': '#62667c', 'e2': '#9498aa', 'e3': '#c4c6d0',  # the moon's ground
+    'w0': '#1a1c36', 'w1': '#34386a', 'w2': '#5c64a0', 'w3': '#8e9ac8', 'w4': '#bcc8e4', 'w5': '#e4ecf8', 'w6': '#ffffff',  # white suit, its shade blue
+    'r0': '#6a1024', 'r1': '#c4203a', 'r2': '#ff4c5a',  # the suit's stripes
+    'v0': '#1a0a04', 'v1': '#5a2408', 'v2': '#b05a10', 'v3': '#f09a20', 'v4': '#ffd858', 'v5': '#fffad0',  # gold visor
+    'g0': '#0c0e16', 'g1': '#1e222e', 'g2': '#343a4a', 'g3': '#58607a', 'g4': '#8c98b4',  # gun, joints
+    'b0': '#0a4a9c', 'b1': '#20a0f0', 'b2': '#78e4ff', 'b3': '#f0ffff',  # the beam
 }
+SUIT = 'w0 w1 w2 w3 w4 w5 w6'
+VISOR = 'v0 v1 v2 v3 v4 v5'
+GUN = 'g0 g1 g2 g3 g4'
+SUN = (-0.5, -0.62, 0.6)  # raw sunlight from the upper left
 
 
 def draw():
-    p = Pic(PAL)
-    # Chest, the near shoulder high and forward.
-    p.poly([(6, 42), (20, 34), (44, 34), (58, 42), (60, 64), (4, 64)], 'w')
-    p.poly([(36, 35), (44, 34), (58, 42), (60, 64), (40, 64)], 'wd')
-    p.poly([(8, 43), (20, 36), (30, 36), (24, 48), (10, 50)], 'wh')
-    p.rect(26, 44, 38, 56, 'k')  # chest unit
-    p.rect(27, 45, 37, 50, 'kh')
-    p.pxs([(29, 47), (31, 47)], 'r')
-    p.pxs([(33, 47), (35, 47)], 'g')
-    p.line([(6, 58), (58, 58)], 'r', 2)
-    p.line([(6, 60), (58, 60)], 'rd')
-    # Far shoulder and near shoulder.
-    p.ell(44, 32, 62, 48, 'wd')
-    p.ell(45, 32, 59, 44, 'w')
-    p.ell(0, 30, 24, 52, 'wd')
-    p.ell(1, 30, 22, 48, 'w')
-    p.ell(3, 31, 15, 40, 'wh')
-    p.line([(2, 44), (22, 42)], 'r', 2)
+    p = Pic(PAL, [SUIT, VISOR, GUN, 'k0 k1 k2 k3 k4 k5', 'e0 e1 e2 e3'])
+    # Space: a band of nebula from the lower left to the upper right, stars, the moon's horizon.
+    p.tone(ALL, 'k0 k1 k2 k3 k4 k5 k4 k3 k2 k1 k0', lambda x, y: (x * 0.45 + (63 - y) * 0.9 + 6) / 100, 0.9)
+    for i, (x, y) in enumerate(((3, 4), (9, 14), (15, 6), (50, 3), (57, 9), (61, 17), (47, 12), (5, 24), (54, 24), (12, 30), (60, 30), (2, 36), (44, 2))):
+        p.px(x, y, 'st' if i % 3 else 'sb')
+    p.rows(55, 3, '''
+.w.
+wsw
+.w.
+''', {'w': 'sb', 's': 'st'})
+    ground = poly([(0, 46), (20, 44), (44, 45), (63, 43), (63, 63), (0, 63)])
+    p.grad(ground, 'e3 e2 e1 e0', (0, 44), (0, 60))
+    p.fill(ell(3, 48, 11, 51), 'e0')
+    p.line([(4, 51), (10, 51)], 'e3')
+
+    def form(m, cx, cy, rx, ry, ramp, amb=0.16, light=SUN):
+        p.fill({(x + dx, y + dy) for x, y in m for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}, 'o')
+        p.ball(m, cx, cy, rx, ry, ramp, light, amb)
+
+    # The far shoulder, then the chest and its control unit.
+    far = ell(36, 32, 58, 50)
+    form(far, 47, 42, 12, 10, SUIT)
+    chest = poly([(8, 42), (18, 35), (40, 35), (50, 42), (52, 64), (6, 64)])
+    form(chest, 26, 46, 26, 24, SUIT)
+    p.shift(poly([(34, 36), (42, 35), (52, 42), (54, 64), (38, 64)]) & chest, -1)
+    unit = box(26, 48, 38, 58)
+    p.fill({(x + dx, y + dy) for x, y in unit for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}, 'o')
+    p.bevel(unit, GUN, 2, flat=0.45)
+    p.pxs([(28, 51), (30, 51)], 'r2')
+    p.pxs([(33, 51), (35, 51)], 'b2')
+    p.line([(28, 54), (36, 54)], 'g0')
+    p.line([(8, 60), (25, 60)], 'r1')
+    p.line([(8, 59), (25, 59)], 'r2')
+    p.line([(39, 60), (52, 60)], 'r0')
+    p.line([(39, 59), (52, 59)], 'r1')
     # Neck ring.
-    p.poly([(20, 30), (46, 30), (44, 37), (22, 37)], 'k')
-    p.poly([(20, 30), (46, 30), (45, 32), (21, 32)], 'kh')
-    # The helmet, a dome with its visor turned three quarters right.
-    p.ell(16, 0, 48, 34, 'w')
-    p.ell(17, 0, 38, 20, 'wh')
-    p.poly([(38, 2), (48, 12), (48, 26), (40, 34), (32, 33)], 'wd')
-    p.line([(18, 20), (24, 30)], 'wx')
-    # The red stripe over its crown.
-    p.line([(28, 0), (24, 14)], 'r', 2)
-    p.line([(29, 0), (26, 12)], 'rd')
-    # The lamp on its side.
-    p.rect(17, 12, 21, 17, 'wx')
-    p.rect(18, 13, 20, 16, 'l')
-    # The visor: dark, a sunset caught in it, a glint.
-    p.poly([(26, 10), (46, 9), (48, 16), (46, 26), (30, 27), (25, 18)], 'v')
-    p.poly([(27, 18), (47, 15), (46, 22), (30, 24)], 'vm')
-    p.poly([(28, 22), (46, 20), (46, 24), (30, 26)], 'vy')
-    p.poly([(28, 11), (36, 10), (30, 16)], 'vh')
-    p.pxs([(30, 12), (31, 12), (30, 13), (40, 11), (41, 11)], 'vs')
-    p.line([(25, 9), (47, 8)], 'wx')
-    p.line([(26, 28), (46, 27)], 'wx')
-    # The far arm raised, a pistol held up beside the helmet, its emitter glowing.
-    p.poly([(46, 44), (52, 34), (61, 36), (60, 48)], 'wd')
-    p.poly([(47, 43), (52, 35), (57, 36), (53, 44)], 'w')
-    p.poly([(49, 10), (56, 9), (57, 27), (51, 28)], 'k')
-    p.poly([(49, 10), (51, 10), (53, 28), (51, 28)], 'kh')
-    p.line([(53, 11), (55, 26)], 'g')
-    p.rect(50, 6, 55, 9, 'kd')
-    p.pxs([(51, 5), (52, 4), (53, 4), (54, 5), (52, 3)], 'gb')
-    p.pxs([(52, 5), (53, 5)], 'g')
-    p.poly([(51, 27), (57, 26), (59, 33), (53, 34)], 'kd')
-    # The glove round its grip.
-    p.ell(47, 27, 59, 38, 'wd')
-    p.ell(48, 27, 55, 33, 'w')
-    p.pxs([(48, 34), (50, 36), (53, 37), (56, 36)], 'wx')
-    p.outline('o')
+    ring = poly([(15, 31), (41, 30), (43, 37), (29, 39), (15, 37)])
+    form(ring, 26, 33, 16, 6, GUN, 0.3)
+    p.line([(16, 32), (40, 31)], 'g4')
+    # The helmet: a white dome, its gold visor three quarters to the right.
+    helm = ell(11, 0, 45, 34)
+    form(helm, 28, 17, 17, 17, SUIT)
+    p.rim(helm, 'w6', ((0, -1), (-1, 0)), box(11, 0, 30, 14))
+    p.line([(24, 1), (21, 10)], 'r1', 2)  # the red stripe over the crown
+    p.line([(24, 1), (21, 9)], 'r2')
+    p.fill(box(12, 14, 16, 21), 'o')  # the lamp at its temple
+    p.fill(box(13, 15, 15, 20), 'g3')
+    p.fill(box(13, 16, 14, 19), 'v4')
+    visor = poly([(22, 9), (38, 7), (43, 11), (45, 18), (43, 25), (38, 29), (25, 29), (20, 22), (20, 14)])
+    p.fill({(x + dx, y + dy) for x, y in visor for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}, 'g1')
+    p.edge(visor, 'w2', ((0, 1),))
+    # In the visor: the black sky above, the sunlit ground below, the sun itself a hard glint.
+    p.ball(visor, 34, 18, 14, 13, VISOR, (-0.45, -0.3, 0.84), 0.0)
+    p.shift(visor & box(0, 0, 63, 12), -1)
+    p.shift(poly([(20, 22), (45, 19), (44, 25), (38, 29), (25, 29)]) & visor, 1)
+    p.line([(21, 22), (44, 19)], 'v1')
+    p.fill(box(25, 12, 28, 15), 'v5')
+    p.pxs([(24, 13), (29, 14), (26, 11), (27, 16), (26, 16)], 'v4')
+    p.line([(31, 11), (36, 10)], 'v4')
+    p.pxs([(40, 23), (41, 22)], 'v5')
+    # The near shoulder, the red band round it.
+    pad = ell(-5, 32, 21, 56)
+    form(pad, 8, 44, 14, 13, SUIT)
+    p.fill(stroke([(0, 48), (10, 49), (20, 45)], 2) & pad, 'r1')
+    p.fill(stroke([(0, 47), (10, 48), (16, 46)], 1) & pad, 'r2')
+    # The rifle levelled to the right, its emitter alight.
+    body = poly([(16, 43), (42, 40), (43, 48), (16, 51)])
+    nose = poly([(42, 41), (53, 40), (53, 46), (43, 47)])
+    for m, flat in ((body, 0.45), (nose, 0.6)):
+        p.fill({(x + dx, y + dy) for x, y in m for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1))}, 'o')
+        p.bevel(m, GUN, 2, (-0.5, -0.8), flat)
+    p.fill(box(24, 44, 39, 45), 'b0')  # the glowing cell along its side
+    p.line([(25, 44), (38, 44)], 'b2')
+    p.pxs([(27, 44), (28, 44), (33, 44)], 'b3')
+    p.fill(box(26, 38, 34, 40), 'g1')  # scope
+    p.line([(26, 38), (34, 38)], 'g4')
+    p.px(35, 39, 'b2')
+    for x in (45, 47, 49, 51):
+        p.line([(x, 42), (x, 44)], 'g0')
+    # Gloves: one at the grip, one under the nose.
+    for cx, cy in ((21, 51), (41, 49)):
+        fist = ell(cx - 4, cy - 4, cx + 4, cy + 4)
+        form(fist, cx, cy, 5, 5, SUIT, 0.2)
+        p.pxs([(cx - 2, cy + 1), (cx, cy + 2), (cx + 2, cy + 1)], 'w1')
+    # The beam out of the tile, a burst where it leaves the emitter.
+    p.fill(box(54, 41, 63, 45), 'b0')
+    p.fill(box(54, 42, 63, 44), 'b1')
+    p.line([(54, 43), (63, 43)], 'b3')
+    p.line([(56, 42), (63, 42)], 'b2')
+    burst = poly([(52, 43), (55, 40), (55, 36), (57, 40), (60, 38), (58, 42), (58, 44), (60, 48), (57, 46), (55, 50), (55, 46)])
+    p.fill(burst, 'b1')
+    p.fill(ell(53, 41, 58, 45), 'b2')
+    p.fill(box(54, 42, 57, 44), 'b3')
+    p.pxs([(51, 37), (59, 34), (52, 50), (61, 50)], 'b2')
     return p

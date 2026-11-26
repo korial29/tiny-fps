@@ -138,7 +138,7 @@ const LAZY = {
   'cast-opus': 148_992,
   'cast-mp3': 365_824,
   // The character screen's tiles, hand-drawn pixel art (lobby.ts; the user, 2026-11-26).
-  'cast-art': 4_096,
+  'cast-art': 8_192,
   // The ships' predictive targeting (index.ts).
   targeting: 1_792,
   // Tranquility's and Landfall's scenery (render/scene.ts decor()), the rounded stones that both draw

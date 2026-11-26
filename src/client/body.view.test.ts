@@ -95,10 +95,11 @@ describe('body', () => {
     ]) {
       for (const pitch of [0, -1.2, 1]) {
         const v = draw(watch(p, 40), p, pitch);
-        // The near runner minus its head, neck and fists, its arms close, plus two hands of under 6000 vertices each.
+        // The near runner minus its head, neck and fists, its arms close, plus two hands of under 8700 vertices each.
         expect(v.length).toBeGreaterThan(3500);
         // The pouch on the hip adds about 200 (the user, 2026-11-09).
-        expect(v.length).toBeLessThanOrEqual(26000);
+        // 26000 until the hands took 1722 vertices more each (the user, 2026-11-26: a more real hand).
+        expect(v.length).toBeLessThanOrEqual(30000);
         for (const { at, n } of v) {
           expect(at.every(Number.isFinite)).toBe(true);
           expect(Math.hypot(...n)).toBeCloseTo(1);

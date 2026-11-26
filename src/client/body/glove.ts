@@ -36,7 +36,7 @@ import {
 import type { Claws, Ring } from './fingers';
 import { PALM_END, palmAt, palmNormal, palmSkin } from './palm';
 import { gear, sinews } from './gear';
-import { HAND_SKIN, hideAt } from './hide';
+import { HAND_SKIN, HIDE_TO, hideAt } from './hide';
 import { THENAR, mound } from './mound';
 import { along } from './reach';
 import { HAND_SPOT, handSpots } from './spots';
@@ -136,7 +136,7 @@ const tidy = (x: number) => Math.round(x * 1e9) / 1e9;
 const BUILT = new Map<string, number[]>();
 const KEPT = 128;
 /** The Hunter's nail: the share of the last phalanx its bed covers, how far it goes on past the fingertip (metres) and how much of that it curves toward the palm. */
-const NAIL = { bed: 0.62, free: 0.02, curve: 0.22 };
+const NAIL = { bed: 0.62, free: 0.02, curve: 0.22, sides: 6 };
 /** Where the four fingers leave the palm, index to little: across the hand, and how far along it, metres. */
 const ROOT_X = [0, 1, 2, 3].map(i => 0.034 - 0.0225 * i);
 const KNUCKLES = 0.092;
@@ -180,17 +180,40 @@ const shape = (
   let layer = -1;
   const hide = clawStyle === 'short' && !lite;
   /** A point and a direction in hand space, in `paint` of its ring. */
-  const put = ([x, y, z]: Vec3, [m, n, w]: Vec3, r = 0) => {
-    let c = paint(r);
-    // The Hunter's bare skin takes his hide's gradient and grain (hideAt()); his nails and spots
-    // keep their own colour.
-    // And the shader's skin pass (HAND_SKIN): pores and a fine grain, on its place in the hand.
-    let l = layer;
+  /** hideAt()'s two numbers for each vertex of the Hunter's skin: worked out once a vertex, not once a corner of each triangle round it (its sines were half of the hand's build). */
+  const dyed = new Map<Vec3, number[]>();
+  const put = (p: Vec3, [m, n, w]: Vec3, r = 0) => {
+    const x = p[0];
+    const y = p[1];
+    const z = p[2];
+    const c = paint(r);
+    // The Hunter's bare skin takes his hide's gradient and grain (hideAt()), and the shader's skin
+    // pass (HAND_SKIN): pores and a fine grain, on its place in the hand. His nails and spots keep
+    // their own colour.
     if (hide && c === tint) {
-      c = hideAt(tint, x, y, z);
-      l = HAND_SKIN;
+      let dye = dyed.get(p);
+      if (!dye) {
+        dye = [0, 1];
+        hideAt(dye, x, y, z);
+        dyed.set(p, dye);
+      }
+      const l = dye[0];
+      const k = dye[1];
+      out.push(
+        x,
+        y,
+        z,
+        m,
+        n,
+        w,
+        (c[0] + (HIDE_TO[0] - c[0]) * l) * k,
+        (c[1] + (HIDE_TO[1] - c[1]) * l) * k,
+        (c[2] + (HIDE_TO[2] - c[2]) * l) * k,
+        HAND_SKIN,
+      );
+      return;
     }
-    out.push(x, y, z, m, n, w, c[0], c[1], c[2], l);
+    out.push(x, y, z, m, n, w, c[0], c[1], c[2], layer);
   };
   // The palm starts as the sleeve's cuff does, vertex for vertex, its normals leaning to the fingers.
   const PALM = [
@@ -223,7 +246,14 @@ const shape = (
   const FLESH_K = claws ? 0.5 : 1;
   // The Hunter's bare hand shows its tendons on its back (TENDON), in a skin twice as fine round.
   const tendons = shortClaws
-    ? (x: number, z: number) => Math.max(...ROOT_X.map(at => tendon(x, z, at))) - TENDON[0] * 0.35
+    ? (x: number, z: number) =>
+        Math.max(
+          tendon(x, z, ROOT_X[0]),
+          tendon(x, z, ROOT_X[1]),
+          tendon(x, z, ROOT_X[2]),
+          tendon(x, z, ROOT_X[3]),
+        ) -
+        TENDON[0] * 0.35
     : undefined;
   const skin = lite ? [] : palmSkin(PALM, CS, put, 0.75, FLESH_K, tendons);
   if (lite) {
@@ -299,7 +329,8 @@ const shape = (
           ring(1.85, 0.12, 0.08),
           ring(2, 0, 0),
         ],
-        lite ? 4 : FS,
+        // A thin plate: six sides are enough round it.
+        lite ? 4 : NAIL.sides,
         (q, n) => put(q, n),
       );
       return;

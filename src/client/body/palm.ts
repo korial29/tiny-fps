@@ -36,23 +36,27 @@ export const relief = (a: number, u: number) => {
 
 /** The row of the piecewise palm `keys` at `z` along the hand. */
 export const rowAt = (keys: Row[], z: number): Row => {
-  const k = Math.min(
-    Math.max(
-      keys.findIndex(r => r[0] > z),
-      1,
-    ),
-    keys.length - 1,
-  );
-  const [a, b] = [keys[k - 1], keys[k]];
+  let k = 1;
+  while (k < keys.length - 1 && keys[k][0] <= z) {
+    k++;
+  }
+  const a = keys[k - 1];
+  const b = keys[k];
   const f = Math.min(Math.max((z - a[0]) / (b[0] - a[0]), 0), 1);
-  return a.map((v, i) => v + (b[i] - v) * f);
+  return [
+    a[0] + (b[0] - a[0]) * f,
+    a[1] + (b[1] - a[1]) * f,
+    a[2] + (b[2] - a[2]) * f,
+    a[3] + (b[3] - a[3]) * f,
+  ];
 };
 
 /** A point of the palm's skin at the angle `a` round the row `[z, y, w, h]`, `out` off its ring. */
 export const onPalm = ([z, y, w, h]: Row, a: number, out: number): Vec3 => {
-  const [c, s] = [Math.cos(a), Math.sin(a)];
-  const n = unit([c / w, s / h, 0]);
-  return [w * c + n[0] * out, y + h * s + n[1] * out, z];
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  const l = out / (Math.hypot(c / w, s / h) || 1);
+  return [w * c + (c / w) * l, y + h * s + (s / h) * l, z];
 };
 
 /** What stands out of the back of a hand at x across it and z along it, metres: a bare hand's tendons. */

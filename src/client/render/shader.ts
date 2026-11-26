@@ -433,12 +433,12 @@ c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 #ifdef BEACH
 float bw=0.,hk=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
+if(abs(L-(${TARP}))<.001)${TARP_GLSL}
+if(abs(L-${TEX.GRATE}.)<.5)h*=${GRATE_RELIEF}.;
 #ifdef PRINTS
 if(bs){float pr=smoothstep(.1,.45,P.y-${FRAME.water}.);h+=prh*pr;c*=1.-.38*prk*pr;}
 #endif
 if(abs(L-(${HULL}))<.005)${PANEL}
-if(abs(L-(${TARP}))<.001)${TARP_GLSL}
-if(abs(L-${TEX.GRATE}.)<.5)h*=${GRATE_RELIEF}.;
 #endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
 vec2 R=SP[int(s>0.?L+.5:L<-1.2?${LAYERS + 1}.:L<-1.1?${LAYERS + 2}.:${LAYERS}.)];if(kt>0.)R=vec2(.22*kg,40.);if(kr>0.)R=vec2(.5*(.3+.7*rr),36.);

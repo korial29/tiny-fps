@@ -63,7 +63,7 @@ Each camp: an escape pod (`POD`) with tarpaulin shelters, the flag by the pod, t
 | Map      | `shared/beach.ts`, `shared/beach.test.ts`                 | Relief, the wreck and the debris as grey boxes, packs, spawns, the tests               |
 | Shore    | `client/shore.ts`, the water in `render.ts`               | The sand's mesh, the water, the horizon, the sky                                       |
 | Edge     | `client/jungle.ts`                                        | The forest with its levels of detail, the headlands                                    |
-| Wreck    | `client/hulk.ts`                                          | The hull, wings, engines, debris and inside, drawn on the map's boxes (after playtest) |
+| Wreck    | `client/hulk/`                                            | The hull, wings, engines, debris and inside, drawn on the map's boxes (after playtest) |
 | Bots     | `shared/nav.ts`, `shared/routes.ts`                       | Navigation, 24 bot matches (after playtest)                                            |
 | Mood     | `client/sfx.ts`, `demo/`                                  | Smoke, fire, surf, a song, the menu card (after playtest)                              |
 
@@ -143,7 +143,7 @@ bots' routes described above.
 
 The ship carried troops. Its inside now says so, and the canopy is glass.
 
-- **Troop seats** (`troops()`, `ROWS_OF_SEATS` in `hulk.ts`): fold-down rows along both flanks,
+- **Troop seats** (`troops()`, `ROWS_OF_SEATS` in `hulk/cabin.ts`): fold-down rows along both flanks,
   facing in, a seat every 0.55 m: a canvas pan and a webbed back slung from three tubes, legs every
   other seat; down, folded up, hanging broken or gone, a belt's strap dangling now and then. In the
   middle section's hold (x 44.6..57.1 and 60.9..73.4) and deck (44.6..47.3, 55.3..66.8,

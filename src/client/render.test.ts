@@ -809,6 +809,13 @@ describe('what a pixel pays for', () => {
     expect(FRAG).toContain('mg(');
   });
 
+  it('compiles the footprints only into the map program of the sand and the regolith', () => {
+    expect(fragOf(HIGHLINE, 'LAND')).not.toContain('#define PRINTS');
+    expect(fragOf(MAPS.tranquility, 'LAND')).toContain('\n#define PRINTS\n');
+    expect(fragOf(MAPS.landfall, 'LAND')).toContain('\n#define PRINTS\n');
+    expect(fragOf(MAPS.tranquility, 'FLESH')).not.toContain('#define PRINTS');
+  });
+
   it('sets every scene uniform through uni(), which every program gets', () => {
     // Set straight on the GL, a uniform would reach only the program in use: the map's and the
     // bodies' would draw with different values, and nothing would tell.

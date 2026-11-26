@@ -18,6 +18,7 @@ import { TOWARD, floored } from '../shared/physics';
 import { FALL, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import type { Vec3 } from './mesh';
+import type { Plant } from './prints';
 import { JOINT as J, PARENT, RESTS, axis, mul, rest, slerp, solve, turn } from './rig';
 import type { Pose, Quat } from './rig';
 import { grips } from './rover';
@@ -47,6 +48,8 @@ export interface Gait {
   readonly phase: number;
   /** Footsteps so far: a foot set down, or along a wall each half of the stride. */
   readonly steps: number;
+  /** The last foot set down flat (not along a wall): one object, rewritten at each footfall. */
+  readonly plant: Plant;
 }
 
 const TAU = Math.PI * 2;
@@ -556,6 +559,7 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
   /** After it, how far the hips trail the look (radians). */
   const TRAIL = BARE + 2;
   const sp = new Array<number>(TRAIL + 2).fill(0);
+  const plant = { n: 0, x: 0, y: 0, z: 0, yaw: 0, side: 1 };
   const feet: Foot[] = [0, 1].map(() => ({
     x: 0,
     y: 0,
@@ -893,6 +897,8 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
         const [df] = roll(P.td * gate);
         [f.on, f.px, f.pz, f.gy, f.k] = [true, f.x - fx * df, f.z - fz * df, f.tg, -1];
         steps++;
+        [plant.x, plant.y, plant.z, plant.yaw, plant.side] = [f.px, f.gy, f.pz, f.fy, n ? 1 : -1];
+        plant.n++;
       }
       f.u = u;
       if (f.on) {
@@ -1411,5 +1417,6 @@ export const createGait = (bow = BOW, kind = 0): Gait => {
     get steps() {
       return steps;
     },
+    plant,
   };
 };

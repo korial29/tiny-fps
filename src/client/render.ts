@@ -38,6 +38,9 @@ import {
 import { LIGHT, MAX_LIGHTS, MAX_SHADOWS, beams } from './lights';
 import { mouths, rooms } from '../shared/station';
 import { GRAIN, SAND, SKY, WATER, WET, lagoon, shore } from './shore';
+import { createPrints, SPAN } from './prints';
+import { FRAME } from '../shared/beach';
+import type { Prints } from './prints';
 import { PLUME, SMOKE, plumes } from './smoke';
 import { CANOPY, CANOPY_GLSL, GLOSS as SHEEN, HULL, PANEL } from './paint';
 import type { Light } from './lights';
@@ -312,6 +315,9 @@ precision highp float;precision highp sampler2DArray;precision highp sampler2DAr
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform int Hv;uniform float Gp;uniform sampler2D Og;out vec4 o;
+#ifdef PRINTS
+uniform sampler2D Fp;uniform vec2 Fc;
+#endif
 #ifdef DEPTH
 void main(){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;}
 #else
@@ -409,6 +415,10 @@ if(L<${SMOKE + 0.5})${PLUME(MIST)}
 if(L<-4.5)${WATER(MIST)}
 #endif
 vec4 t=texture(S,vec3(C.xy/${TILE}.+vec2(g*T*.01,0),max(L,0.)));
+#ifdef PRINTS
+vec2 pro=abs(P.xz-Fc.xy);float prw=1.-smoothstep(${SPAN / 2 - 3}.,${SPAN / 2 - 0.5},max(pro.x,pro.y)),prk=0.,prh=0.;
+if(prw>0.){vec4 prm=texture(Fp,P.xz/${SPAN}.);prk=(1.-prm.r)*prw;prh=((prm.r-1.)*.05+prm.a*.02*prm.r)*prw;}
+#endif
 float ks=LD(step(abs(L-${TEX.STONE}.),.5));vec3 cg=vec3(0);
 if(ks>.5){
 vec2 uv=C.xy/${TILE}.,gx=dFdx(uv),gy=dFdy(uv);float q=vn(C.xy*.11)*8.,iq=floor(q);
@@ -420,6 +430,9 @@ t.a=mix(t.a,.5,fd);
 t.rgb*=mix(.6,1.,smoothstep(.72,.97,normalize(N).y));
 #ifdef MOON
 if(Sn>0.){vec3 cq=cs(P.xz,length(P-E));float uw=smoothstep(.7,.95,normalize(N).y);t.rgb*=mix(1.,cq.z,uw);cg=-uw*vec3(cq.x,0,cq.y);}
+#ifdef PRINTS
+t.rgb*=1.-.3*prk;
+#endif
 #endif
 }
 #ifdef BEACH
@@ -444,6 +457,9 @@ float k=hd*smoothstep(wd,wd*.3,d)*(1.-smoothstep(.85,1.,abs(t)))+hd*step(g2.y,.5
 sr=max(sr,k);}
 c=mix(c,c*vec3(.45,.33,.28),mo*.85);c=mix(c,c*vec3(1.05,.72,.7),bl*.6);c=mix(c,c*vec3(.74,.58,.48),fk*.75);c=mix(c,c*vec3(1.18,.98,.98)+.025,sr*.8);}
 float h=t.a*s*${RELIEF}+f1*-.00004*pore*(1.-sr)+f2*.00007*n6+f3*.0002*n18+.00012*sr,det=dot(dx,a);
+#if defined(PRINTS)&&defined(MOON)
+h+=ks*prh;
+#endif
 float Wq=step(3.5,Wa),Wb=Wa-4.*Wq;
 #ifdef NINJA
 float nk=Wq*step(abs(L-(${GLOSS})),.02)*step(Wb,1.5),lz=nk*max(step(Rp.y,.6),step(.155,abs(Rp.x))*step(Rp.y,1.19)),qz=nk*(1.-lz)*smoothstep(1.,1.03,Rp.y);
@@ -506,6 +522,9 @@ c*=.8+.4*hq.z;st=hq.z;st2=hq.y;}
 float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(C.xy))));
 #ifdef BEACH
 float bw=0.,hk=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
+#ifdef PRINTS
+if(bs){float pr=smoothstep(.1,.45,P.y-${FRAME.water}.);h+=prh*pr;c*=1.-.38*prk*pr;}
+#endif
 if(abs(L-(${HULL}))<.005)${PANEL}
 #endif
 vec3 m=normalize(abs(det)*n-sign(det)*f*(dFdx(h)*a+dFdy(h)*b)+n*1e-9);
@@ -609,6 +628,8 @@ const UNIFORMS = [
   'Hv',
   'Pl',
   'Og',
+  'Fp',
+  'Fc',
 ];
 /** The vertex shader's uniforms (VERT): all the depth passes' program reads. */
 const DEPTH_UNIFORMS = [
@@ -654,8 +675,12 @@ export const fragOf = (
 ) =>
   FRAG.replace(
     '\n',
-    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
+    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
   ).replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`);
+
+/** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */
+const printed = (def: Pick<WorldDef, 'scenery' | 'relief'>) =>
+  !!def.relief && (def.scenery === 'beach' || def.scenery === 'moon');
 
 /** A map with the moon's sky: its globe, stars and craters. Not the beach, whose sand is a relief too. */
 const moonly = (def: Pick<WorldDef, 'scenery' | 'seam' | 'relief'>) =>
@@ -1229,6 +1254,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const tail = ground.length * 4;
   let cap = tail + TAIL;
   let shadows: WebGLTexture;
+  /** Footprints in the sand or the regolith, on unit 6; none on other maps. */
+  let prints: Prints | undefined;
   let depth: WebGLFramebuffer;
   /** The scene's programs (fragOf()): the map and the sky, the bodies, the moon's globe. */
   let land: Variant;
@@ -1501,6 +1528,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     uni('uniform1i', 'D', 1);
     uni('uniform1i', 'Og', 2);
     uni('uniform1i', 'Pl', 5);
+    uni('uniform1i', 'Fp', 6);
+    // Unit 6: the footprints' map (prints.ts), bound for good.
+    gl.activeTexture(gl.TEXTURE6);
+    prints = createPrints(gl, world);
     // Unit 5: the chitin's plates (plates()), read in the skin's rest space; it repeats (REPEAT, the default).
     const pn = PLATES * PLATE_TEXELS;
     gl.activeTexture(gl.TEXTURE5);
@@ -1668,6 +1699,15 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       const crowd = self ? [...others, self] : others;
       // A picture's runner moves on by its own time (poseDt); the scene's drops and dust wait.
       animate(runners, crowd, posing ? poseDt : dt, world, tracer, rovers, builds, looks);
+      // Each footfall since the last frame, of the others and of the own body, into the soil.
+      if (prints && !posing) {
+        for (const r of runners.values()) {
+          prints.feed(r.gait.plant);
+        }
+        if (body) {
+          prints.feed(body.plant);
+        }
+      }
       const [right, up, fwd] = basis(yaw, pitch, fx.roll);
       drive(v, eye, fwd, Date.now() / 1000, pieces);
       // The spent batteries and capsules falling to the floor.
@@ -1809,6 +1849,13 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       );
       const first = ground.length / STRIDE;
       const sunM = sunProj(sunDir, sunAt(eye, yaw));
+      // The footprints' map follows the eye; a portrait's eye is elsewhere and leaves it be.
+      if (prints && !posing) {
+        prints.pass(dt, eye[0], eye[2]);
+        gl.bindVertexArray(main);
+        live = undefined;
+        use(land);
+      }
       // Layer 0: the sun, once; then one layer per mapped light.
       uni('uniform1f', 'Z', -1);
       // Unit 1 is unbound meanwhile: sampling a map the framebuffer writes is a feedback loop.
@@ -1835,6 +1882,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       gl.viewport(0, 0, w, h);
       uni('uniformMatrix4fv', 'm', false, vp);
       uni('uniformMatrix4fv', 'W', false, sunM);
+      if (prints) {
+        uni('uniform2f', 'Fc', prints.cx, prints.cz);
+      }
       uni('uniform3fv', 'E', eye);
       uni('uniform1f', 'T', now);
       uni('uniform1f', 'Z', 1);

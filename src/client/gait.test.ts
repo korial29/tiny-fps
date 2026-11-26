@@ -316,6 +316,26 @@ describe('gait: the stride', () => {
     expect(rise(9)).toBeGreaterThan(rise(3));
   });
 
+  it('gives each foot set down, left and right in turn, where it stands', () => {
+    const g = createGait();
+    const p = state({ id: 1, vz: -3 });
+    const plants: { n: number; x: number; z: number; side: number }[] = [];
+    sim(g, p, 4, q => (q.z += q.vz * DT));
+    for (let t = 0; t < 2; t += DT) {
+      const n = g.plant.n;
+      p.z += p.vz * DT;
+      g.update(p, DT);
+      if (g.plant.n !== n) {
+        plants.push({ ...g.plant });
+        // Under the body, a stride's length at most from it, on its own side.
+        expect(Math.abs(g.plant.z - p.z)).toBeLessThan(1.2);
+        expect(g.plant.x * g.plant.side).toBeGreaterThan(0);
+      }
+    }
+    expect(plants.length).toBeGreaterThan(3);
+    plants.forEach((f, i) => i && expect(f.side).toBe(-plants[i - 1].side));
+  });
+
   it('takes more steps per second and longer ones as it speeds up', () => {
     const rate: number[] = [];
     const length: number[] = [];

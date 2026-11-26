@@ -27,6 +27,7 @@ import { strokeRate, strokeShare } from './gait';
 import type { PlayerState } from '../shared/types';
 import { ray } from '../shared/world';
 import type { World } from '../shared/world';
+import type { Plant } from './prints';
 import { SIDE, blowOf, createGait, frame, thrown } from './gait';
 import { FIRE_KEY, wristComputer } from './computer';
 import { fetched, pouch, pouchAt } from './pouch';
@@ -151,6 +152,8 @@ export interface Body {
   /** Its gait's footsteps so far and stride phase (Gait.steps, Gait.phase): the sounds of its steps and the bob of the view go with its feet. */
   readonly steps: number;
   readonly phase: number;
+  /** Its gait's last footfall (Gait.plant), for the prints it leaves. Recreated with the gait. */
+  readonly plant: Plant;
   /** The joints for a camera at `eye`; undefined without a player, or with the camera away from the body. */
   pose(eye: Vec3, yaw: number, pitch: number, roll?: number): Solved | undefined;
   /**
@@ -3211,6 +3214,9 @@ export const createBody = (world?: World): Body => {
     parried: () => (parry = 0),
     get steps() {
       return gait.steps;
+    },
+    get plant() {
+      return gait.plant;
     },
     get phase() {
       return gait.phase;

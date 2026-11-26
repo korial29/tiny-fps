@@ -548,10 +548,14 @@ vec3 hl=kx*X*sv*smoothstep(-.15,.35,dot(n,O))*(.08*pow(max(1.-d1*d1,0.),80.)*(.5
 vec3 skp=kb*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),90.)*(.07+.4*pow(clamp(1.-dot(n,V),0.,1.),5.))*(.6+.8*n9);
 for(int i=0;i<${MAX_LIGHTS};i++){
 if(i>=Q||g>0.)break;
-vec3 d=A[i].xyz-P;float r=length(d),k=K[i].w,u=B[i].w;
-d/=max(r,1e-4);
-float w=max(1.-r*r/(A[i].w*A[i].w),0.);
-w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*max(dot(m,d),0.);
+vec3 d=A[i].xyz-P;float dd=dot(d,d),rr=A[i].w*A[i].w;
+if(dd>=rr)continue;
+float k=K[i].w,u=B[i].w;
+d/=max(sqrt(dd),1e-4);
+float nd=max(dot(m,d),0.);
+if(nd<=0.)continue;
+float w=1.-dd/rr;
+w*=w*smoothstep(u,u+(1.-u)*.4,-dot(d,B[i].xyz))*nd;
 if(w>0.&&k>=0.){
 vec4 q=M[int(k)]*vec4(P+n*.03,1);q.xyz=q.xyz/q.w*.5+.5;
 float v=0.;
@@ -787,25 +791,53 @@ export const lightProj = ({ p, d, cone, range }: Light) =>
     [0.3, range],
   );
 
+/** The lights of this frame that reach into the view, refilled every frame. */
+const lit: Light[] = [];
+const PACKED = {
+  n: 0,
+  maps: 0,
+  a: new Float32Array(MAX_LIGHTS * 4),
+  b: new Float32Array(MAX_LIGHTS * 4),
+  k: new Float32Array(MAX_LIGHTS * 4),
+  m: new Float32Array(MAX_SHADOWS * 16),
+};
+
 /**
  * The lights as the shader's uniform arrays (see FRAG): at most MAX_LIGHTS of them, and the first
  * MAX_SHADOWS shadowed spots get a slot, whose matrix goes in m at 16 floats a slot.
  */
 export const pack = (lights: Light[]) => {
-  const [a, b, k] = [0, 0, 0].map(() => new Float32Array(MAX_LIGHTS * 4));
-  const m = new Float32Array(MAX_SHADOWS * 16);
+  // The same arrays every frame: the renderer uploads them at once, and nothing keeps them.
+  const { a, b, k, m } = PACKED;
+  a.fill(0);
+  b.fill(0);
+  k.fill(0);
+  m.fill(0);
+  const n = Math.min(lights.length, MAX_LIGHTS);
   let maps = 0;
-  const list = lights.slice(0, MAX_LIGHTS);
-  list.forEach((l, i) => {
+  for (let i = 0; i < n; i++) {
+    const l = lights[i];
     const slot = l.shadow && l.kind == LIGHT.SPOT && maps < MAX_SHADOWS ? maps++ : -1;
-    a.set([...l.p, l.range], i * 4);
-    b.set([...l.d, l.kind == LIGHT.POINT ? -9 : l.cone], i * 4);
-    k.set([...l.color, slot], i * 4);
+    const o = i * 4;
+    a[o] = l.p[0];
+    a[o + 1] = l.p[1];
+    a[o + 2] = l.p[2];
+    a[o + 3] = l.range;
+    b[o] = l.d[0];
+    b[o + 1] = l.d[1];
+    b[o + 2] = l.d[2];
+    b[o + 3] = l.kind == LIGHT.POINT ? -9 : l.cone;
+    k[o] = l.color[0];
+    k[o + 1] = l.color[1];
+    k[o + 2] = l.color[2];
+    k[o + 3] = slot;
     if (slot >= 0) {
       m.set(lightProj(l), slot * 16);
     }
-  });
-  return { n: list.length, maps, a, b, k, m };
+  }
+  PACKED.n = n;
+  PACKED.maps = maps;
+  return PACKED;
 };
 
 /**
@@ -1842,11 +1874,20 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         read = used;
       }
       // The headlights of the rovers that are driven, after the lights given.
-      const pk = pack(
-        [...lights, ...beams(rovers.filter(r => !r.ship))].filter(
-          l => l.kind != LIGHT.POINT || inView(vp, l.p, l.range),
-        ),
-      );
+      // Only the lights that reach into the view: the GPU pays for each on every fragment, and a
+      // spot's cone lies inside the sphere of its range as a point's light does.
+      lit.length = 0;
+      for (const l of lights) {
+        if (inView(vp, l.p, l.range)) {
+          lit.push(l);
+        }
+      }
+      for (const l of beams(rovers.filter(r => !r.ship))) {
+        if (inView(vp, l.p, l.range)) {
+          lit.push(l);
+        }
+      }
+      const pk = pack(lit);
       const first = ground.length / STRIDE;
       const sunM = sunProj(sunDir, sunAt(eye, yaw));
       // The footprints' map follows the eye; a portrait's eye is elsewhere and leaves it be.

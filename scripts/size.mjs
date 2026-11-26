@@ -124,7 +124,8 @@ const BUDGETS = [
   // 59,392 B: Landfall 25 % longer, its lattice on the centre line and its blocks of granite (the user, 2026-11-26).
   // 59,520 B: the bots swimming back to shore (the user, 2026-11-26).
   // 59,776 B: the Hunter's pistol in the step and the snapshot (the user, 2026-11-26).
-  { file: 'dist/local.js', max: 59_776 },
+  // 60,800 B: the bots at the wheel of the moon's rovers (the user, 2026-11-26).
+  { file: 'dist/local.js', max: 60_800 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured

@@ -175,6 +175,16 @@ All in `src/client/hunter/` (re-exported by `src/client/hunter.ts`); nothing her
 - **Hide.** Olive (`HIDE`), lightened to a green beige over the pecs and the abs (`HIDE_LIGHT`), with
   dark green spots gathered on the flanks, the back and the limbs (`HIDE_SPOT`). Painted per vertex.
   The hands (`HUNTER_HAND`, `body/fingers.ts`) take the same olive in both views.
+- **Hands** (the user, 2026-11-26). His bare hands on the shared hand (below): long pointed nails,
+  thin plates that leave the skin on the last phalanx and run 20 mm past the fingertip (`NAIL`,
+  `body/glove.ts`); his hide's spots along the edges of the hand and the sides of the fingers, each
+  with its twin across the middle, in a lighter green (`handSpots()`, `body/spots.ts`); a lighter
+  band down the middle of the hand and a grain painted per vertex (`hideAt()`, `body/hide.ts`); and
+  the shader's skin pass at part strength (`HAND_SKIN`) with a coarser grain of its own
+  (`HAND_GRAIN`, `mesh.ts`). The frame's vertices carry no rest place, so the renderer hands the
+  shader the two wrists' frames each frame (`Body.palms`, `palmsOf()`, the uniform `Hh`) and the
+  vertex shader finds a hand's skin in the hand's own space: the grain stays on the hand as it
+  moves. His fist is a true one (`HUNTER_FIST` 1).
 - **Spots.** Small round dark green dots (`spots()`, `SPOTS` to a square metre), the same on his two
   sides, thick on the flanks, the back and the limbs and thinning out over the chest. Each is a flat
   hexagon laid on the skin, rigid on its nearest bone. The painted blotches are mirrored too.

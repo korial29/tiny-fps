@@ -24,6 +24,8 @@ export interface Body {
   spun(): number;
   /** The katana in hand just struck a ball back: it snaps into the parry (DEFLECT, katana.ts) and eases back. */
   parried(): void;
+  /** Where its two hands were at the last draw(): the world to each hand's own space (palmsOf()), for the shader's skin pass on bare hands. */
+  readonly palms: Float32Array;
   /** Its gait's footsteps so far and stride phase (Gait.steps, Gait.phase): the sounds of its steps and the bob of the view go with its feet. */
   readonly steps: number;
   readonly phase: number;

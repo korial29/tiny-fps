@@ -573,6 +573,7 @@ describe('createRenderer', () => {
       pose: vi.fn(),
       muzzle: () => [0, 0, 0] as [number, number, number],
       spun: () => 0,
+      palms: new Float32Array(32),
       plant: { n: 0, x: 0, y: 0, z: 0, yaw: 0, side: 1 },
       parried: vi.fn(),
       steps: 0,

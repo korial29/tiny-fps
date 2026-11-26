@@ -61,6 +61,15 @@ export const [CARD_BASE, CARD_STEP] = [-1.36, 1e-4];
  */
 export const SKIN_LAYER = -1.06;
 /**
+ * The own bare hands' skin (the Hunter's): the frame's vertices carry no rest place, so the vertex
+ * shader finds theirs in the hand's own space (Body.palms) and sets it HAND_MARK metres along x, far
+ * from any body's, to tell the skin pass it is a hand's. There the pass adds a hide's grain to a
+ * man's fine pores (the user, 2026-11-26: more grain): this much of the colour for its grain, its
+ * blotches and its pores.
+ */
+export const HAND_MARK = 50;
+export const HAND_GRAIN = [0.3, 0.2, 0.14];
+/**
  * The xenomorph's chitin (the user, 2026-11-16: a texture), on its rest place: a shell of small
  * plates with fine seams, a grain, a mottled tone and a wet gloss that varies over it. Its rigid
  * pieces and its skin; not its tail, drawn in the world's frame each frame (it would swim on it).

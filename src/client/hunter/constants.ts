@@ -18,7 +18,7 @@ export const stature = 1.2;
 /** The helmet's width against its first build (the user, 2026-11-24: narrower). */
 export const HELM_WIDTH = 0.88;
 /** How far the Hunter's right fingers close (hand()'s curl): a fist, the claw's housing on its back. */
-export const HUNTER_FIST = 0.9;
+export const HUNTER_FIST = 1;
 /** The wrist blades and their housing stand off the back of the hand and sit up the forearm (the user, 2026-11-24: they cut into the hand), in the runner's metres. */
 export const WRIST_LIFT = 0.022;
 export const WRIST_UP = 0.02;

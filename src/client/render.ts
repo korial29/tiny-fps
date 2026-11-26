@@ -778,6 +778,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       const bodyAt = v.length;
       bodyPieces.length = 0;
       body?.draw(v, eye, yaw, pitch, fx.roll, rgb(colors.get(body.id) ?? '#888'), bodyPieces);
+      if (body) {
+        // Where its hands are: their skin's grain is drawn on them (VERT's `Hh`).
+        uni('uniformMatrix4fv', 'Hh', false, body.palms);
+      }
       if (tail + v.length * 4 > cap) {
         cap = tail + v.length * 8;
         alloc();

@@ -514,7 +514,9 @@ describe('the laser rifle in both hands', () => {
         .map(([r, u, f]) => [r, u - RIFLE_RISE * (f + RIFLE_GRIP[2]), f]);
       /** How deep a point is in the rifle: negative outside. */
       const deep = ([r, u]: number[]) => Math.min(HALF - Math.abs(r), u - UNDER);
-      expect(Math.max(...hand.map(deep)), name).toBeLessThan(0.008);
+      // 8 mm until the palm took a man's flesh (the user, 2026-11-26: a more real hand): its pads
+      // press 1.5 mm further into the handguard it carries.
+      expect(Math.max(...hand.map(deep)), name).toBeLessThan(0.01);
       // The palm on the block's underside, across its whole width.
       const under = hand.filter(([r, u]) => Math.abs(r) < HALF && u < UNDER);
       expect(Math.min(...under.map(([, u]) => UNDER - u)), name).toBeLessThan(0.003);

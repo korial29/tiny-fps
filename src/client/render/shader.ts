@@ -12,6 +12,8 @@ import {
   HAIR_ROOT,
   HAIR_SPAN,
   SHINE,
+  HAND_GRAIN,
+  HAND_MARK,
   SKIN_LAYER,
   WEAVE,
   TWILL,
@@ -54,7 +56,7 @@ import {
 // dress()), the rest armor() for one corner.
 export const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
-uniform mat4 m;uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
+uniform mat4 m,Hh[2];uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
 uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2],Hc;uniform float Ak;uniform vec4 Hs;
 out vec3 P,N,Rp;out vec4 C;out float Wa;
 vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
@@ -94,7 +96,8 @@ Wa=(Ak>0.?((K&1)!=0?2.:1.):0.)+(Sb.w==4?4.:0.);N=q;C=vec4(l.xy,h.w,l.z);gl_Posit
 if(Sm==3){float f=c.y,ph=c.w<0.?-1.:floor((${CARD_BASE}-c.z)*${(1 / CARD_STEP).toFixed(1)})*1.7,T=Hs.w,fo=f*step(0.,ph),o2=fo*(.002+.0015*sin(T*2.7+ph));
 vec3 d=.6*f*Hs.xyz+fo*vec3(.005*sin(T*2.3+ph)+.003*sin(T*5.1+ph*1.7),.002*sin(T*3.1+ph*.7),.004*sin(T*1.9+ph*1.3)+.003)+n*o2;
 P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);Rp=vec3(c.w<0.?-1.-c.w:c.w,step(c.w,0.),0);Wa=-1.;gl_Position=m*vec4(P,1);return;}
-P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;gl_Position=m*vec4(P,1);}`;
+P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;gl_Position=m*vec4(P,1);
+if(c.z<-1.03&&c.z>-1.08&&R[1]==vec4(0,0,0,1)){vec3 a=(Hh[0]*vec4(P,1)).xyz,b=(Hh[1]*vec4(P,1)).xyz;Rp=(dot(a,a)<dot(b,b)?a:b)+vec3(${HAND_MARK}.,0,0);}}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 export const POST_VERT = `#version 300 es
@@ -375,7 +378,8 @@ float kb=FL(clamp(-(L+1.)/.06,0.,1.)*step(-1.08,L)*step(L,-.5)),pw=max(length(dx
 float f1=kb*(1.-smoothstep(.35,1.,pw*1500.)),f2=kb*(1.-smoothstep(.35,1.,pw*600.)),f3=kb*(1.-smoothstep(.35,1.,pw*180.));
 float pore=0.,n6=0.,n18=0.,n9=0.;
 if(kb>0.){pore=smoothstep(.62,.86,n3(Rp*1500.));float ma=n3(Rp*65.)-.5,mb=n3(Rp*24.+7.)-.5,md=.09*ma+.07*mb;
-c*=1.+kb*(md*vec3(1,1.15,1.2)+max(-mb,0.)*vec3(.035,-.02,-.025))+f2*.07*(n3(Rp*600.+5.)-.5)-f1*.05*pore;n6=n3(Rp*600.);n18=n3(Rp*180.+3.);n9=n3(Rp*90.);}
+c*=1.+kb*(md*vec3(1,1.15,1.2)+max(-mb,0.)*vec3(.035,-.02,-.025))+f2*.07*(n3(Rp*600.+5.)-.5)-f1*.05*pore;n6=n3(Rp*600.);n18=n3(Rp*180.+3.);n9=n3(Rp*90.);
+if(Rp.x>${HAND_MARK - 10}.)c*=1.+kb*(${HAND_GRAIN[0]}*(n6-.5)+${HAND_GRAIN[1]}*(n18-.5)-${HAND_GRAIN[2]}*pore);}
 float sr=0.;
 if(kb>0.){vec3 q=Rp,z=vec3(Ss*.731,Ss*1.37,Ss*.291);float fm=1.-smoothstep(.4,1.,pw*500.),hd=smoothstep(1.53,1.58,q.y),fa=smoothstep(.02,-.04,q.z)*hd;
 vec3 mc=floor(q*28.),mh=hs(mc+z);float mo=fm*step(mh.x,.07)*smoothstep(.0011+.0011*mh.y,.0005,length(q-(mc+.25+.5*mh)/28.));
@@ -543,6 +547,7 @@ if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
 
 /** The scene's uniforms. */
 export const UNIFORMS = [
+  'Hh',
   'Bx',
   'Bn',
   'm',

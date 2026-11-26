@@ -22,11 +22,12 @@ import type { Step, Vec3 } from './nav';
 import type { Flying } from './plasma';
 import { stepOf } from './plasma';
 import { Sortie } from './sortie';
+import { Valet, driver } from './valet';
 import type { Errand } from './sortie';
 import type { Kit } from './kit';
 import type { Leg } from './routes';
 import { CUT, EV, FLAG, KEY, MODE } from './types';
-import type { FlagState, PlayerState } from './types';
+import type { FlagState, PlayerState, Rover } from './types';
 import { hidden, ray } from './world';
 import type { World } from './world';
 
@@ -51,6 +52,8 @@ export interface Sight {
   balls?: readonly Flying[];
   /** What the room asks of it at the orbital station (sortie.ts). */
   errand?: Errand;
+  /** The free rover within its walk, or the one it drives (valet.ts). */
+  car?: Rover;
   /** The numbers of its class (kit.ts): the marine's when absent. */
   kit?: Kit;
   /** Its team's roles this tick, worked out once by the room (squad()); else its own reckoning. */
@@ -122,6 +125,8 @@ export interface Persona {
   lead: number;
   /** The share of a target's change of speed it catches up with a tick. */
   track: number;
+  /** The share of the cars within its walk that it takes on a long way (valet.ts). */
+  ride: number;
 }
 
 /** A number in [0, 1) that looks random, the same for the same n. */
@@ -138,13 +143,14 @@ export const personaOf = (id: number, skill = SKILL): Persona => {
     miss: (0.3 - 0.22 * s) * (0.75 + 0.5 * r(1)),
     react: Math.round((40 - 24 * s) * (0.75 + 0.5 * r(2))),
     turn: 0.04 + 0.06 * s,
-    jumpy: 0.003 + 0.012 * r(3),
+    jumpy: 0.001 + 0.004 * r(3),
     strafe: Math.round(25 + 45 * r(4)),
     duck: 0.1 + 0.6 * s,
     warn: Math.round(1 + 2 * (1 - s) + r(5)),
     shake: (0.15 - 0.1 * s) * (0.75 + 0.5 * r(6)),
     lead: 0.3 + 0.6 * s,
     track: 0.03 + 0.09 * s,
+    ride: 0.25 + 0.4 * r(7),
   };
 };
 
@@ -429,6 +435,9 @@ export class Bot {
   private weighed = new Set<number>();
   /** Its errand to the orbital station, when it has one. */
   private sortie = new Sortie();
+  /** Its rides in a rover, and whether it was at the wheel last tick. */
+  private valet = new Valet();
+  private riding = false;
   /**
    * Whether it jumps unlike the marine the routes were flown with (the ninja, the xenomorph): it
    * steers every leap in the air to come down on its point, as the moon's (`land`).
@@ -533,7 +542,12 @@ export class Bot {
       this.sortie.board = undefined;
     }
     this.gaze = undefined;
-    const goal = this.goalOf(s);
+    const target = this.goalOf(s);
+    const ride = this.ride(s, p, target, t);
+    if (ride) {
+      return ride;
+    }
+    const goal = this.valet.board ?? target;
     // A way is planned from a floor, or from the water, where a swimmer stays: from the air it
     // would start where the bot is not going to be. Forward is kept till then, so a jump over a gap
     // does not fall short of it.
@@ -862,6 +876,45 @@ export class Bot {
       }
     }
     return this.posts[this.post].at;
+  }
+
+  /**
+   * Its rides (valet.ts): to a free rover on a long way, at its wheel along its own way, out where
+   * the way turns to a leg. None when it is on foot and goes its way.
+   */
+  private ride(s: Sight, p: PlayerState, goal: Vec3, t: number): Intent | undefined {
+    if (driver(p, s.car, this.id)) {
+      if (!this.riding) {
+        // The way it was on led to the car: a new one, to where it goes.
+        this.riding = true;
+        this.plan(s.world, p, goal);
+        this.valet.start(t);
+      }
+      const way: Vec3[] = [];
+      for (const st of this.steps.slice(this.step)) {
+        if (st.leg) {
+          break;
+        }
+        way.push(st.to);
+      }
+      const e = this.valet.drive(s.car, way.length ? way : [goal], s.world, t);
+      this.look = this.aim = e.yaw;
+      this.why = 'car';
+      return e;
+    }
+    if (this.riding) {
+      // Out of the car: a new way from where it stands.
+      [this.riding, this.goal] = [false, undefined];
+    }
+    if (
+      p.mode !== MODE.RIDE &&
+      this.why !== 'flag home' &&
+      this.foe < 0 &&
+      this.valet.wants(p, s.car, goal, t, this.persona.ride, () => this.rnd())
+    ) {
+      return s.car ? this.valet.approach(p, s.car, t) : undefined;
+    }
+    return undefined;
   }
 
   private urgent(why = this.why): boolean {

@@ -131,3 +131,11 @@ The bots take the marine, the ninja and the xenomorph in turn by their name (`BO
 - The Hunter, who spawns with his blades alone, detours on attack to the racks that hold his own weapons: the harpoon on the katana rack, the cannon on the rail gun rack and the disc on the rifle rack.
 - A class that takes no gun (`Kit.gear` false, the xenomorph) never walks to the rack, and runs at an enemy it sees within `HUNT` (15 m) and `HUNT_Y` (2 m) of its height: its claws reach an arm's length.
 - A class that jumps unlike the marine the routes were flown with (the ninja, the xenomorph, `Kit.jump`) steers every leap in the air to come down on its point, as the moon's `land` legs, still pressing a leg's dash and double jump on their step. Held forward all the way, the xenomorph's jump twice as high overshot the leaps before the enemy tower, caught a wall and fell.
+
+## Calmer jumps, cars, a later ship (the user, 2026-11-26)
+
+They jumped too much, never took the moon's rovers, and flew off to the orbital station at the start, leaving the flag. The flag stays their first aim.
+
+- **Jumpiness** is a third of what it was (`jumpy` 0.001 to 0.005 a tick in a fight).
+- **Cars** (`valet.ts`, `Persona.ride`): on a way of 70 m or more, with a free rover within 25 m that is no farther than half the way, a bot rolls once every 10 s against its `ride` (0.25 to 0.65, from its id). If it takes the car it walks to it, presses USE, plans its way from the wheel and drives along the nodes of its path up to the first leg of a jump, slows toward the end and gets out there. It also gets out when stuck, when a drop opens ahead or after 15 s. Not for a flag carrier. On Tranquility the rille cuts the way, so a ride is the run from the base to the crossing.
+- **The ship**: no bot is sent to the station until 150 s of the match have run (`SORTIE_AFTER` in `room.ts`).

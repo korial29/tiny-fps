@@ -12,7 +12,7 @@ import type { Conn, PlayerState, Rover } from './types';
 const DEF = MOON.station!;
 
 /** A room on the moon with one person (red, standing still) and `bots` less one bot (blue), run a tick at a time. */
-const match = (bots = 2) => {
+const match = (bots = 2, late = true) => {
   const room = new Room({ map: 'tranquility', bots });
   const c: Conn = { send: () => {} };
   room.connect(c);
@@ -25,7 +25,12 @@ const match = (bots = 2) => {
     rovers: Rover[];
     station: { phase: number; team: number; ticks: number };
     ticks: number;
+    ctf: { clock: number };
   };
+  // The bots go to the station only once the match has run a while: skip to then.
+  if (late) {
+    r.ctf.clock -= 150 * 60;
+  }
   let seq = 0;
   const players = () => [...r.peers.values()].filter(p => p !== null);
   const me = () => players().find(p => !p.bot)!;
@@ -38,6 +43,15 @@ const match = (bots = 2) => {
 };
 
 describe('a bot at the orbital station', () => {
+  it('leaves the ship on its pad at the start of a match: the flag comes first', () => {
+    const { r, tick } = match(2, false);
+    const ship = r.rovers.find(v => v.ship && v.z < 140)!;
+    for (let k = 0; k < 100 * 60; k++) {
+      tick();
+    }
+    expect(ship.driver).toBe(NOBODY);
+  });
+
   it('flies its ship up, presses the button, guards it, and flies home to its pad once it has struck', () => {
     const { r, me, bot, tick } = match();
     expect([me().info.team, bot().info.team]).toEqual([0, 1]);

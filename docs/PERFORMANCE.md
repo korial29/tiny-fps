@@ -258,6 +258,29 @@ GPU (median, base then after):
 The renderer's tests read a pass's run draws as one draw of the whole map (`test/draws.ts`);
 `cells.test.ts` checks the cut on Highline itself.
 
+### The vision's code, only in its frames (2026-11-26)
+
+A frame on the real GPU (headless Chrome, 8 bots, a timer query round the frame) was cut one part
+of the fragment shader at a time: an early `return;` at successive points of `main()`, or a block
+put behind `if(false)`, the shader rewritten in `shaderSource`. What came out of it, on Highline:
+the sun's shadow, the reflections, the lights, the shadow pass and the bloom each cost 0.1 to
+0.5 ms, but the xenomorph's and the Hunter's vision, the `if(Vn>0){...}` that never runs outside
+it, cost 2.9 ms of a 7.5 ms frame (4.6 ms of a 9.2 ms one once the mirrors were in the shader).
+Dead at run time, it still took registers from every pixel (the rule of fragOf()). It is now behind
+`VISION`: the map's and the bodies' programs are linked without it, and a frame of a vision draws
+with their twins that have it (`see()`, `sightOf()` in createRenderer), linked when a xenomorph or
+a Hunter is in the match (`wear()`), or on the first frame of the vision if not.
+
+| Map         | Before | After  |
+| ----------- | ------ | ------ |
+| Highline    | 9.2 ms | 4.6 ms |
+| Tranquility | 8.5 ms | 7.1 ms |
+| Landfall    | 9.3 ms | 9.2 ms |
+
+The same method found the rest: the lights' loop at 0.5 ms (PR #426 took what could be taken), and
+half the frame in the fragment shader. A segment timer per framebuffer does not work on the M-series
+GPU: the passes overlap and the sums are above the frame.
+
 ## Moving the work to the GPU
 
 The plan agreed on 2026-11-14 (the user), one step and one PR at a time, the size budget raised by

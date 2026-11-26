@@ -311,7 +311,11 @@ if(Y<.5){fa=Ob.w>.5?0.:max(Ob.y*smoothstep(120.,260.,length(P-E))*step(P.y,${ORB
 if(Ob.w>.5&&Ob.x>0.){vec3 p;if(gh(normalize(P-E),p))discard;}}
 #endif
 vec3 gk=fa>.002?K0(kd,kp):vec3(0);
-if(Y>.5){o=vec4(gk,1);if(Vn>0)o.rgb=hv(o.rgb);return;}
+if(Y>.5){o=vec4(gk,1);
+#ifdef VISION
+if(Vn>0)o.rgb=hv(o.rgb);
+#endif
+return;}
 if(fa>=1.&&C.z>-1.3){o=vec4(gk,1);return;}
 float L=C.z,s=step(0.,L),I=floor(C.w*.5),g=step(abs(L-${TEX.LAVA}.),.5)+step(L,-1.5);
 #ifdef BEACH
@@ -490,11 +494,15 @@ c+=wa*ch*X*sv*sd*pow(max(dot(m,nz(O+V)),0.),60.)*.5;
 c=mix(c,c*(.5+2.2*dot(k,vec3(.3,.4,.3)))*(.3+.7*smoothstep(-.1,.25,r.y)+1.5*exp(-abs(r.y-.12)*18.)),step(abs(L-(${GILT})),.02)*(.45+.45*fr));
 float D=min(length(P-E),${FOG_FAR}.),x=clamp(${FOG_RISE}*(P.y-E.y),-${FOG_CLIMB}.,${FOG_CLIMB}.),z=step(L,-2.5),ht=0.;
 c.g=mix(c.g,c.r,z);
-float xr=0.;vec3 fc=F.rgb;if(Vn>0){
+float xr=0.;vec3 fc=F.rgb;
+#ifdef VISION
+if(Vn>0){
 vec3 xd=P-E;float xa=max(dot(xd.xz,xd.xz),1e-4);
 float hh=0.,hc=0.;for(int i=0;i<Vn-1;i++){vec4 e=Ve[i];float cw=step(50.,abs(e.w)),eh=abs(e.w)-100.*cw;vec2 dq=P.xz-e.xz;float reach=Hv==2||cw>.5?1.4:.5;float hi=step(dot(dq,dq),reach)*step(e.y+.03,P.y)*step(P.y,e.y+eh);hc=max(hc,hi*cw);hi*=1.-cw;ht=max(ht,hi);float hf=(P.y-e.y)/eh;float rd=length(dq),vo=exp(-(hf-.56)*(hf-.56)*25.)*(1.-smoothstep(.24,.44,rd)),hbd=max(1.-abs(hf-.68)*1.6+1.1*vo,step(.85,hf)*mix(.8,.45,smoothstep(.9,1.,hf)));float hb=mix(mix(hbd,.42,smoothstep(.76,.85,hf)),mix(.15,.45,smoothstep(.45,.75,hf)),smoothstep(.19,.26,rd));hh=max(hh,hi*clamp(hb*(.7+.3*abs(dot(n,V))),0.,1.));
 if(e.w>0.||cw>.5)continue;float xs=max(dot(e.xz-E.xz,xd.xz)/xa,0.);vec3 xp=E+xd*xs;float xh=eh*.5;float halo=Hv==2?.9:.34;xr=max(xr,(1.-smoothstep(halo*.35,halo,length(xp.xz-e.xz)))*(1.-smoothstep(.8,1.,abs(xp.y-e.y-xh)/xh)));}
-c=mix(hv(c),Hv==2?vec3(.15,2.,1.8)*(.7+.5*abs(dot(n,V))):Hv==1?hpal(hh):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):Hv==1?vec3(2.,.75,.06):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));c=mix(c,vec3(.03,.1,.55)*(.6+.4*abs(dot(n,V))),hc);fc=hv(fc);}c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
+c=mix(hv(c),Hv==2?vec3(.15,2.,1.8)*(.7+.5*abs(dot(n,V))):Hv==1?hpal(hh):vec3(2.4,1.,.3)*(.45+.55*abs(dot(n,V))),ht);c=mix(c,Hv==2?vec3(.1,1.8,2.):Hv==1?vec3(2.,.75,.06):vec3(2.,.75,.2),xr*(.6+.15*sin(T*7.)));c=mix(c,vec3(.03,.1,.55)*(.6+.4*abs(dot(n,V))),hc);fc=hv(fc);}
+#endif
+c=mix(c,vec3(2.,.45,.03),Gp*(.55+.45*sin(T*14.)));
 o=vec4(mix(c,fc,1.-exp(-F.a*(1.-.6*step(1.,float(Vn)))*(1.-max(ht,xr))*D*(1.+${FOG_LAYER}*exp(${FOG_RISE}*(U-E.y))*(abs(x)<1e-3?1.-x*.5:(1.-exp(-x))/x)))),mix(1.,C.y*pow(abs(dot(n,V)),2.),z)*mix(1.,ac,kc)*ah);
 #ifdef MOON
 if(fa>.002)o.rgb=mix(o.rgb,gk,fa);
@@ -573,6 +581,10 @@ export interface Variant {
   p: WebGLProgram;
   u: Record<string, WebGLUniformLocation>;
   sent: Map<string, unknown[]>;
+  /** The kind it was made for (fragOf()), to make its twin with the vision's code. */
+  kind: string;
+  /** For a program with the vision's code (VISION): the one without it that it stands in for. */
+  base?: Variant;
 }
 export type Setter = Extract<keyof WebGL2RenderingContext, `uniform${string}`>;
 
@@ -609,17 +621,21 @@ export const mirrors = (brushes: readonly Brush[] = []): boolean =>
  * colour's registers kept every shadow map's pixels from running as many at once); with none, all of it. Left in where it never runs,
  * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
  * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon. `rock` is the GLSL of the
- * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk).
+ * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk). `sight` adds the
+ * vision's filter and its glowing prey (VISION), for a frame in a xenomorph's or the Hunter's
+ * vision: its loop and palettes were 4.6 ms a frame on Highline with none ever drawn, 1.4 on
+ * Tranquility and none on Landfall, through the registers they take from every pixel.
  */
 export const fragOf = (
   def: Pick<WorldDef, 'scenery' | 'seam' | 'relief' | 'helmets'> &
     Partial<Pick<WorldDef, 'brushes'>>,
   kind = 'LAND\n#define FLESH',
   rock = '',
+  sight = false,
 ) =>
   FRAG.replace(
     '\n',
-    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${kind.startsWith('LAND') && mirrors(def.brushes) ? '#define MIRROR\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}`,
+    `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${kind.startsWith('LAND') && mirrors(def.brushes) ? '#define MIRROR\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}${sight ? '#define VISION\n' : ''}`,
   ).replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`);
 
 /** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */

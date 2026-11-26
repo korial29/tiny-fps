@@ -203,7 +203,7 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
 // toward 1.
 export const POST_FRAG = `#version 300 es
-precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L;in vec2 U;out vec4 o;
+precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L,Dp;in vec2 U;out vec4 o;
 vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.9,2.,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
@@ -211,12 +211,15 @@ vec3 c;
 if(Y.z<1.)c=(b(U+Y.xy)+b(U-Y.xy)+b(U+Y.xy*vec2(1,-1))+b(U-Y.xy*vec2(1,-1)))/4.;
 else if(Y.z<2.)c=T(0.)*.227+(T(1.3846)+T(-1.3846))*.3162+(T(3.2308)+T(-3.2308))*.0703;
 else{
-c=texture(S[0],U).rgb+texture(S[1],U).rgb*1.3+texture(S[2],U).rgb*1.+texture(S[3],U).rgb*.7;
+vec3 s=texture(S[0],U).rgb;
+if(Dp>0.){vec2 e=Y.xy*3.,f=e*.7;s=mix(s,(s+texture(S[0],U+e*vec2(1,0)).rgb+texture(S[0],U-e*vec2(1,0)).rgb+texture(S[0],U+e*vec2(0,1)).rgb+texture(S[0],U-e*vec2(0,1)).rgb+texture(S[0],U+f).rgb+texture(S[0],U-f).rgb+texture(S[0],U+f*vec2(1,-1)).rgb+texture(S[0],U-f*vec2(1,-1)).rgb)/9.,Dp);}
+c=s+texture(S[1],U).rgb*1.3+texture(S[2],U).rgb*1.+texture(S[3],U).rgb*.7;
 vec2 q=U-.5;
 c=min(c,.6)+.4*(1.-exp(-max(c-.6,0.)/.4));
+c=mix(c,c*vec3(.3,.7,.95)+vec3(0,.025,.045),Dp*.85);
 float a=atan(q.y,q.x)*24.,h=fract(sin(floor(a)*12.9898)*43758.5453);
 c+=L*step(.85-.5*L,h)*sin(fract(a)*3.1416)*smoothstep(.2,.6,length(q))*fract(length(q)*3.-Y.w*.002+h*9.)*.22;
-c*=1.-(.7+.3*L)*dot(q,q);
+c*=1.-(.7+.3*L+.4*Dp)*dot(q,q);
 c=pow(max(c*vec3(.97,1.,1.03),0.),vec3(.92))+(fract(sin(dot(gl_FragCoord.xy+Y.w,vec2(12.9898,78.233)))*43758.5453)-.5)*.03;}
 o=vec4(c,1);}`;
 
@@ -1250,6 +1253,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   };
   let post: WebGLProgram;
   let pu: Record<string, WebGLUniformLocation> = {};
+  /** 0 to 1: the eye under the water, which the post pass tints. */
+  let under = 0;
   let fmt: number;
   /** The format of the small targets: the globe's, whose alpha is read, and the bloom's blurs. */
   let wide: number;
@@ -1457,7 +1462,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     owned.length = 0;
     made = [0, 0];
     asides.clear();
-    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L']);
+    [post, pu] = link(POST_VERT, POST_FRAG, ['S', 'Y', 'L', 'Dp']);
     gl.uniform1iv(pu.S, [0, 1, 2, 3]);
     const variant = (kind: string, names = UNIFORMS): Variant => {
       const [p, l] = link(VERT, fragOf(world.def, kind), names);
@@ -1624,6 +1629,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       }
       const tan = Math.tan(((FOV_DEG + fx.fov) * Math.PI) / 360);
       vp = viewProj(eye, yaw, pitch, w / h, fx.roll, tan);
+      // How far the eye is under the sea's sheet (the map's water, drawn a LIFT over it), over a hand's breadth.
+      under =
+        world.def.water === undefined
+          ? 0
+          : Math.min(Math.max((world.def.water + 0.05 - eye[1]) / 0.1, 0), 1);
       // The frame's vertices, into the store the last frame left.
       v.length = 0;
       pieces.length = 0;
@@ -1991,7 +2001,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         pass(a, 1, 0, 1 / a.h, b);
       });
       gl.uniform1f(pu.L, fx.lines);
-      pass(undefined, 2, 0, 0, hdr, ...bloom.map(l => l[0]));
+      // Under the sea's surface: tinted and a little blurred (the step between pixels is Y.xy).
+      gl.uniform1f(pu.Dp, under);
+      pass(undefined, 2, 1 / w, 1 / h, hdr, ...bloom.map(l => l[0]));
       // Units 1 to 3 hold the blurs, which the next frame draws into.
       for (let i = 3; i > 0; i--) {
         gl.activeTexture(gl.TEXTURE0 + i);

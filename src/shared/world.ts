@@ -58,6 +58,8 @@ export interface WorldDef {
   teams: [red: TeamDef, blue: TeamDef];
   /** Feet below this height have fallen off the roofs: the player is put back at a spawn of the team. */
   floor: number;
+  /** Height of the water's surface, when the map has a sea (Landfall): feet that sink SWIM_DEPTH under it swim (MODE.SWIM) instead of walking the bed. Absent: no water. */
+  water?: number;
   /** Health packs, points on tops (with the ammo packs and the rail cells at most PACK_BITS): walking within PACK_R gives PACK_HP, then it is gone PACK_BACK seconds. */
   packs?: Vec3[];
   /** Ammo packs, points on tops (with the health packs and the rail cells at most PACK_BITS): within PACK_R a player with the gun and fewer than AMMO_MAX shots takes AMMO_PACK, then it is gone AMMO_BACK seconds. */

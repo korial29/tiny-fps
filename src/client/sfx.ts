@@ -244,6 +244,10 @@ export const SOUND = {
    */
   HUNTER_CLICKS: 95,
   HUNTER_GROWL: 96,
+  /** A step in shallow water: a splash with spray and a bubble rising; also a body entering the water, lower. */
+  WADE: 97,
+  /** A swimmer's stroke through the water, looped: a low wash with a rustle over it, louder with his speed. */
+  SWIM: 98,
 } as const;
 
 /**
@@ -928,6 +932,17 @@ export const LAYERS: Voice[][] = [
     [3, 900, -0.6, 0.06, 0.4, 0.4, 0, 0.1, 0, 1, 0.32],
     [1, 58, -0.8, 0.02, 0.06, 0.26, 0.7, 0.12, 0, 1, 0.35, 0.6],
   ],
+  // WADE: the splash, its spray and a bubble sliding up.
+  [
+    [3, 6000, -1.5, 0.003, 0.01, 0.2, 0, 0.3, 0, 1, 0.8],
+    [3, 9000, 0, 0.002, 0, 0.1, 0.3, 0.6, 0, 1, 0.4, 0.01],
+    [2, 380, 1.8, 0.002, 0, 0.08, 0, 1, 0, 1, 0.25, 0.03],
+  ],
+  // SWIM: a wash of water and a rustle over it, both swelling and ebbing.
+  [
+    [3, 5000, 0, 0.001, 2.1, 0.001, 0.7, 0.16, 0, 1, 0.6],
+    [3, 2200, 0, 0.001, 2.1, 0.001, 0.4, 0.08, 0, 1, 0.7],
+  ],
 ];
 
 /** The seconds sound `id` lasts: its longest voice, from its start late to the end of its decay. */
@@ -946,6 +961,7 @@ export const LOOPED: number[] = [
   SOUND.JET,
   SOUND.STATIC,
   SOUND.HUNTER_SEEK,
+  SOUND.SWIM,
 ];
 
 /**

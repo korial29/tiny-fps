@@ -437,10 +437,10 @@ describe('prediction against the room', () => {
   })();
 
   it('flies a course that uses every move: a guard, so the run below is not a trivial one', () => {
-    // Every mode a runner gets into on foot: RIDE is a rover's seat, CLING the xenomorph's.
+    // Every mode a runner gets into on foot: RIDE is a rover's seat, CLING the xenomorph's, SWIM Landfall's sea.
     expect([...COURSE.modes].sort()).toEqual(
       Object.values(MODE)
-        .filter(m => m !== MODE.RIDE && m !== MODE.CLING)
+        .filter(m => m !== MODE.RIDE && m !== MODE.CLING && m !== MODE.SWIM)
         .sort(),
     );
     expect(COURSE.ev).toBe(Object.values(EV).reduce((a, b) => a | b, 0) & ~EV.RESPAWN);

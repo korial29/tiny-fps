@@ -890,6 +890,7 @@ export const BEACH: WorldDef = {
   // Armour: on the engine in the lagoon, and on the hull's back over the wings.
   vests: both([on(ENGINE)], [63, BACK[1], MID]),
   floor: DEPTH,
+  water: FRAME.water,
   fires: FIRES.map(([x, y, z, , r]): [number, number, number, number, number] => [
     x,
     y,

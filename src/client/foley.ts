@@ -66,9 +66,12 @@ export const createFoley = (
   a: Audio,
   /** Whether a player is a xenomorph: chitin feet that click, and a shriek for its dash. */
   beast: (id: number) => boolean = () => false,
+  /** The height of the water's surface on this map, if it has any (WorldDef.water): feet under it splash. */
+  water?: number,
 ): Foley => {
   const wind = a.loop(SOUND.WIND);
   const scrape = a.loop(SOUND.SCRAPE);
+  const swim = a.loop(SOUND.SWIM);
   /** Footfalls of the own player so far. */
   let feet = 0;
   const seen = new Map<number, { p: PlayerState; steps?: number }>();
@@ -82,10 +85,17 @@ export const createFoley = (
   let [air, drop] = [0, 0];
   /** The breath: the effort eased from 0 to 1, and where in its cycle it is (0 to 1). */
   let [effort, cycle] = [0, 0];
+  /** Whether the own player swam at the last call. */
+  let swam = false;
 
   /** The footfall n of p: harder at a sprint, softer crouched, the two feet a little apart in pitch. */
   const tap = (p: PlayerState, n: number, at?: Vec3) => {
     const run = sprinting(p);
+    // A foot in the water splashes, harder at a sprint.
+    if (water !== undefined && p.y < water - 0.05) {
+      a.play(SOUND.WADE, at, run ? 0 : -4, (run ? 0.95 : 1.05) * (n & 1 ? 1.08 : 0.92));
+      return;
+    }
     // The xenomorph's footfall, played softly (it moves stealthily); its four feet each a pitch.
     if (beast(p.id)) {
       a.play(SOUND.CHITIN, at, run ? -6.9 : p.mode === MODE.CROUCH ? -16.5 : -11.1, PAWS[n & 3]);
@@ -118,6 +128,13 @@ export const createFoley = (
       if (stepped) {
         tap(p, n);
       }
+      // Into the water: a heavy splash; then the stroke's wash, with his speed.
+      const swims = p.mode === MODE.SWIM;
+      if (swims && !swam) {
+        a.play(SOUND.WADE, undefined, 3, 0.7);
+      }
+      swam = swims;
+      swim.set(swims ? 0.15 + 0.5 * clamp(speedOf(p) / 4) : 0, 0.85 + 0.3 * clamp(speedOf(p) / 4));
       for (const [bit, id] of [
         [EV.JUMP, SOUND.JUMP],
         [EV.DOUBLE, SOUND.DOUBLE],
@@ -249,6 +266,9 @@ export const createFoley = (
           const at: Vec3 = [p.x, p.y + 0.1, p.z];
           if (n !== undefined && s.steps !== undefined && n > s.steps) {
             tap(p, n, at);
+          }
+          if (p.mode === MODE.SWIM && s.p.mode !== MODE.SWIM) {
+            a.play(SOUND.WADE, at, 0, 0.7);
           }
           if (p.ground && !s.p.ground && s.p.vy < -SOFT) {
             land(p.id, -s.p.vy, at);

@@ -4,6 +4,7 @@ import {
   EYE,
   GRAVITY,
   LOW_EYE,
+  SWIM_EYE,
   LOW_H,
   JUMP_SPEED,
   MAX_PITCH,
@@ -724,7 +725,7 @@ describe('time in the mode', () => {
     for (const mode of Object.values(MODE)) {
       const low = mode === MODE.SLIDE || mode === MODE.CROUCH;
       expect([heightOf({ mode }), eyeHeight({ mode })]).toEqual(
-        low ? [LOW_H, LOW_EYE] : [PLAYER_H, EYE],
+        low ? [LOW_H, LOW_EYE] : [PLAYER_H, mode === MODE.SWIM ? SWIM_EYE : EYE],
       );
     }
     expect(LOW_H).toBeCloseTo(PLAYER_H / 2, 1);

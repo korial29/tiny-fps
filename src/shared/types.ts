@@ -140,6 +140,8 @@ export const MODE = {
   RIDE: 7,
   /** The xenomorph on a wall (`wall` the side): it climbs, goes down and along it with no gravity. */
   CLING: 8,
+  /** Swimming (WorldDef.water): afloat on the surface, slow, unarmed. */
+  SWIM: 9,
 } as const;
 
 /**

@@ -116,6 +116,7 @@ describe('the sounds of the game', () => {
       SOUND.JET,
       SOUND.STATIC,
       SOUND.HUNTER_SEEK,
+      SOUND.SWIM,
     ]);
   });
 

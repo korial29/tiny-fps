@@ -95,10 +95,10 @@ describe('random play on ROOFTOPS', () => {
       }
     }
     // The run went through every mode and every event, or it proves little.
-    // Every mode a runner gets into on foot: RIDE is a rover's seat, CLING the xenomorph's.
+    // Every mode a runner gets into on foot: RIDE is a rover's seat, CLING the xenomorph's, SWIM Landfall's sea.
     expect([...seen].sort()).toEqual(
       Object.values(MODE)
-        .filter(m => m !== MODE.RIDE && m !== MODE.CLING)
+        .filter(m => m !== MODE.RIDE && m !== MODE.CLING && m !== MODE.SWIM)
         .sort(),
     );
     expect(events).toBe(Object.values(EV).reduce((a, b) => a | b, 0));

@@ -948,6 +948,12 @@ describe('no NaN out of the shaders', () => {
     expect(FRAG).toContain('k=max(dot(d,O),0.)');
   });
 
+  it('has no JavaScript keyword at the start of a line: the split once left an `export` in the GLSL', () => {
+    for (const src of [FRAG, fragOf(HIGHLINE), fragOf(MAPS.landfall, 'LAND', '', true)]) {
+      expect(src).not.toMatch(/^(export|import) /m);
+    }
+  });
+
   it('normalises the half vectors and the light direction safely, as they can vanish', () => {
     expect(FRAG).toContain('vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}');
     expect(FRAG).not.toMatch(/normalize\((O\+V|d\+V|n\+m)\)/);

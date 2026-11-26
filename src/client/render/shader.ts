@@ -241,7 +241,7 @@ vec3 tv(vec3 c){float l=dot(c,vec3(.3,.59,.11));return vec3(.02,.06,.22)+min(l,1
 vec3 av(vec3 c){float l=dot(c,vec3(.3,.59,.11));return vec3(.25,.08,.01)+min(l,1.5)*vec3(1.1,.5,.12);}
 vec3 hv(vec3 c){return Hv==1?tv(c):Hv==2?av(c):xv(c);}
 vec3 hpal(float t){return t<.33?mix(vec3(.1,1.3,.25),vec3(1.8,1.7,.15),t*3.):t<.66?mix(vec3(1.8,1.7,.15),vec3(2.1,.75,.06),t*3.-1.):mix(vec3(2.1,.75,.06),vec3(2.3,.12,.06),t*3.-2.);}
-export const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
+const vec2 SP[${SPEC.length}]=vec2[](${SPEC.map(([a, b]) => `vec2(${a},${b})`)});
 vec3 e(vec3 x){return 2.*(1.-exp(-.5*x));}
 vec3 nz(vec3 v){return v*inversesqrt(max(dot(v,v),1e-12));}
 vec3 hs(vec3 p){p=fract(p*vec3(.1031,.103,.0973));p+=dot(p,p.yxz+33.33);return fract((p.xxy+p.yxx)*p.zyx);}

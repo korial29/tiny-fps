@@ -328,7 +328,7 @@ store's list, as in the game), one runner a frame, and the first frame of one in
 
 - **The spine and the neck's pipes were rebuilt every frame through `sheet()`**, which allocates per
   triangle: 60 % of its time. Both only follow joints, so the back's half of the spine and the pipes
-  are baked into its skin (`backOf()` in `xeno.ts`, appended by `shape()`), each point on the two
+  are baked into its skin (`backOf()` in `xeno/back.ts`, appended by `shape()`), each point on the two
   joints of the bones it lies between, and `flesh()` poses them. The tail stays on the CPU
   (`tail()`), written straight into `out`; its first ring is the skin's last, on the pelvis alone,
   so there is no crack.

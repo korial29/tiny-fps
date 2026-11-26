@@ -142,7 +142,14 @@ describe('prediction against the room', () => {
       grants = [],
       def = ROOFTOPS,
       role,
-    }: { grants?: number[]; def?: WorldDef; role?: number } = {},
+      arm,
+    }: {
+      grants?: number[];
+      def?: WorldDef;
+      role?: number;
+      /** Weapons the host gives him before the first input, as racks would. */
+      arm?: Partial<PlayerState>;
+    } = {},
   ) => {
     const n = steps.length;
     const map = def === ROOFTOPS ? world : build(def);
@@ -175,7 +182,10 @@ describe('prediction against the room', () => {
     pred.you(team, team, role);
     const kit = kitOf(role, def);
     // As the room puts him in: with his class's health.
-    const ref: PlayerState = { ...spawn(team, world, 0, team), hp: kit.hp };
+    const ref: PlayerState = { ...spawn(team, world, 0, team), hp: kit.hp, ...arm };
+    if (arm) {
+      Object.assign(room['peers'].get(conn)!.state, arm);
+    }
     const inputs: { at: number; data: ArrayBuffer }[] = [];
     const snaps: { at: number; data: ArrayBuffer }[] = [];
     let seen = 0;
@@ -529,6 +539,78 @@ describe('prediction against the room', () => {
     expect(chained).toBeGreaterThan(5);
     for (const [name, lag] of LAGS) {
       const r = race(lag, steps, 0, [], [], true, { role: ROLE.XENO });
+      expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
+    }
+  }, 60_000);
+
+  it('agrees with the host exactly for a Hunter with all five weapons: blades, pistol, harpoon, cannon and disc, under every lag (the user, 2026-11-26)', () => {
+    let s = 4242;
+    const rnd = () => (s = (s * 1103515245 + 12345) % 2147483648) / 2147483648;
+    // Each of his keys in turn and at random, fired, charged, burst and reloaded.
+    const picks = [KEY.BLADE, KEY.FISTS, 0, KEY.RAIL, KEY.RIFLE];
+    const steps: Omit<Input, 'seq'>[] = [];
+    let [pick, keys, yaw] = [0, 0, 0];
+    for (let k = 0; k < 2400; k++) {
+      if (k % 30 === 0) {
+        pick = k < 300 ? picks[(k / 30) % 5] : picks[Math.floor(rnd() * 5)];
+        keys =
+          (rnd() < 0.5 ? KEY.FORWARD : 0) |
+          (rnd() < 0.3 ? KEY.SPRINT : 0) |
+          (rnd() < 0.1 ? KEY.JUMP : 0) |
+          (rnd() < 0.15 ? KEY.SPECIAL : 0) |
+          (rnd() < 0.08 ? KEY.RELOAD : 0);
+        yaw += (rnd() - 0.5) * 2;
+      }
+      // The disc is picked but never thrown: its catch is the host's alone (Room.fly() zeroes `clip`),
+      // a correction no prediction foresees.
+      const fire =
+        pick === KEY.RIFLE ? 0 : k % 30 < 12 || (k % 7 === 0 && rnd() < 0.5) ? KEY.FIRE : 0;
+      steps.push({ keys: pick | keys | fire, yaw: ((yaw % 6.2832) + 6.2832) % 6.2832, pitch: 0 });
+    }
+    const arm = {
+      ammo: 12,
+      mag: 1,
+      rail: 0,
+      cap: 15,
+      rifle: 0,
+      clip: 0,
+      side: 60,
+      sideMag: 15,
+    };
+    // The guard: every weapon came to hand and fired.
+    const p = { ...spawn(0, world, 0, 0, kitOf(ROLE.HUNTER, ROOFTOPS)), ...arm };
+    const hands = new Set<string>();
+    const strikes = new Set<number>();
+    let pistol = 0;
+    steps.forEach((i, k) => {
+      const struck = step(
+        p,
+        onWire({ ...i, seq: k }),
+        world,
+        0,
+        true,
+        [],
+        kitOf(ROLE.HUNTER, ROOFTOPS),
+      );
+      strikes.add(struck);
+      pistol += +(p.sided && struck === STRIKE.SHOT);
+      hands.add(
+        p.sided
+          ? 'pistol'
+          : p.wield
+            ? 'blades'
+            : p.railed
+              ? 'cannon'
+              : p.rifled
+                ? 'disc'
+                : 'harpoon',
+      );
+    });
+    expect([...hands].sort()).toEqual(['blades', 'cannon', 'disc', 'harpoon', 'pistol']);
+    expect([...strikes]).toEqual(expect.arrayContaining([STRIKE.SHOT, STRIKE.RAIL]));
+    expect(pistol).toBeGreaterThan(2);
+    for (const [name, lag] of LAGS) {
+      const r = race(lag, steps, 0, [], [], true, { role: ROLE.HUNTER, arm });
       expect([r.worst, r.end, r.final, r.differing], `${name} lag`).toEqual([0, 0, 0, []]);
     }
   }, 60_000);

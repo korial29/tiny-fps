@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { duo } from '../../test/teams';
 import {
+  AMMO_MAX,
+  BURST,
+  GUN_MAG,
+  GUN_RELOAD,
+  HARPOON,
   DISK,
   DISK_LOST,
   DISK_RETURN,
@@ -139,13 +144,14 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
     expect(p.shots).toBe(0);
   });
 
-  it('has no fists: KEY.FISTS leaves the weapon in hand', () => {
+  it('has no fists: KEY.FISTS asks for his pistol, and without it leaves his blades in hand', () => {
     const p = hunter();
-    go(p, BLADE | KEY.FISTS | FIRE);
-    expect(p).toMatchObject({ fists: false, wield: true });
+    go(p, KEY.FISTS | FIRE);
+    expect(p).toMatchObject({ fists: false, sided: false, wield: true });
     const q = hunter();
-    go(q, RAIL | KEY.FISTS);
-    expect(q).toMatchObject({ fists: false, railed: true });
+    go(q, RAIL);
+    go(q, KEY.FISTS);
+    expect(q).toMatchObject({ fists: false, sided: false, railed: false, wield: true });
   });
 
   it('has no ring on G', () => {
@@ -156,18 +162,25 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
   });
 
   it('finds his own weapons on the racks and no standard one (the user, 2026-11-26)', () => {
-    // The gun rack gives him nothing.
+    // The gun rack: his pistol, as many shots as the marine's gun, and nothing else.
     const p = bare({ x: -20, z: 40 });
     go(p, 0);
-    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, wield: true });
+    expect(p).toMatchObject({ side: AMMO_MAX, sideMag: GUN_MAG, ammo: -1, rail: -1, rifle: -1 });
+    expect(p).toMatchObject({ rack: true, wield: true, sided: false });
     // The katana rack: his harpoon, on arrival only, and its bolts again on the next arrival.
-    Object.assign(p, STILL, { x: -20, z: 43, y: 1 });
+    // Out of the gun rack's circle first (both racks are his `rack`, never overlapping), then
+    // there standing: STILL would drop his weapons too.
+    Object.assign(p, { x: 0, z: 0, y: 1, vx: 0, vy: 0, vz: 0 });
+    go(p, 0);
+    expect(p.rack).toBe(false);
+    Object.assign(p, { x: -20, z: 43, y: 1, vx: 0, vy: 0, vz: 0 });
     go(p, 0);
     expect(p).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag, rack: true, wield: false });
+    expect(p).toMatchObject({ side: AMMO_MAX, sideMag: GUN_MAG });
     Object.assign(p, { ammo: 1, mag: 0 });
     go(p, 0);
     expect(p).toMatchObject({ ammo: 1, mag: 0 });
-    Object.assign(p, STILL, { x: -20, z: 40, y: 1 });
+    Object.assign(p, STILL, { x: 0, z: 0, y: 1 });
     go(p, 0);
     expect(p.rack).toBe(false);
     Object.assign(p, STILL, { x: -20, z: 43, y: 1 });
@@ -194,9 +207,145 @@ describe('the Hunter’s shoulder cannon (the user, 2026-11-23: his third weapon
   });
 
   it('loses what he found when he dies: his blades alone at the respawn', () => {
-    const p = hunter({ hp: 0, down: 1 });
+    const p = hunter({ hp: 0, down: 1, side: 20, sideMag: 5, sided: true });
     step(p, { seq: 0, keys: 0, yaw: EAST, pitch: 0 }, world, 0, true, [], HUNTER);
-    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, blade: true, wield: true });
+    expect(p).toMatchObject({ ammo: -1, rail: -1, rifle: -1, side: -1, blade: true, wield: true });
+    expect(p.sided).toBe(false);
+  });
+});
+
+describe('the Hunter’s pistol (the user, 2026-11-26: the gun with his own skin, on key 2)', () => {
+  const MARINE = KITS[ROLE.MARINE];
+  /** A Hunter with every weapon and his pistol full. */
+  const armed = (over: Partial<PlayerState> = {}) =>
+    hunter({ side: AMMO_MAX, sideMag: GUN_MAG, ...over });
+  /** A marine with a full gun, where the Hunter stands. */
+  const marine = () =>
+    Object.assign(spawn(0, world, 0, 0, MARINE), { ammo: AMMO_MAX, mag: GUN_MAG });
+  const run = (p: PlayerState, kit: typeof MARINE, keys: number[]) =>
+    keys.map((k, n) => step(p, { seq: n, keys: k, yaw: EAST, pitch: 0 }, world, 0, true, [], kit));
+  const { FISTS, RELOAD } = KEY;
+
+  it('is in hand on KEY.FISTS, apart from the harpoon, whose bolts it never spends', () => {
+    const p = armed();
+    go(p, FISTS);
+    expect(p).toMatchObject({
+      sided: true,
+      wield: false,
+      railed: false,
+      rifled: false,
+      fists: false,
+    });
+    expect(p).toMatchObject({
+      ammo: HUNTER.ammo,
+      mag: HUNTER.mag,
+      side: AMMO_MAX,
+      sideMag: GUN_MAG,
+    });
+    // Back to the harpoon (no weapon key), then to the pistol again.
+    go(p, 0);
+    expect(p).toMatchObject({ sided: false, wield: false, ammo: HUNTER.ammo });
+    go(p, FISTS);
+    expect(p.sided).toBe(true);
+  });
+
+  it('charges, fires, bursts and reloads exactly as the marine’s gun, step for step', () => {
+    // Taps, a held charge let go, a burst on G, a dry battery and its swap, a reload asked for.
+    const keys = [
+      FIRE,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      ...Array<number>(30).fill(FIRE),
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      SPECIAL,
+      ...Array<number>(30).fill(0),
+      ...Array.from({ length: 120 }, (_, n) => (n % 3 ? 0 : FIRE)),
+      RELOAD,
+      ...Array<number>(GUN_RELOAD + 4).fill(0),
+      FIRE,
+      0,
+      0,
+    ];
+    const h = armed();
+    const m = marine();
+    go(h, FISTS);
+    const a = run(
+      h,
+      HUNTER,
+      keys.map(k => k | FISTS),
+    );
+    const b = run(m, MARINE, keys);
+    expect(a).toEqual(b);
+    expect(a.filter(s => s === STRIKE.SHOT).length).toBeGreaterThan(BURST + 5);
+    expect([h.side, h.sideMag, h.cool, h.shots, h.reload, h.charge, h.burst]).toEqual([
+      m.ammo,
+      m.mag,
+      m.cool,
+      m.shots,
+      m.reload,
+      m.charge,
+      m.burst,
+    ]);
+    // The harpoon was never touched.
+    expect(h).toMatchObject({ ammo: HUNTER.ammo, mag: HUNTER.mag, sided: true });
+  });
+
+  it('keeps the harpoon its own: a bolt, no burst on G, and the pistol’s shots untouched', () => {
+    const p = armed({ sideMag: 7, side: 30 });
+    go(p, 0);
+    expect(go(p, SPECIAL)).toBe(STRIKE.NONE);
+    expect(go(p, FIRE)).toBe(STRIKE.SHOT);
+    expect(p).toMatchObject({ ammo: HUNTER.ammo - 1, mag: 0, side: 30, sideMag: 7, sided: false });
+  });
+
+  it('fires plasma through the room, not a harpoon bolt', () => {
+    const room = new Room({}, ARENA);
+    const c: Conn = { send: () => {} };
+    room.connect(c);
+    room.receive(c, JSON.stringify({ t: 'join', name: 'hunter', role: ROLE.HUNTER }));
+    const foe: Conn = { send: () => {} };
+    room.connect(foe);
+    room.receive(foe, JSON.stringify({ t: 'join', name: 'foe', role: ROLE.MARINE }));
+    const p: PlayerState = room['peers'].get(c)!.state;
+    Object.assign(p, STILL, ARMED, { side: AMMO_MAX, sideMag: GUN_MAG, x: 0, y: 1, z: 0 });
+    const balls = () => (room['balls'] as Flying[]).map(b => b.power);
+    let seq = 0;
+    const send = (keys: number) => {
+      room.receive(c, encodeInput({ seq: seq++, keys, yaw: EAST, pitch: 0, view: room['ticks'] }));
+      room.tick();
+    };
+    send(FISTS);
+    send(FISTS | FIRE);
+    send(FISTS);
+    expect(balls()).toEqual([1]);
+    for (let n = 0; n < 20; n++) {
+      send(0);
+    }
+    send(FIRE);
+    expect(balls()).toContain(HARPOON);
+  });
+
+  it('is the Hunter’s alone: KEY.FISTS is still the marine’s fists, and he never has a pistol', () => {
+    const m = marine();
+    run(m, MARINE, [KEY.FISTS]);
+    expect(m).toMatchObject({ fists: true, sided: false, side: -1 });
+    const n = Object.assign(marine(), { side: 12, sideMag: 4, sided: true });
+    run(n, MARINE, [0]);
+    expect(n).toMatchObject({ side: -1, sideMag: 0, sided: false });
   });
 });
 

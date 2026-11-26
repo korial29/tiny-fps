@@ -70,6 +70,19 @@ export default defineConfig({
     testTimeout: 60_000,
     // Shards by each file's time (test/durations.json), not by a hash of its path.
     sequence: { sequencer: Sequencer },
+    // `vitest --changed` (pull requests in CI) runs only the files whose import graph reaches a
+    // changed file. A change to one of these runs every file: the first three are Vitest's
+    // defaults, the rest decide how every test runs without being imported by one.
+    forceRerunTriggers: [
+      '**/package.json/**',
+      '**/vitest.config.*/**',
+      '**/vite.config.*/**',
+      '**/package-lock.json/**',
+      '**/.nvmrc/**',
+      '**/tsconfig.json/**',
+      '**/test/sequencer.ts/**',
+      '**/.github/workflows/ci.yml/**',
+    ],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

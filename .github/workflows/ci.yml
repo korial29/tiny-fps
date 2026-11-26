@@ -78,8 +78,17 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
 
+      # A pull request runs only the test files whose import graph reaches a file it changes
+      # (vitest --changed, diffed against the base branch). A change to a file listed in the
+      # config's forceRerunTriggers runs them all, as does every push to master.
+      - name: Fetch the base branch
+        if: github.event_name == 'pull_request'
+        run: git fetch --no-tags --depth=1 origin ${{ github.base_ref }}
+
       - name: Test
-        run: npm run test:ci -- --shard=${{ matrix.shard }}/4
+        env:
+          CHANGED: ${{ github.event_name == 'pull_request' && format('--changed=origin/{0}', github.base_ref) || '' }}
+        run: npm run test:ci -- --shard=${{ matrix.shard }}/4 $CHANGED
 
   # The check master's protection requires: green only when the lint and every shard are. A job
   # skipped after a failed need would count as passed, hence always() and the results read here.

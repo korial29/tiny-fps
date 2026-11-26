@@ -48,7 +48,7 @@ export const backing = (cw: number, ch: number, dpr: number): [number, number] =
  * player who joins or change in the menu mid-match), the xenomorph's skins and rigid pieces (its
  * close skull alone took a frame of 70 ms), the racks' weapons and the textures. An armour's
  * recipe is a step of many (preparing()), a slice of its skin at a time. createRenderer()
- * runs them at once; index.ts runs them one task each before, so the loading screen paints on.
+ * runs them at once; play/entry.ts runs them one task each before, so the loading screen paints on.
  * `own` is the own runner's build, whose first-person body is drawn close: a match's, not the
  * character screen's. `hunter`: the Hunter's pieces too (warmHunter()), which the character
  * screen draws on a tile and a match only once one comes.

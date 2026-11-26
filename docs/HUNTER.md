@@ -220,4 +220,4 @@ All in `src/client/hunter/` (re-exported by `src/client/hunter.ts`); nothing her
   the blades in steel blue, the harpoon in bronze, the cannon in plasma red, the disc in silver.
 - **Blades out.** They slide out each time they are taken, not only the first: after the press
   (`pressAt(1)`), once the arm is up, with `SOUND.HUNTER_BLADE_DRAW` in time (`body.ts`,
-  `shing()` in `combat.ts`).
+  `shing()` in `combat/create.ts`).

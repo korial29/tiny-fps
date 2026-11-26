@@ -17,7 +17,7 @@ import {
 } from './constants';
 import { touches } from './ctf';
 import { eyeHeight, floorAt, forward, gravity, norm } from './physics';
-import { locate, navOf, path, WADE } from './nav';
+import { ashore, locate, navOf, path, WADE } from './nav';
 import type { Step, Vec3 } from './nav';
 import type { Flying } from './plasma';
 import { stepOf } from './plasma';
@@ -534,13 +534,15 @@ export class Bot {
     }
     this.gaze = undefined;
     const goal = this.goalOf(s);
-    // A way is planned from a floor: from the air it would start where the bot is not going to be.
-    // Forward is kept till then, so a jump over a gap does not fall short of it.
-    if (!this.goal && !p.ground) {
+    // A way is planned from a floor, or from the water, where a swimmer stays: from the air it
+    // would start where the bot is not going to be. Forward is kept till then, so a jump over a gap
+    // does not fall short of it.
+    const afloat = p.mode === MODE.SWIM;
+    if (!this.goal && !p.ground && !afloat) {
       return { keys: FORWARD, yaw: p.yaw, pitch: 0 };
     }
     if (
-      p.ground &&
+      (p.ground || afloat) &&
       (!this.goal ||
         !!this.rackSteps ||
         (this.plannedWhy !== this.why && (this.urgent() || this.urgent(this.plannedWhy))) ||
@@ -575,10 +577,13 @@ export class Bot {
       return { keys: fight.keys, yaw: this.aim, pitch: 0 };
     }
     // Aiming elsewhere: the move keys turn with the look, and the sprint goes (it wants forward).
+    // The strafe is the dodge's; where it has no side to strafe to (a drop each side, on a box),
+    // it keeps to its way sideways rather than stand.
     const keys = move.keys & ~(FORWARD | BACK | LEFT | RIGHT | SPRINT);
     const dirs = move.keys & FORWARD ? keysFor(this.aim, move.yaw) : 0;
+    const side = this.dodge(s.world, p);
     const out = {
-      keys: (dirs & ~(LEFT | RIGHT)) | this.dodge(s.world, p) | keys | fight.keys,
+      keys: (side ? dirs & ~(LEFT | RIGHT) : dirs) | side | keys | fight.keys,
       yaw: this.aim,
       pitch: this.pitch,
     };
@@ -865,7 +870,12 @@ export class Bot {
     const nav = navOf(w);
     // The route it prefers, one of the world's: the bots of a team spread over them.
     const prefer = direct ? -1 : this.id % nav.ways;
-    this.steps = this.rackSteps ?? path(nav, w, at(p), goal, prefer);
+    // A swimmer first makes for the nearest sand he can wade out on: from where he floats, the
+    // nearest floor may be a float's top he cannot climb.
+    const out = p.mode === MODE.SWIM && !this.rackSteps ? ashore(nav, w, at(p)) : undefined;
+    this.steps =
+      this.rackSteps ??
+      (out ? [{ to: out }, ...path(nav, w, out, goal, prefer)] : path(nav, w, at(p), goal, prefer));
     this.rackSteps = undefined;
     // A dead end of the mesh (a ledge it came down on): the way stops where it stands, so it makes
     // straight for the goal as a body off the mesh does, off a drop that does not hurt.
@@ -885,6 +895,16 @@ export class Bot {
    */
   private pilot(p: PlayerState): Move {
     const s = this.steps[this.step];
+    const afloat = p.mode === MODE.SWIM;
+    // In the water no leg is flown (no jump): the link that put it there costs more, and a new way
+    // is planned from where it floats.
+    if (s?.leg && afloat) {
+      if (s.edge) {
+        s.edge.fails = (s.edge.fails ?? 0) + 1;
+      }
+      this.goal = undefined;
+      return { keys: 0, yaw: p.yaw, free: false, exact: true };
+    }
     if (s?.leg) {
       return this.fly(p, s.leg);
     }
@@ -894,7 +914,8 @@ export class Bot {
     const [x, y, z] = s.to;
     const d = flat(p.x, p.z, x, z);
     // Off a drop or onto a box: it steers to come down on the point, and starts no leg in the air.
-    if (!p.ground) {
+    // A swimmer swims to it as it walks.
+    if (!p.ground && !afloat) {
       return {
         keys: this.alight(p, x, y, z),
         yaw: toward(p.x, p.z, x, z),

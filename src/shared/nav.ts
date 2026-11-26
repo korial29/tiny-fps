@@ -469,10 +469,10 @@ const ABOVE = 2.2;
 const BELOW = 8;
 
 /**
- * The rectangle a body at `v` stands on, or the nearest one within NEAR metres, at most ABOVE over
- * it and BELOW under it, as (index, the point of it to walk to); -1 when none.
+ * The rectangle a body at `v` stands on, or the nearest one within `near` metres, at most `above`
+ * over it and BELOW under it, as (index, the point of it to walk to); -1 when none.
  */
-export const locate = (nav: Nav, w: World, v: Vec3): [number, Vec3] => {
+export const locate = (nav: Nav, w: World, v: Vec3, above = ABOVE, near = NEAR): [number, Vec3] => {
   const i = under(nav, w, v[0], v[1], v[2], PLAYER_R);
   if (i >= 0 && heightAt(w, nav.polys[i], v[0], v[2]) > v[1] - 1.5) {
     return [i, onto(w, nav.polys[i], v[0], v[2])];
@@ -481,7 +481,7 @@ export const locate = (nav: Nav, w: World, v: Vec3): [number, Vec3] => {
   let least = Infinity;
   let pt: Vec3 = v;
   const seen = new Set<number>();
-  cells([v[0], v[2], v[0], v[2]], NEAR, k => {
+  cells([v[0], v[2], v[0], v[2]], near, k => {
     for (const j of nav.grid.get(k) ?? []) {
       if (seen.has(j)) {
         continue;
@@ -489,12 +489,21 @@ export const locate = (nav: Nav, w: World, v: Vec3): [number, Vec3] => {
       seen.add(j);
       const o = onto(w, nav.polys[j], v[0], v[2]);
       const d = flat(v[0], v[2], o[0], o[2]) + Math.abs(o[1] - v[1]);
-      if (d < least && o[1] - v[1] <= ABOVE && v[1] - o[1] <= BELOW) {
+      if (d < least && o[1] - v[1] <= above && v[1] - o[1] <= BELOW) {
         [best, least, pt] = [j, d, o];
       }
     }
   });
-  return [least <= NEAR ? best : -1, pt];
+  return [least <= near ? best : -1, pt];
+};
+
+/**
+ * Where a swimmer at `v` gets out: the nearest floor no higher than a step over his feet, within
+ * twice NEAR. He neither jumps nor climbs in the water, so a float's or a box's top is no way out.
+ */
+export const ashore = (nav: Nav, w: World, v: Vec3): Vec3 | undefined => {
+  const [i, on] = locate(nav, w, v, STEP_H, 2 * NEAR);
+  return i < 0 ? undefined : on;
 };
 
 /**

@@ -324,6 +324,18 @@ describe('LANDFALL, a bot alone with the real physics', () => {
     expect(Math.abs(f.state.z - 175)).toBeLessThan(4);
   });
 
+  it('swims out of the lagoon by the sand when it falls in by a float, not at the float’s side', () => {
+    // Off the edge of the shallows by red's first float, bound for blue's flag round the tail: in
+    // the water the float's top, 1.45 m over a swimmer's feet, is the nearest floor but no way out.
+    const f = flight(4, 0, 30, {
+      from: [18, walked(18, ZED - 105.6), ZED - 105.6],
+      done: p => p.z < MID - 5,
+    });
+    expect(f.put).toBe(false);
+    expect(f.at).toBe('lagoon');
+    expect(f.seconds).toBeLessThan(15);
+  });
+
   it('jumps onto a box a little too high to step onto: the pack on the panel by the hold’s door', () => {
     const pack = BEACH.packs![2];
     const [x, , z] = pack;

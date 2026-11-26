@@ -4,6 +4,7 @@
 import { RACK_R } from '../shared/constants';
 import { GLOW, glow, ring, tri } from './flag';
 import { gun, railgun, rifle } from './gun';
+import { discVertices, hunter as hunterModel, hunterHarpoon } from './hunter';
 import { sword } from './katana';
 import { GILT, GLOSS, STRIDE, basis, dim, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
@@ -20,14 +21,65 @@ export const packsOf = (all: readonly Vec3[] = [], mask = 0, from = 0): Vec3[] =
   all.filter((_, n) => Math.floor(mask / 2 ** (from + n)) % 2 === 1);
 
 /**
- * A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives
- * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, the rail
- * gun (2) or the laser rifle (3).
+ * Which weapons a player's racks show: the standard ones (marine, astronaut, ninja), the Hunter's
+ * own (his pistol, harpoon, shoulder cannon and disc on the gun, katana, rail gun and rifle points),
+ * or none for a class that takes nothing from them (the xenomorph).
  */
+export type RackSet = 'gear' | 'hunter' | 'none';
+
+/** The rack set of a class: by its kit's `hunter` and `gear`. */
+export const rackSetOf = (kit: { gear: boolean; hunter?: boolean }): RackSet =>
+  kit.hunter ? 'hunter' : kit.gear ? 'gear' : 'none';
+
+/**
+ * `v` (vertices in the renderer's format) moved so its box is centred on the origin and scaled so
+ * its longest side is `length` metres: the Hunter's pieces come in his model's frame and size.
+ */
+const fit = (v: readonly number[], length: number): number[] => {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < v.length; i += STRIDE) {
+    for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], v[i + k]);
+      hi[k] = Math.max(hi[k], v[i + k]);
+    }
+  }
+  const s = length / Math.max(...hi.map((h, k) => h - lo[k]), 1e-6);
+  const out = v.slice();
+  for (let i = 0; i < out.length; i += STRIDE) {
+    for (let k = 0; k < 3; k++) {
+      out[i + k] = (v[i + k] - (lo[k] + hi[k]) / 2) * s;
+    }
+  }
+  return out;
+};
+
+/**
+ * The Hunter's weapon over a rack of `kind`, centred, at its size on the rack (scale 1): his
+ * pistol (the gun for now), the harpoon, the shoulder cannon and the disc.
+ */
+const hunterWeapon = (kind: number): number[] =>
+  (hunterBuilt[kind] ??=
+    kind == 0
+      ? fit(gun(0), 0.42)
+      : kind == 1
+        ? fit(hunterHarpoon(0), 0.8)
+        : kind == 2
+          ? fit(hunterModel(0)['Shoulder laser'], 0.6)
+          : fit(discVertices(0), 0.45));
+const hunterBuilt: number[][] = [];
+
+/** The vertices over a rack of `kind` in `set`. */
+const weaponOf = (kind: number, set: RackSet): number[] =>
+  set == 'hunter' ? hunterWeapon(kind) : [gun, gun, railgun, rifle][kind](0);
+
+/** The scale a rack's weapon is drawn at: the Hunter's come fitted. */
+const scaleOf = (kind: number, set: RackSet) => (set == 'hunter' ? 1 : kind == 3 ? 1.2 : 1.5);
+
 /** A rack's rotating rigid weapon, made once in model space. */
-export const rackWeapon = (kind: number) =>
-  mesh(`rack-weapon-${kind}`, out => {
-    const v = [gun, gun, railgun, rifle][kind](0);
+export const rackWeapon = (kind: number, set: RackSet = 'gear') =>
+  mesh(set == 'hunter' ? `rack-weapon-hunter-${kind}` : `rack-weapon-${kind}`, out => {
+    const v = weaponOf(kind, set);
     const a = room(out, v.length);
     for (let i = 0; i < v.length; i++) {
       a[i] = v[i];
@@ -35,7 +87,20 @@ export const rackWeapon = (kind: number) =>
     out.length = v.length;
   });
 
-export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0, pieces?: Pieces) => {
+/**
+ * A rack at `at` (a point on a top): a post and a dish, a ring on the roof of the radius that gives
+ * the weapon, and the weapon over it: the gun, or by `kind` the katana (1), crackling, the rail
+ * gun (2) or the laser rifle (3); the Hunter's own weapon on those points when `set` is 'hunter'.
+ */
+export const rack = (
+  out: Out,
+  at: Vec3,
+  rgb: number[],
+  t: number,
+  kind = 0,
+  pieces?: Pieces,
+  set: RackSet = 'gear',
+) => {
   const dark = rgb.map(c => c * 0.45);
   segment(
     out,
@@ -54,19 +119,19 @@ export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0, pie
   glow(out, from, 1.2 * GLOW * (0.7 + 0.3 * Math.sin(t * 2.5)));
   const over: Vec3 = [x, y + 1.05 + 0.04 * Math.sin(t * 2), z];
   const ax = basis(t * 0.8, 0);
-  if (kind == 1) {
+  if (kind == 1 && set != 'hunter') {
     // Lying level, turning about its middle, 42 cm ahead of the grip.
     sword(out, over.map((v, i) => v - ax[2][i] * 0.42) as Vec3, ax, 0, t);
   } else if (pieces) {
     const half = t * 0.4;
     pieces.push({
-      m: rackWeapon(kind),
+      m: rackWeapon(kind, set),
       q: [0, Math.sin(half), 0, Math.cos(half)],
       t: over,
-      k: kind == 3 ? 1.2 : 1.5,
+      k: scaleOf(kind, set),
     });
   } else {
-    place(out, [gun, gun, railgun, rifle][kind](0), over, ax, [0, 0, 0], kind == 3 ? 1.2 : 1.5);
+    place(out, weaponOf(kind, set), over, ax, [0, 0, 0], scaleOf(kind, set));
   }
 };
 
@@ -76,7 +141,10 @@ export const rack = (out: Out, at: Vec3, rgb: number[], t: number, kind = 0, pie
  */
 export const RACK_RGB = [1, 0.78, 0.12];
 
-/** Each team's gun rack, katana rack, rail gun rack and laser rifle rack, where it has them. */
+/**
+ * Each team's gun rack, katana rack, rail gun rack and laser rifle rack, where it has them, as the
+ * own class sees them (`set`): none at all for a class that takes nothing from them.
+ */
 export const racks = (
   out: Out,
   guns: readonly (Vec3 | undefined)[] = [],
@@ -85,9 +153,14 @@ export const racks = (
   rails: readonly (Vec3 | undefined)[] = [],
   rifles: readonly (Vec3 | undefined)[] = [],
   pieces?: Pieces,
+  set: RackSet = 'gear',
 ) =>
-  [guns, blades, rails, rifles].forEach((list, kind) =>
-    list.forEach(at => at && rack(out, at, RACK_RGB, t, kind, pieces)),
+  set != 'none' &&
+  [guns, blades, rails, rifles].forEach(
+    (list, kind) =>
+      // The Hunter's pistol, for the gun rack, is not made yet: he sees no gun rack until then.
+      (set != 'hunter' || kind > 0) &&
+      list.forEach(at => at && rack(out, at, RACK_RGB, t, kind, pieces, set)),
   );
 
 /** The faces of a cube: the normal and the two edges. */

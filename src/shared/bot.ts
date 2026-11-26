@@ -778,13 +778,22 @@ export class Bot {
       this.why = 'gun rack';
       return home.rack;
     }
-    // Detour for a weapon not yet carried, without abandoning urgent flag duties.
-    if (gear && !s.kit?.katana && role === 'attack') {
-      const choices: [Vec3 | undefined, boolean, string][] = [
-        [home.rail, (p.rail ?? -1) < 0, 'rail rack'],
-        [home.rifle, (p.rifle ?? -1) < 0, 'rifle rack'],
-        [home.blade, !p.blade, 'katana rack'],
-      ];
+    // Detour for a weapon not yet carried, without abandoning urgent flag duties. The Hunter,
+    // whose blades are all he spawns with, finds his own on the racks (the user, 2026-11-26): the
+    // harpoon on the katana's, the cannon on the rail gun's and the disc on the rifle's.
+    const own = !!s.kit?.hunter;
+    if (gear && (!s.kit?.katana || own) && role === 'attack') {
+      const choices: [Vec3 | undefined, boolean, string][] = own
+        ? [
+            [home.blade, p.ammo < 0, 'harpoon rack'],
+            [home.rail, (p.rail ?? -1) < 0, 'cannon rack'],
+            [home.rifle, (p.rifle ?? -1) < 0, 'disc rack'],
+          ]
+        : [
+            [home.rail, (p.rail ?? -1) < 0, 'rail rack'],
+            [home.rifle, (p.rifle ?? -1) < 0, 'rifle rack'],
+            [home.blade, !p.blade, 'katana rack'],
+          ];
       const current = choices.find(
         ([point, missing]) => missing && point && point === this.rackTarget,
       );

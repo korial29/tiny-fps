@@ -67,7 +67,7 @@ export const TRAITS: { name: string; tag: string; pros: string[]; cons: string[]
       'A disc that comes back',
       'Thermal and alien vision (V)',
     ],
-    cons: ['No fists', 'Takes no weapon from the racks', 'Harpoon reloads in 1.3 s'],
+    cons: ['No fists', 'Starts with the blades alone', 'Harpoon reloads in 1.3 s'],
   },
 ];
 

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { PACK_BITS, RACK_R } from '../shared/constants';
 import { GILT, STRIDE } from './mesh';
 import type { Vec3 } from './mesh';
-import { battery, cell, kit, packsOf, rack, racks, vest } from './props';
+import { battery, cell, kit, packsOf, rack, rackSetOf, racks, vest } from './props';
+import { KITS, ROLE } from '../shared/kit';
 import { apart, unfolded } from '../../test/store';
 
 const PACKS: Vec3[] = [
@@ -297,6 +298,46 @@ describe('the racks of a scene', () => {
     const [r, g, b] = rgb(dish(red));
     expect(r).toBeGreaterThan(b * 3);
     expect(g).toBeGreaterThan(b * 3);
+  });
+});
+
+describe('the racks each class sees', () => {
+  const at: Vec3 = [4, 3, 8];
+  const all = (set: 'gear' | 'hunter' | 'none') =>
+    drawn(out => racks(out, [at], [at], 0, [at], [at], undefined, set));
+
+  it('gives the marine and the ninja the standard weapons, the Hunter his own and the xenomorph none', () => {
+    expect(rackSetOf(KITS[ROLE.MARINE])).toBe('gear');
+    expect(rackSetOf(KITS[ROLE.ASTRONAUT])).toBe('gear');
+    expect(rackSetOf(KITS[ROLE.NINJA])).toBe('gear');
+    expect(rackSetOf(KITS[ROLE.HUNTER])).toBe('hunter');
+    expect(rackSetOf(KITS[ROLE.XENO])).toBe('none');
+  });
+
+  it('shows the Hunter no gun rack, his pistol not made yet, and his three other racks', () => {
+    const one = (set: 'gear' | 'hunter', kind: number) =>
+      drawn(out => rack(out, at, [1, 0.78, 0.12], 0, kind, undefined, set)).length;
+    expect(all('hunter').length).toBe([1, 2, 3].reduce((n, k) => n + one('hunter', k), 0));
+  });
+
+  it('draws nothing for the xenomorph', () => {
+    expect(all('none')).toEqual([]);
+    expect(all('gear').length).toBeGreaterThan(0);
+  });
+
+  it("puts the Hunter's own weapon over each kind of rack, on the same yellow stand", () => {
+    for (const kind of [0, 1, 2, 3]) {
+      const gear = drawn(out => rack(out, at, [1, 0.78, 0.12], 0, kind));
+      const own = drawn(out => rack(out, at, [1, 0.78, 0.12], 0, kind, undefined, 'hunter'));
+      // The stand and the ring come first and are the same; the weapon over them differs.
+      expect(own.slice(0, 40)).toEqual(gear.slice(0, 40));
+      expect(own.slice(40)).not.toEqual(gear.slice(40));
+      // Fitted, it floats over the dish and stays within the ring.
+      const over = own.filter(x => x[1] > 3.8);
+      expect(over.length).toBeGreaterThan(30);
+      expect(Math.min(...over.map(x => x[1]))).toBeGreaterThan(3.6);
+      expect(Math.max(...over.map(x => Math.hypot(x[0] - 4, x[2] - 8)))).toBeLessThan(RACK_R);
+    }
   });
 });
 

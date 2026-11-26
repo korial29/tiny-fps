@@ -176,41 +176,44 @@ export const step = (
   p.pressed = !!(i.keys & KEY.FIRE);
   // The rack fills the gun on arrival, not on every step spent in its circle.
   // Every rack serves both teams (the user, 2026-11-24): red takes from blue's and blue from
-  // red's. The xenomorph (no gear) and the Hunter (his own arms) still take none of their weapons.
+  // red's. The xenomorph (no gear) takes nothing from them.
   const near = (key: 'rack' | 'blade' | 'rail' | 'rifle') =>
     w.def.teams.some(t => !!t[key] && within(p, t[key], RACK_R));
-  const inside = near('rack');
   // A class with no gear takes nothing from the racks, and carries nothing.
   const gear = kit.gear;
   if (!gear) {
     [p.ammo, p.rail, p.rifle, p.blade, p.nades] = [-1, -1, -1, false, 0];
   }
-  // The Hunter takes no other weapon (the user, 2026-11-23): his harpoon, his blades, his
-  // shoulder cannon and his disc, which are always on him (`rifle` 0: carried, nothing in it; the
-  // disc takes the laser rifle's slot, `rifled`). The gun rack still refills the harpoon's bolts.
-  // The cannon's battery (`cap`, HUNTER_CELLS when full) gets a shot back each HUNTER_CELL_TICKS
-  // without firing, counted down in `rail` (the user, 2026-11-23).
+  // The Hunter starts with his wrist blades alone and finds his other weapons on the racks (the
+  // user, 2026-11-26), which show him his own: the katana rack gives the harpoon (the gun's slot:
+  // `ammo`, `mag`), the rail gun rack the shoulder cannon (the rail gun's: `cap` its battery,
+  // `rail` the countdown to its next charge) and the laser rifle rack the disc (the rifle's:
+  // `rifle` 0 while carried). He takes no standard weapon. A weapon he has not found reads -1.
   const own = kit.hunter;
+  // His `rack`: inside the circle of the rack that fills the harpoon (the katana's).
+  const inside = near(own ? 'blade' : 'rack');
   if (own) {
-    [p.rifle, p.nades] = [0, 0];
+    p.nades = 0;
     // His `clip`: the ticks before his thrown disc is in his hand again (DISK_LOST), 0 when it is;
     // the room sets it to 0 as he catches it (Room.fly()).
     p.clip = Math.max(0, (p.clip ?? 0) - 1);
-    // His harpoon and a full battery are his from the start too, also when he took the class
-    // after his spawn (a class changes at the next step, not at a respawn): no harpoon (-1) gives
-    // him both, whatever was left of a marine's rail gun in `rail` and `cap`.
-    if (p.ammo < 0 && !p.down) {
-      [p.ammo, p.mag, p.cap, p.rail] = [kit.ammo, kit.mag, kit.cap, 0];
-    }
-    p.cap = Math.min(p.cap ?? kit.cap, kit.cap);
-    p.rail = Math.min(Math.max(p.rail ?? 0, 0), HUNTER_CELL_TICKS);
-    if (p.cap >= kit.cap) {
-      p.rail = 0;
-    } else if (p.rail > 1) {
-      p.rail--;
-    } else {
-      p.cap++;
-      p.rail = p.cap < kit.cap ? HUNTER_CELL_TICKS : 0;
+    // A class taken after the spawn (it changes at the next step, not at a respawn) keeps none of a
+    // marine's rifle rounds or rail gun capsule: the disc is carried empty (0), and the cannon's
+    // countdown never runs past a charge.
+    p.rifle = (p.rifle ?? -1) >= 0 ? 0 : -1;
+    // The cannon's battery (`cap`, HUNTER_CELLS when full) gets a shot back each HUNTER_CELL_TICKS
+    // without firing, counted down in `rail` (the user, 2026-11-23).
+    if ((p.rail ?? -1) >= 0) {
+      p.cap = Math.min(p.cap ?? kit.cap, kit.cap);
+      p.rail = Math.min(p.rail!, HUNTER_CELL_TICKS);
+      if (p.cap >= kit.cap) {
+        p.rail = 0;
+      } else if (p.rail > 1) {
+        p.rail--;
+      } else {
+        p.cap++;
+        p.rail = p.cap < kit.cap ? HUNTER_CELL_TICKS : 0;
+      }
     }
   }
   if (armed && gear && inside && !p.rack) {
@@ -219,13 +222,19 @@ export const step = (
   p.rack = inside;
   p.blade = !!kit.katana || !!p.blade || (armed && gear && near('blade'));
   const inRail = near('rail');
-  if (armed && gear && !own && inRail && !p.inRail) {
-    [p.rail, p.cap] = [kit.rail, kit.cap];
+  if (armed && gear && inRail && !p.inRail) {
+    // The Hunter's cannon comes with a full battery, its countdown stopped.
+    [p.rail, p.cap] = [own ? 0 : kit.rail, kit.cap];
   }
   p.inRail = inRail;
   const inRifle = near('rifle');
-  if (armed && gear && !own && inRifle && !p.inRifle) {
-    [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
+  if (armed && gear && inRifle && !p.inRifle) {
+    // The Hunter's disc: one, in his hand; a rack gives no second while the first is out.
+    if (own) {
+      [p.rifle, p.clip] = p.rifle! < 0 ? [0, 0] : [p.rifle!, p.clip];
+    } else {
+      [p.rifle, p.clip, p.nades] = [kit.rifle, kit.clip, NADE_MAX];
+    }
   }
   p.inRifle = inRifle;
   // Never more than the class carries: a change of class keeps no marine's ammo on a ninja.

@@ -140,6 +140,19 @@ describe('the weapon choice', () => {
     expect(chosen(WEAPON.FISTS, armed, armed, true)).toBe(BLADE);
   });
 
+  it('brings the Hunter each weapon he finds on a rack to hand, and not a refill (the user, 2026-11-26)', () => {
+    const blades = player({ blade: true, wield: true, ammo: -1 });
+    const harpoon = player({ blade: true, ammo: 12, mag: 1 });
+    expect(chosen(BLADE, blades, harpoon, true)).toBe(GUN);
+    const cannon = player({ blade: true, ammo: 12, rail: 0 });
+    expect(chosen(GUN, harpoon, cannon, true)).toBe(RAIL);
+    const disc = player({ blade: true, ammo: 12, rail: 0, rifle: 0 });
+    expect(chosen(RAIL, cannon, disc, true)).toBe(WEAPON.RIFLE);
+    // Bolts again from the rack, or the disc back in his hand: the choice stays.
+    expect(chosen(BLADE, player({ blade: true, ammo: 1 }), harpoon, true)).toBe(BLADE);
+    expect(chosen(BLADE, player({ ...disc, clip: 40 }), disc, true)).toBe(BLADE);
+  });
+
   it('sets KEY.BLADE exactly while the katana is chosen, KEY.RAIL while the rail gun is', () => {
     expect(withWeapon(KEY.FORWARD | KEY.FIRE, BLADE)).toBe(KEY.FORWARD | KEY.FIRE | KEY.BLADE);
     expect(withWeapon(KEY.FORWARD | KEY.FIRE, RAIL)).toBe(KEY.FORWARD | KEY.FIRE | KEY.RAIL);

@@ -122,12 +122,11 @@ export const chosen = (
   if (!was || was.down || now.ev & EV.RESPAWN || (hunter && weapon === WEAPON.FISTS)) {
     return +!!now.wield;
   }
-  // The Hunter carries all his weapons from the spawn: nothing new to switch to.
-  if (hunter) {
-    return weapon;
-  }
-  const [a, b] = [owned(was), owned(now)];
-  return weapon === WEAPON.FISTS ? weapon : ([1, 2, 3].find(k => b[k] && !a[k]) ?? weapon);
+  // A weapon just found comes to hand: the katana, the rail gun or the rifle, and for the Hunter,
+  // who starts with his blades alone (the user, 2026-11-26), the harpoon, the cannon or the disc.
+  const [a, b] = [owned(was, hunter), owned(now, hunter)];
+  const found = (hunter ? [0, 2, 3] : [1, 2, 3]).find(k => b[k] && !a[k]);
+  return weapon === WEAPON.FISTS ? weapon : (found ?? weapon);
 };
 
 /** The keys of a step with KEY.BLADE set while the katana is the choice, KEY.RAIL while the rail gun is, KEY.RIFLE while the rifle is. */

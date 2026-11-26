@@ -7,6 +7,7 @@ import { FLAG } from '../shared/types';
 import type { FlagState, PlayerState } from '../shared/types';
 import { STRIDE, place, segment, solid } from './mesh';
 import type { Vec3 } from './mesh';
+import type { RackSet } from './props';
 import { axis, turn } from './rig';
 import type { Quat } from './rig';
 import { room } from './verts';
@@ -55,6 +56,8 @@ export interface CtfScene {
   rails?: readonly (Vec3 | undefined)[];
   /** The laser rifle racks. */
   rifles?: readonly (Vec3 | undefined)[];
+  /** Which weapons the own class sees on the racks (rackSetOf()): the standard ones when not given. */
+  rackSet?: RackSet;
   packs?: readonly Vec3[];
   /** The ammo packs that are there to take. */
   ammo?: readonly Vec3[];

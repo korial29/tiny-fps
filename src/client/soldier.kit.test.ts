@@ -21,7 +21,7 @@ import { SCALE, SHELL } from './helmet';
 import { GLOSS, SHINE, STRIDE, add, basis } from './mesh';
 import type { Vec3 } from './mesh';
 import { JOINT as J, REST, solve, turn } from './rig';
-import { FRY, animate, dissolve, fried, seatOf, soldier, stance } from './soldier';
+import { FRY, HUNTER_GEAR, animate, dissolve, fried, seatOf, soldier, stance } from './soldier';
 import type { Runner } from './soldier';
 import { hunter } from './hunter';
 import { PACK, pack } from './pack';
@@ -251,7 +251,8 @@ describe('the ninja', () => {
 
 describe('the Hunter', () => {
   it('draws the complete Hunter model at the player’s feet instead of the Marine skin', () => {
-    const r = hold({}, 5);
+    // All he finds on the racks carried, so that every part is drawn.
+    const r = hold(HUNTER_GEAR, 5);
     r.look = { role: ROLE.HUNTER };
     const out: number[] = [];
     soldier(out, r, [0.15, 0.4, 1], 0);
@@ -265,6 +266,24 @@ describe('the Hunter', () => {
     const crown = Math.max(...heights) - r.p.y;
     expect(crown).toBeGreaterThan(stance(r).s.pos[J.HEAD][1] - r.p.y + 0.3);
     expect(crown).toBeLessThan(2.255);
+  });
+
+  it('carries no weapon he has not found: harpoon, shoulder cannon and disc appear as he finds them (the user, 2026-11-26)', () => {
+    const drawn = (o: Partial<PlayerState>) => {
+      const r = hold({ ammo: -1, rail: -1, rifle: -1, ...o }, 5);
+      r.look = { role: ROLE.HUNTER };
+      const out: number[] = [];
+      soldier(out, r, [0.15, 0.4, 1], 0);
+      return out.length;
+    };
+    const part = (name: string) => hunter(0)[name].length;
+    const bare = drawn({});
+    expect(drawn({ ammo: 12, fists: true }) - bare).toBe(part('Harpoon'));
+    expect(drawn({ rail: 0 }) - bare).toBe(part('Shoulder laser'));
+    expect(drawn({ rifle: 0 }) - bare).toBe(part('Flying disc'));
+    expect(drawn(HUNTER_GEAR) - bare).toBe(
+      part('Harpoon') + part('Shoulder laser') + part('Flying disc'),
+    );
   });
 
   it('runs on the marine’s animated legs instead of sliding frozen (the user, 2026-11-23)', () => {

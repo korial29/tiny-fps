@@ -48,7 +48,15 @@ import { JOINT, JOINTS, turn } from './rig';
 import { craft } from './craft';
 import { rolled, rover } from './rover';
 import type { Quat } from './rig';
-import { GRIN, animate, createRunner, hunterSteps, soldier, warmHunter } from './soldier';
+import {
+  GRIN,
+  HUNTER_GEAR,
+  animate,
+  createRunner,
+  hunterSteps,
+  soldier,
+  warmHunter,
+} from './soldier';
 import { PARRY_IN } from './katana';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT, beast, body, cut } from './skin';
 import { CLOTH } from './mask';
@@ -2105,6 +2113,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
               railed: false,
               rifled: false,
             },
+            // The Hunter's picture shows all he can find, carried, the hands free (the fists:
+            // nothing in hand): his weapons are on him only once found (soldier.ts).
+            ...(look?.role === ROLE.HUNTER && HUNTER_GEAR),
             ...shot.hold,
           };
       // At ease, the arms down: no fighter's guard. The xenomorph is never at ease: it threatens.

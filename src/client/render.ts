@@ -40,7 +40,6 @@ import { LAYERS, PLATES, PLATE_TEXELS, SIZE, plates, textures } from './textures
 import { drawDrops, fall } from './drops';
 import { traffic } from './traffic';
 import { GAP, cells, seen } from './cells';
-import type { Cells } from './cells';
 
 import {
   CLOSE,
@@ -91,6 +90,7 @@ import {
   scenery,
 } from './render/scene';
 import type { Renderer, Target, Targets } from './render/types';
+import { instanceDraw } from './instances/draw';
 import { PICTURE_MIN, PORTRAIT, backing, outfit, through, warmSteps } from './render/shots';
 
 export * from './render/constants';
@@ -151,14 +151,10 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const glassN = seaN && (d.glass?.length ?? 0) / STRIDE;
   /** Its undergrowth, before the glass: drawn near the eye only, in no shadow map. */
   const grassN = seaN && (d.grass?.length ?? 0) / STRIDE;
-  /** Its palms near and far, after the undergrowth: each tile drawn in one of the two by its distance. */
-  const [nearN, farN] = [d.groves?.near, d.groves?.far].map(v =>
-    seaN && v ? v.length / STRIDE : 0,
-  );
-  /** The ground's opaque vertices, before the undergrowth, the palms, the Earth, the glass, the smoke and the sea. */
-  const opaque = ground.length / STRIDE - heavensN - grassN - nearN - farN - glassN - smokeN - seaN;
-  /** Where what follows the palms starts: the glass, the smoke, the sea. */
-  const after = opaque + grassN + nearN + farN;
+  /** The ground's opaque vertices, before the undergrowth, the Earth, the glass, the smoke and the sea. */
+  const opaque = ground.length / STRIDE - heavensN - grassN - glassN - smokeN - seaN;
+  /** Where what follows the undergrowth starts: the glass, the smoke, the sea. */
+  const after = opaque + grassN;
   /** Those cut into runs, each pass drawing those in its view (cells.ts), and the draws of the last one. */
   const runs = cells(ground, opaque);
   const draws = new Int32Array(runs.n * 2);
@@ -171,45 +167,40 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     GRASS_TILE,
   );
   const tuftDraws = new Int32Array(tufts.n * 2);
-  /** The palms' tiles as runs, near and far with the same bounds, and the draws of the last pass. */
-  const grove = (far: boolean): Cells => {
-    const t = d.groves?.tiles ?? [];
-    const n = seaN ? t.length / 10 : 0;
-    const c = {
-      n,
-      first: new Int32Array(n),
-      count: new Int32Array(n),
-      box: new Float32Array(n * 6),
-    };
-    for (let i = 0; i < n; i++) {
-      c.first[i] = (far ? nearN : 0) + t[i * 10 + (far ? 2 : 0)];
-      c.count[i] = t[i * 10 + (far ? 3 : 1)];
-      c.box.set(t.slice(i * 10 + 4, i * 10 + 10), i * 6);
-    }
-    return c;
-  };
-  const [nearPalms, farPalms] = [grove(false), grove(true)];
-  const palmDraws = new Int32Array(nearPalms.n * 2);
-  /** Draws the palms in the frustum of `m`: near ones within GROVE_NEAR of `at`, far ones past it to GROVE_FAR unless `shadow`. */
+  /** What the map draws by instance (instances/): Landfall's palms. */
+  const trees = seaN && d.instances ? instanceDraw(gl, d.instances) : undefined;
+  /**
+   * Draws the palms in the frustum of `m`: near ones within GROVE_NEAR of `at`, far ones past it to
+   * GROVE_FAR unless `shadow`, with the land's dither (`faded`) but in a shadow pass.
+   */
   const palms = (m: Float32Array, at: ArrayLike<number>, shadow = false) => {
-    for (const [c, far] of [
-      [nearPalms, false],
-      [farPalms, true],
-    ] as const) {
-      if (far && shadow) {
-        continue;
-      }
-      const n = seen(c, m, palmDraws, GAP, at, GROVE_NEAR, far, GROVE_FAR);
-      for (let i = 0; i < n; i++) {
-        gl.drawArrays(gl.TRIANGLES, opaque + grassN + palmDraws[i * 2], palmDraws[i * 2 + 1]);
-      }
+    if (!trees) {
+      return;
+    }
+    if (!shadow && faded) {
+      use(faded);
+    }
+    trees.draw(m, at, GROVE_NEAR, GROVE_FAR, shadow, sm => uni('uniform1i', 'Sm', sm));
+    gl.bindVertexArray(main);
+    gl.bindBuffer(gl.ARRAY_BUFFER, frameBuf);
+    if (!shadow && faded) {
+      use(land);
     }
   };
   /** Draws the undergrowth's tiles in the frustum of `m` within GRASS_REACH of `eye`. */
   const grass = (m: Float32Array, at: ArrayLike<number>) => {
     const n = seen(tufts, m, tuftDraws, GAP, at, GRASS_REACH);
+    // With the palms by instance, the undergrowth thins out by the pixel over its last 7 m (VERT's Gf).
+    if (faded) {
+      use(faded);
+      uni('uniform2f', 'Gf', GRASS_REACH - 7, GRASS_REACH);
+    }
     for (let i = 0; i < n; i++) {
       gl.drawArrays(gl.TRIANGLES, opaque + tuftDraws[i * 2], tuftDraws[i * 2 + 1]);
+    }
+    if (faded) {
+      uni('uniform2f', 'Gf', 0, 0);
+      use(land);
     }
   };
   const paned = new Int32Array(2);
@@ -246,6 +237,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   let depth: WebGLFramebuffer;
   /** The scene's programs (fragOf()): the map and the sky, the bodies, the moon's globe. */
   let land: Variant;
+  /** The land's program with the palms' and the undergrowth's dither (FRAG's FADE): only their draws pay for its discard. */
+  let faded: Variant | undefined;
   let bodies: Variant;
   let globed: Variant | undefined;
   /** The shadow maps' program: depth only. */
@@ -556,7 +549,11 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     sighted.clear();
     vision = false;
     make = (kind, names = UNIFORMS, sight = false) => {
-      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock, sight, d.glaze, d.forest), names);
+      // Instances only where the map has them (INSTANCES), its own code for them spliced in.
+      const has = (src: string) => (d.instances ? src.replace('\n', '\n#define INSTANCES\n') : src);
+      const vert = has(VERT.replace('//INSTANCE', d.instanced ?? ''));
+      const frag = fragOf(world.def, kind, d.rock, sight, d.glaze, d.forest, d.fade);
+      const [p, l] = link(vert, has(frag), names);
       return { p, u: l, sent: new Map(), kind };
     };
     const variant = (kind: string, names = UNIFORMS) => make(kind, names);
@@ -567,6 +564,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       // The vertex shader's uniforms alone: the depth's fragment shader reads none.
       variant('DEPTH', DEPTH_UNIFORMS),
     ];
+    faded = d.instances ? variant('LAND\n#define FADE') : undefined;
     live = undefined;
     use(land);
     uni('uniform1i', 'D', 1);
@@ -618,6 +616,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     gl.bindBuffer(gl.ARRAY_BUFFER, (held = gl.createBuffer()));
     layout();
     [sent, roomy] = [0, 0];
+    // The palms' variants for good, and the buffer of their instances.
+    trees?.setup(layout);
     gl.bindVertexArray((main = gl.createVertexArray()));
     gl.bindBuffer(gl.ARRAY_BUFFER, (frameBuf = gl.createBuffer()));
     alloc();
@@ -941,9 +941,9 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         uni('uniformMatrix4fv', 'm', false, lm);
         gl.clear(gl.DEPTH_BUFFER_BIT);
         map(lm);
-        // The near palms; then from after the far ones, the undergrowth and the far palms casting
-        // nothing: the glass, the smoke, the sea, what moves.
-        if (nearN) {
+        // The near palms (palms/), fading out with their near mesh; then from after the undergrowth,
+        // which casts nothing: the glass, the smoke, the sea, what moves.
+        if (trees) {
           palms(lm, eye, true);
         }
         gl.drawArrays(gl.TRIANGLES, after, first - after + beamAt / STRIDE);
@@ -1042,7 +1042,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       if (grassN) {
         grass(vp, eye);
       }
-      if (nearN) {
+      if (trees) {
         palms(vp, eye);
       }
       if (heavensN) {

@@ -26,6 +26,15 @@ import { N as PRINT_TEXELS, SPAN } from '../prints';
 import { FRAME } from '../../shared/beach';
 import { PLUME, SMOKE } from '../smoke';
 import { FOLIAGE_SHADOW } from '../foliage/layers';
+import {
+  DIST_FADE_VERT,
+  FADE_DEPTH,
+  FADE_FRAG_HEAD,
+  FADE_PIXEL,
+  INST_VERT,
+  INST_VERT_HEAD,
+  INST_VERT_INIT,
+} from '../instances/glsl';
 import { CANOPY, CANOPY_GLSL, DULL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
 import { JOINTS } from '../rig';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT } from '../skin';
@@ -64,7 +73,7 @@ layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec
 uniform mat4 m,Hh[2];uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
 uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2],Hc;uniform float Ak,Fz;uniform vec4 Hs;
 out vec3 P,N,Rp;out vec4 C;out float Wa;
-vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
+${INST_VERT_HEAD}vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
 float sh,ry;vec2 hb;vec3 kr;
 void k(int i,out vec3 x,out vec3 y){
@@ -79,6 +88,7 @@ void fz(){int i=gl_VertexID/3;float h=float(uint(i+1)*0x9e3779b1u%1000u)/1000.,f
 if(h<Fz){P=vec3(-1e4);return;}P+=vec3(sin(fi)*.3,1.2*h,cos(fi)*.3)*Fz*Fz;C.xyw+=(vec3(${ARC.join(',')})*(1.-Fz)-C.xyw)*w;if(w>.5)C.z=-2.;}
 void main(){
 Rp=vec3(0);Wa=0.;
+${INST_VERT_INIT}
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
 if(Sm==1){vec4 h=g(Sb.y+gl_VertexID);k(int(h.x),P,N);int a=int(h.y);vec3 l=Sp[a];l+=(Sp[int(h.z)]-l)*h.w;l*=sh;
 if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*hb.x;
@@ -103,8 +113,8 @@ Wa=(Ak>0.?((K&1)!=0?2.:1.):0.)+(Sb.w==4?4.:0.);N=q;C=vec4(l.xy,h.w,l.z);fz();gl_
 if(Sm==3){float f=c.y,ph=c.w<0.?-1.:floor((${CARD_BASE}-c.z)*${(1 / CARD_STEP).toFixed(1)})*1.7,T=Hs.w,fo=f*step(0.,ph),o2=fo*(.002+.0015*sin(T*2.7+ph));
 vec3 d=.6*f*Hs.xyz+fo*vec3(.005*sin(T*2.3+ph)+.003*sin(T*5.1+ph*1.7),.002*sin(T*3.1+ph*.7),.004*sin(T*1.9+ph*1.3)+.003)+n*o2;
 P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);Rp=vec3(c.w<0.?-1.-c.w:c.w,step(c.w,0.),0);Wa=-1.;fz();gl_Position=m*vec4(P,1);return;}
-P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;fz();gl_Position=m*vec4(P,1);
-if(c.z<-1.03&&c.z>-1.08&&R[1]==vec4(0,0,0,1)){vec3 a=(Hh[0]*vec4(P,1)).xyz,b=(Hh[1]*vec4(P,1)).xyz;Rp=(dot(a,a)<dot(b,b)?a:b)+vec3(${HAND_MARK}.,0,0);}}`;
+${INST_VERT}P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;fz();gl_Position=m*vec4(P,1);
+${DIST_FADE_VERT}if(c.z<-1.03&&c.z>-1.08&&R[1]==vec4(0,0,0,1)){vec3 a=(Hh[0]*vec4(P,1)).xyz,b=(Hh[1]*vec4(P,1)).xyz;Rp=(dot(a,a)<dot(b,b)?a:b)+vec3(${HAND_MARK}.,0,0);}}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
 export const POST_VERT = `#version 300 es
@@ -247,7 +257,7 @@ precision highp float;precision highp sampler2DArray;precision highp sampler2DAr
 in vec3 P,N,Rp;in vec4 C;in float Wa;uniform vec3 E;uniform float T,Z,Y,Ss;uniform int Q;
 uniform vec4 A[${MAX_LIGHTS}],B[${MAX_LIGHTS}],K[${MAX_LIGHTS}],F,Ob,Cb;uniform float U;uniform float Sn;uniform vec3 G[${MAX_TINTS}],H[5],O,X;uniform mat4 M[${MAX_SHADOWS}],W;
 uniform sampler2DArray S;uniform sampler2DArrayShadow D;uniform highp sampler3D Pl;uniform vec4 Ve[16];uniform int Vn;uniform int Hv;uniform float Gp;uniform sampler2D Og;out vec4 o;
-#ifdef PRINTS
+${FADE_FRAG_HEAD}#ifdef PRINTS
 uniform sampler2D Fp;uniform vec2 Fc;
 #endif
 #ifdef MIRROR
@@ -255,7 +265,8 @@ uniform highp sampler2D Bx;uniform int Bn;
 float rt(vec3 o,vec3 d,out int i,out vec3 n){vec3 q=1./d;float b=1e4;i=-1;n=vec3(0);for(int j=0;j<Bn;j++){vec3 a=(texelFetch(Bx,ivec2(0,j),0).xyz-o)*q,e=(texelFetch(Bx,ivec2(1,j),0).xyz-o)*q,u=min(a,e),v=max(a,e);float s=max(max(u.x,u.y),u.z);if(s>0.&&s<b&&min(min(v.x,v.y),v.z)>=s){b=s;i=j;n=-sign(d)*step(u.yzx,u.xyz)*step(u.zxy,u.xyz);}}return b;}
 #endif
 #ifdef DEPTH
-void main(){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;}
+void main(){if(C.z<-2.5||(C.z<-1.3595&&C.z>-1.3895))discard;
+${FADE_DEPTH}}
 #else
 #ifdef FLESH
 #define FL(x) x
@@ -338,7 +349,7 @@ vec4 bc(sampler2DArray s,vec2 u,float l,float n){vec2 g,a,b;bqw(u,n,g,a,b);retur
 vec4 bp(vec2 u){vec2 g,a,b;bqw(u,${PRINT_TEXELS}.,g,a,b);return mix(mix(textureLod(Fp,b,0.),textureLod(Fp,vec2(a.x,b.y),0.),g.x),mix(textureLod(Fp,vec2(b.x,a.y),0.),textureLod(Fp,a,0.),g.x),g.y);}
 #endif
 void main(){
-#ifdef ORB
+${FADE_PIXEL}#ifdef ORB
 vec3 d=normalize(P);bool t;o=vec4(mg(d,length(fwidth(d))*.5,t),t);
 #else
 vec3 kd=Y>.5?normalize(P):-normalize(E-P);float kp=length(fwidth(kd)),fa=Y;
@@ -614,10 +625,12 @@ export const UNIFORMS = [
   'Og',
   'Fp',
   'Fc',
+  'Gf',
 ];
 /** The vertex shader's uniforms (VERT): all the depth passes' program reads. */
 export const DEPTH_UNIFORMS = [
   'm',
+  'T',
   'Y',
   'J',
   'R',
@@ -681,7 +694,8 @@ export const mirrors = (brushes: readonly Brush[] = []): boolean =>
  * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon. `rock` is the GLSL of the
  * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk), `glaze` that of its indoor
  * windows under MOON (Decor.glaze: Tranquility's traced reflections, from its chunk), `forest` that of
- * the forest's own layers under BEACH (Decor.forest: Landfall's burnt earth, from its chunk). `sight` adds the
+ * the forest's own layers under BEACH (Decor.forest: Landfall's burnt earth, from its chunk), `fade`
+ * the pixel code of what is drawn by instance under FADE (Decor.fade: Landfall's ferns). `sight` adds the
  * vision's filter and its glowing prey (VISION), for a frame in a xenomorph's or the Hunter's
  * vision: its loop and palettes were 4.6 ms a frame on Highline with none ever drawn, 1.4 on
  * Tranquility and none on Landfall, through the registers they take from every pixel.
@@ -694,6 +708,7 @@ export const fragOf = (
   sight = false,
   glaze = '',
   forest = '',
+  fade = '',
 ) =>
   FRAG.replace(
     '\n',
@@ -701,7 +716,8 @@ export const fragOf = (
   )
     .replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`)
     .replace('//GLAZE', kind.startsWith('LAND') ? glaze : '')
-    .replace('//FOREST', kind.startsWith('LAND') ? forest : '');
+    .replace('//FOREST', kind.startsWith('LAND') ? forest : '')
+    .replace('//FADE', fade);
 
 /** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */
 export const printed = (def: Pick<WorldDef, 'scenery' | 'relief'>) =>

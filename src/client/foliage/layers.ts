@@ -1,6 +1,6 @@
 // Landfall's forest as the shader knows it (docs/BEACH.md): lit paint on layers of its own. Leaves
-// and bark are plain paint (the user, 2026-11-27: no texture on the plants, a frame rate first);
-// their layers only tell the shader to spare them work. Burnt earth has a texture of noise. Each layer sits between the runners' bands (from -1.08) and the gloss's
+// are plain paint (the user, 2026-11-27: no texture on the plants, a frame rate first); their layers
+// tell the shader to spare them work. A palm's bark has fibres near the eye (palms/glsl.ts). Burnt earth has a texture of noise. Each layer sits between the runners' bands (from -1.08) and the gloss's
 // (-1.1), clear of SAND's (±0.005 round -1.09) and TARP's (±0.001 round -1.098).
 
 /** Leaves: the palms' fronds, the broadleaves' crowns, the undergrowth and the forest's mass. */

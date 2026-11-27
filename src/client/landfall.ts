@@ -7,15 +7,15 @@ import { BUGGY } from './buggy';
 import { GRANITE } from './granite';
 import { canopy, hulk } from './hulk';
 import { blazes } from './burnt/fire';
-import { packed } from './foliage/grove';
 import { FOREST_GLSL } from './foliage/layers';
 import { tiled } from './foliage/tiles';
 import { parts } from './jungle';
+import { BARK_PIXEL, FERN_BLADE, PALM_INSTANCE } from './palms/glsl';
 
 /** The beach's forest, then its wreck: a yield between the two (tasks.ts drive()). */
 export default function* (def: WorldDef): Generator<undefined, Decor, undefined> {
-  // The undergrowth apart (Decor.grass): drawn near the eye only, in no shadow map.
-  const { brush, groves, ...rest } = parts(def);
+  // The undergrowth apart (Decor.grass): drawn near the eye only, in no shadow map; the palms by instance (Decor.instances).
+  const { brush, trees, ...rest } = parts(def);
   const land = ([] as number[]).concat(...Object.values(rest));
   const grass = tiled(brush);
   yield;
@@ -27,8 +27,10 @@ export default function* (def: WorldDef): Generator<undefined, Decor, undefined>
     rock: GRANITE,
     car: BUGGY,
     grass,
-    groves: packed(groves.values()),
-    forest: FOREST_GLSL,
+    instances: trees,
+    instanced: PALM_INSTANCE,
+    fade: FERN_BLADE,
+    forest: FOREST_GLSL + BARK_PIXEL,
     blazes: blazes(def),
   };
 }

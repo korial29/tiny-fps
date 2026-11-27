@@ -5,12 +5,13 @@ import { TEX } from '../shared/types';
 import type { WorldDef } from '../shared/world';
 import { jungle, parts } from './jungle';
 import { STRIDE } from './mesh';
+import { expand } from './palms/build';
 
 const made = parts(BEACH);
 const count = (v: number[]) => v.length / STRIDE;
-/** Every palm as drawn near (Decor.groves), and as drawn far. */
-const near = (p = made) => [...p.groves.values()].flatMap(g => g.near);
-const far = (p = made) => [...p.groves.values()].flatMap(g => g.far);
+/** Every palm as the vertex shader draws it near (Decor.trees, expand()), and far. */
+const near = (p = made) => expand(p.trees);
+const far = (p = made) => expand(p.trees, true);
 /** Whether a vertex is on a palm of TRUNKS or its twin, the row the map collides with. */
 const onTrunk = (v: number[]) =>
   TRUNKS.some(([x, z]) => [z, ZED - z].some(t => Math.hypot(v[0] - x, v[2] - t) < 1));
@@ -51,34 +52,28 @@ describe('jungle', () => {
       skew += +(Math.abs(Math.hypot(v[i + 3], v[i + 4], v[i + 5]) - 1) > 1e-5);
     }
     expect([differ, odd, skew]).toEqual([0, 0, 0]);
-    const rest = Object.entries(made).filter(([k]) => k != 'groves');
+    const rest = Object.entries(made).filter(([k]) => k != 'trees');
     expect(v.length).toBe(rest.reduce((n, [, p]) => n + (p as number[]).length, near().length));
   });
 
   it('keeps each part within its share of the level', () => {
     expect(count(made.rocks)).toBeLessThan(45_500);
-    // The palms near and far (each tile drawn in one of the two, render.ts), the undergrowth
-    // near only (Decor.grass): what a frame draws of them is bounded by the distances, not these.
-    expect(count(near())).toBeLessThan(250_000);
-    expect(count(far())).toBeLessThan(85_000);
+    // The palms' variants (palms/): every palm drawn from them by instance. The undergrowth near
+    // only (Decor.grass): what a frame draws of it is bounded by the distance, not this.
+    expect(count(made.trees.mesh)).toBeLessThan(15_000);
     expect(count(made.brush)).toBeLessThan(880_000);
     expect(count(made.canopy)).toBeLessThan(76_000);
-    expect(count(made.snags)).toBeLessThan(11_000);
-    expect(count(jungle(BEACH))).toBeLessThan(1_260_000);
+    expect(count(made.snags)).toBeLessThan(16_000);
+    // Kept as vertices: all but the palms, which jungle() expands from their instances.
+    expect(count(jungle(BEACH)) - count(near())).toBeLessThan(1_030_000);
   });
 
-  it('draws each palm twice, near and far, the far one cheaper and as tall, both in its tile', () => {
-    for (const g of made.groves.values()) {
-      expect(g.near.length).toBeGreaterThan(g.far.length);
-      expect(g.far.length).toBeGreaterThan(0);
-      const top = (v: number[]) => Math.max(...verts(v).map(p => p[1]));
-      expect(Math.abs(top(g.near) - top(g.far))).toBeLessThan(1);
-      // The feet in the tile: its middle within half a tile and the fronds' reach of each point.
-      for (const v of [...verts(g.near), ...verts(g.far)]) {
-        expect(Math.abs(v[0] - g.x)).toBeLessThan(8 + 9);
-        expect(Math.abs(v[2] - g.z)).toBeLessThan(8 + 9);
-      }
-    }
+  it('plants hundreds of palms from a few variants, each drawn near or far as tall', () => {
+    expect(made.trees.near.length).toBeGreaterThan(450);
+    const [n, f] = [verts(near()), verts(far())];
+    expect(n.length).toBeGreaterThan(f.length);
+    const top = (v: number[][]) => v.reduce((y, p) => Math.max(y, p[1]), -Infinity);
+    expect(Math.abs(top(n) - top(f))).toBeLessThan(1);
   });
 
   it('draws every rock of ROCKS and its twin on the form the map collides with, in granite', () => {

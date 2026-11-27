@@ -41,6 +41,13 @@ export const GLOSS = -1.12;
  */
 export const GILT = -1.42;
 /**
+ * The layer of a lit pane of glass (Tranquility's portholes, the user, 2026-11-27: reflections on
+ * them): a glow like -2, with the sky, the horizon and the ground mirrored in it over the glow, more
+ * at a grazing angle, and the sun's highlight. Its normals bulge to the rim so the mirror moves
+ * across it.
+ */
+export const PANE = -2.2;
+/**
  * Hair: a band of layers from HAIR_ROOT (the root) to HAIR_ROOT - HAIR_SPAN (the tip), how far along
  * its strand a point is: the shader takes the strand's way from the band's gradient (Kajiya-Kay
  * highlights, streaks). Lit like -1 but for its own highlights.

@@ -7,6 +7,7 @@ import { glow } from './flag';
 import { STRIDE, dress, place, segment, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
 import { UP, box, face, lit } from './brick';
+import { glaze } from './glass/glaze';
 import { GAPS, INDOORS, LINTELS } from './moonbase';
 
 const [CX, CZ] = DOME;
@@ -149,11 +150,30 @@ const disc = (o: number[], [x, y, z, nx, nz]: number[], r: number, e: number, rg
     rgb,
     [x - nx, y, z - nz],
   );
+/** How far a pane's normal leans out toward its rim: the glass looks domed, and the mirror in it moves. */
+const BULGE = 0.8;
+/**
+ * A porthole's lit glass, e out from its middle: a fan of 12 about its centre, the normals leaning
+ * out by BULGE at the rim, on the PANE layer (docs/MOON.md).
+ */
+const pane = (o: number[], [x, y, z, nx, nz]: number[], r: number, e: number) => {
+  const from = o.length;
+  const at = (i: number): Vec3 => {
+    const c = r * Math.cos((i * TAU) / 12);
+    return [x + e * nx - nz * c, y + r * Math.sin((i * TAU) / 12), z + e * nz + nx * c];
+  };
+  const mid: Vec3 = [x + e * nx, y, z + e * nz];
+  for (let i = 0; i < 12; i++) {
+    face(o, [mid, at(i), at(i + 1)], WARM, [x - nx, y, z - nz]);
+  }
+  glow(o, from, 0.7);
+  glaze(o, from, mid, [nx, 0, nz], r, BULGE);
+};
 const portholes = (o: number[]) => {
   for (const p of PORTHOLES) {
     const r = p[5];
     disc(o, p, r + 0.1, 0, IRON);
-    lit(o, 0.7, () => disc(o, p, r, 0.015, WARM));
+    pane(o, p, r, 0.015);
     if (p[6]) {
       // Seen from the room: a dark frame and grey glass on the lining, as its windows.
       const from = o.length;

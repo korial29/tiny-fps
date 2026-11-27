@@ -152,11 +152,13 @@ The ship carried troops. Its inside now says so, and the canopy is glass.
   centre line, and stop short of the wall in the trees. Drawn only: they stand 0.22 to 0.64 m off
   the lining, so a runner pressed to the wall passes 0.3 to 0.6 m into them.
 - **The flight deck** (`cockpit()`), past x 97 on the upper deck's line, behind the wall in the
-  trees: seen, never reached. A floor to the panel (x 101.4), two pilots' seats with their harnesses
-  (the co-pilot's torn from its rails and tipped against the pedestal), the pedestal with four
-  throttles, two pulled back, the instrument panel under the windscreen and its glare shield, faces
-  dim green, amber or dead, the overhead panel torn from its forward mount and hanging, cables
-  down from it, and on the floor a fallen panel, a cushion and plates against the flanks.
+  trees: seen, never reached. A floor to the panel (x 101.4), two pilots' seats with their harnesses,
+  their backs one rounded shell up to the headrest (`chair.ts`) (the co-pilot's torn from its rails
+  and tipped against the pedestal), the pedestal with four throttles, two pulled back, the
+  instrument panel under the windscreen and its glare shield, faces dim green, amber or dead, the
+  overhead panel torn from its forward mount and hanging, cables down from it, and on the floor a
+  fallen panel, a cushion and plates against the flanks. Nothing on it is a box (the user,
+  2026-11-27): rounded slabs, round tubes and ball knobs (`ball()` in `shapes.ts`).
 - **The canopy's glass** (`canopy()`, paint layer `CANOPY` = −7, `CANOPY_GLSL` in `paint.ts`): the
   panes past the arch (x 92) over the sill, no longer of the skin; one pane on each flank broken
   (`SHATTER`, x 98.3..101), shards round it. It is `Decor.glass`, the ground's vertices before the
@@ -319,8 +321,9 @@ a hole or at a broken end, so a runner pressed to the wall passes into the furni
   (its sign green, vacant) at the nose's: carts, ovens and lockers, one cart rolled out on its side.
 - **Holds** (`hold.ts`): suitcases piled along both flanks behind cargo nets, a diamond mesh of
   olive webbing between yellow straps; the doors and the tail's flooded hold left clear.
-- **The flight deck**: the captain dead in the left seat (`pilot.ts`), slumped toward the window,
-  his cap on the floor; the first officer's seat is the one torn from its rails.
+- **The flight deck**: the captain dead in the left seat (`pilot.ts`): the marine's body without
+  its armour, in white, posed once from a rover rider's seat, slumped toward the window with the
+  right arm hanging, and baked into the hulk (the pouch's glow left out); his cap on the floor; the first officer's seat is the one torn from its rails.
 - **The holes' edges**: the tears' frames, the broken ends' rings and the backs of the torn panels
   round the holes in a deck are flat grey (`TRIM`): brushed steel's fine lines shimmered on them.
 - **Textures on the props**: two layers, `FABRIC` (a twill with a small printed diamond) and `HIDE`

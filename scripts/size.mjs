@@ -114,7 +114,8 @@ const BUDGETS = [
   // 291,584 B: Landfall's airliner cabin, its cloth and leather textures and its tints (the user, 2026-11-27).
   // 292,352 B: Landfall's buggies, the rover's model shared with their chunk (the user, 2026-11-27).
   // 292,416 B: the splice of the moon base's traced window reflections (fragOf()'s glaze; the user, 2026-11-27).
-  { file: 'dist/index.js', max: 292_416 },
+  // 297,536 B: the dead captain in the marine's body, posed once by Landfall's chunk (the user, 2026-11-27).
+  { file: 'dist/index.js', max: 297_536 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -160,7 +161,9 @@ const LAZY = {
   // 16,256 B: torn metal in petals, the doors' frames, the dull steel cases (the user, 2026-11-27).
   // 19,456 B: an airliner's cabin, its seats, galleys, luggage, trim and dead captain (the user, 2026-11-27).
   // 21,888 B: a buggy for each camp, its body, pods and sand tyres (the user, 2026-11-27).
-  landfall: 21_888,
+  // 22,400 B: the dead captain in the marine's body, the pilots' seats rounded (the user, 2026-11-27).
+  // 22,912 B: no box left on the flight deck, and room after the moon base's decor (the user, 2026-11-27).
+  landfall: 22_912,
 };
 
 const imports = src => [

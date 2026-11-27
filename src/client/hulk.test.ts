@@ -60,19 +60,19 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 210,000 vertices in all', () => {
+  it('keeps each part within its share: under 222,000 vertices in all', () => {
     // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224, debris 27,246.
     expect(count(made.hull)).toBeLessThan(35_000);
     expect(count(made.ends)).toBeLessThan(2_500);
-    // An airliner's cabin, rounded (the user, 2026-11-27): inside 14,784, cabin 112,914 (seats about
-    // 80,000, luggage 18,600, trim 15,000).
+    // An airliner's cabin, rounded (the user, 2026-11-27): inside 14,784, cabin 127,290 (seats about
+    // 80,000, luggage 18,600, trim 15,000, the dead captain the marine's body at LOD 1, 11,736).
     expect(count(made.inside)).toBeLessThan(16_000);
-    expect(count(made.cabin)).toBeLessThan(116_000);
+    expect(count(made.cabin)).toBeLessThan(130_000);
     expect(count(made.wings)).toBeLessThan(8_000);
     expect(count(made.debris)).toBeLessThan(28_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26): 6,348.
     expect(count(made.camps)).toBeLessThan(7_000);
-    expect(count(hulk(BEACH))).toBeLessThan(210_000);
+    expect(count(hulk(BEACH))).toBeLessThan(222_000);
   });
 
   it('keeps the seats, galleys and luggage against the flanks, clear of the ways through, the doors and the tears', () => {
@@ -375,7 +375,9 @@ describe('hulk', () => {
         v[1] < y + 1.1 &&
         Math.abs(v[2] - (MID - 0.85)) < 0.35,
     );
-    // His white shirt, over the seat's cushion.
-    expect(body.filter(v => v[8] === -1 && v[6] > 0.5 && v[7] > 0.5).length).toBeGreaterThan(30);
+    // The marine's skinned body in white over the seat's cushion, not a few boxes.
+    expect(body.filter(v => v[8] === -1 && v[6] > 0.5 && v[7] > 0.5).length).toBeGreaterThan(2_000);
+    // Dead: no glow on him, the pouch's spare battery left dark.
+    expect(body.filter(v => v[8] === -2)).toEqual([]);
   });
 });

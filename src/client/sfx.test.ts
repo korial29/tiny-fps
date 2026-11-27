@@ -17,6 +17,7 @@ import {
   chirr,
   render,
   seam,
+  SURF,
   surf,
 } from './sfx';
 import type { Voice } from './sfx';
@@ -951,9 +952,9 @@ describe('Landfall\u2019s ambience', () => {
   });
 
   it('is loudest at the waterline for the surf, and still heard at the trees', () => {
-    expect(heard(30, 150)[0]).toBe(1);
-    expect(heard(60, 150)[0]).toBeLessThan(0.5);
-    expect(heard(92, 150)[0]).toBeGreaterThan(0.2);
+    expect(heard(30, 150)[0]).toBe(SURF);
+    expect(heard(60, 150)[0]).toBeLessThan(0.5 * SURF);
+    expect(heard(92, 150)[0]).toBeGreaterThan(0.2 * SURF);
     expect(heard(2, 150)[0]).toBeLessThan(heard(30, 150)[0]);
   });
 

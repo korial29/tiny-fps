@@ -119,8 +119,10 @@ try {
   // As made.
 }
 const STORE = 'tiny-fps:muted';
-/** The announcer's volume, and the music's share of its own under a line. */
-const SPEECH = 0.9;
+/** The announcer's volume (+6 dB on 2026-11-27, the user: heard over the match), and the music's share of its own under a line. */
+const SPEECH = 1.8;
+/** dB a line over the radio gains: the clip and the narrow band take its body, so it needs more to be heard. */
+const RADIO = 6;
 const DUCK = 0.35;
 /** The radio's band, Hz: what a headset's speaker gives of a voice. */
 const BAND = [500, 2800];
@@ -319,7 +321,7 @@ export const createAudio = (
     radio = false,
     mimic = false,
   ): boolean => {
-    const loud = gain(level);
+    const loud = gain(radio ? level + RADIO : level);
     /** What reaches the listener, for the voices' priority: the panner's own fall with distance. */
     let vol = loud;
     let p: PannerNode | undefined;

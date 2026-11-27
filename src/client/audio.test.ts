@@ -660,7 +660,7 @@ describe('speak', () => {
     expect([hp.type, lp.type]).toEqual(['highpass', 'lowpass']);
     expect(hp.frequency.value).toBeLessThan(lp.frequency.value);
     expect(lp.to!.pos).toBeUndefined();
-    expect(lp.to!.gain.value).toBeCloseTo(gain(-3));
+    expect(lp.to!.gain.value).toBeCloseTo(gain(-3 + 6));
     // The noise into the same amplifier: loud, low under the line, loud again, then stopped.
     const noise = fake().sources.find(s => s.loop && s.to?.to === shaper)!;
     const g = noise.to!.gain;

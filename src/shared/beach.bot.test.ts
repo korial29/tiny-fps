@@ -344,13 +344,15 @@ describe('LANDFALL, a bot alone with the real physics', () => {
     expect(f.seconds).toBeLessThan(15);
   });
 
-  it('jumps onto a box a little too high to step onto: the pack on the panel by the hold’s door', () => {
-    const pack = BEACH.packs![2];
+  it('jumps onto a box a little too high to step onto: the first panel of the line of debris', () => {
+    // The packs on the sand lie low enough to step onto (the user, 2026-11-27); this panel, the
+    // line's first step, does not. Its ammo pack, seen as a health pack.
+    const pack = BEACH.ammo![0];
     const [x, , z] = pack;
-    // 0.59 m over the level sand east of it: more than a step.
-    expect(pack[1] - ground(world, x + 2, z)).toBeGreaterThan(STEP_H + 0.05);
+    // More than a step over the sand on the camp's side of it.
+    expect(pack[1] - ground(world, x, z + 5)).toBeGreaterThan(STEP_H + 0.05);
     const f = flight(1, 0, 10, {
-      from: [58, ground(world, 58, 143), 143],
+      from: [x, ground(world, x, z + 7), z + 7],
       hp: 2,
       sight: { packs: [pack] },
       done: p =>

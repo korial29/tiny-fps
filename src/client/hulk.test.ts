@@ -319,8 +319,8 @@ describe('hulk', () => {
       const hue = (v: number[]) => [v[6], v[7], v[9]].map(c => c / Math.max(v[6], v[7], v[9]));
       const want = tint.map(c => c / Math.max(...tint));
       const team = mine.filter(v => hue(v).every((c, i) => Math.abs(c - want[i]) < 1e-6));
-      // Two tarpaulins of 432 vertices (their roofs both faces, their hems), the step's top twice, the band of eight faces, two lids.
-      expect(team.length).toBeGreaterThanOrEqual(2 * 432 + 12 + 48 + 12);
+      // Two tarpaulins of 432 vertices (their roofs both faces, their hems), the step's top twice, the band of eight faces.
+      expect(team.length).toBeGreaterThanOrEqual(2 * 432 + 12 + 48);
     });
   });
 

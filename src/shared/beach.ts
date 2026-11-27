@@ -704,7 +704,7 @@ const FLOATS = [
   note(mine, 'float', box(23, -1.6, 132.6, 26, 0.2, 135, METAL)),
 ];
 
-/** The camp: the pod, the flag's step by it, a crate under each rack with a tarpaulin over it. */
+/** The camp: the pod, the flag's step by it, a tarpaulin over the camp's racks. */
 const POD_BOX = note(
   mine,
   'pod',
@@ -716,8 +716,14 @@ const DAIS = note(
   // A hatch cover lying on the sand: a raised step read as a floor floating over it (the user, 2026-11-25).
   box(POD[0] - 2, CAMP - 0.5, POD[1] - 10, POD[0] + 2, CAMP + 0.05, POD[1] - 6, PAINT, RED),
 );
-const crate = (x: number, z: number, h = 0.4, tint?: Vec3) =>
-  lay('crate', x - 1.5, z - 1.5, x + 1.5, z + 1.5, h, WOOD, tint);
+/**
+ * A crate on the sand with a pack on it: its top 0.1 m over the highest sand under it, so a player
+ * runs over it without a jump from its low side too (under STEP_H; the user, 2026-11-27).
+ */
+const crate = (x: number, z: number) => lay('crate', x - 1.5, z - 1.5, x + 1.5, z + 1.5, 0.1, WOOD);
+/** A metal plate on the sand with a pack on it, as low as a crate for the same reason. */
+const plate = (x0: number, z0: number, x1: number, z1: number) =>
+  lay('panel', x0, z0, x1, z1, 0.1, METAL);
 /** The top of the camps' tarpaulins: their hems hang from it (client paint.ts TARP_GLSL). */
 export const AWNING = CAMP + 3.75;
 /** A tarpaulin on four poles 3.6 m high (the user, 2026-11-26: taller), wider than deep: no pole on a diagonal of the crate under it, where it would hide the rack from a spawn. */
@@ -738,8 +744,15 @@ const shelter = (x: number, z: number): Brush[] =>
       ),
     ),
   ].map(b => note(mine, 'shelter', b));
-const [GUNS, BLADES] = [crate(49, 221), crate(71, 221)];
-const [RIFLES, RAILS] = [crate(84, 185, 0.4, RED), crate(33, 153, 0.4, RED)];
+/**
+ * A rack standing on the sand as it is walked there: no crate under it, which a player running at
+ * the rack had to jump onto (the user, 2026-11-27).
+ */
+const sand = (x: number, z: number): Vec3 => [x, walked(x, z), z];
+// The rail rack 5 m up the strand from where its crate stood at (33, 153): the bare sand there is
+// within 0.3 m of the water.
+const [GUNS, BLADES] = [sand(49, 221), sand(71, 221)];
+const [RIFLES, RAILS] = [sand(84, 185), sand(38, 156)];
 
 /** The debris between the camp and the wing, a line to run: a panel, a container, the landing gear, a second container, the wing. */
 // The panel and the first container are lower than they were on the camp's level sand: the dunes
@@ -756,20 +769,21 @@ const SCRAP = {
   camp: [crate(76, 213), crate(40, 217)],
   west: [
     // On the open strand between the camp and the field of debris.
-    lay('panel', 44.5, 191.5, 47.5, 194.5, 0.5, METAL),
+    plate(44.5, 191.5, 47.5, 194.5),
     lay('container', 33, 173.7, 39, 176.3, 2.2, METAL, ORANGE),
-    lay('panel', 41, 163.5, 44, 166.5, 0.4, METAL),
+    plate(41, 163.5, 44, 166.5),
+    // In the shallows: as high as it was, its top over the water.
     lay('panel', 25.5, 159.5, 28.5, 162.5, 0.5, METAL),
-    lay('panel', 50.5, 139.5, 53.5, 142.5, 0.4, METAL),
+    plate(50.5, 139.5, 53.5, 142.5),
     // Against the flank under the tear of the lower deck: the way up to it.
     lay('container', 49.5, 132.4, 52.5, 135, 2.6, METAL, ORANGE),
   ],
   east: [
-    lay('panel', 62.5, 145.5, 65.5, 148.5, 0.4, METAL),
+    plate(58.5, 140.5, 61.5, 143.5),
     crate(80, 171),
     crate(85.5, 165),
     crate(84, 153),
-    lay('panel', 84.5, 135.5, 87.5, 138.5, 0.4, METAL),
+    plate(84.5, 141.5, 87.5, 144.5),
   ],
   // Skin standing in the sand: cover on the open strand, nothing to stand on.
   cover: [
@@ -860,12 +874,8 @@ const half: Brush[] = [
   ...FLOATS,
   POD_BOX,
   DAIS,
-  GUNS,
-  BLADES,
   ...shelter(49, 221),
   ...shelter(71, 221),
-  RIFLES,
-  RAILS,
   PANEL,
   CONTAINER,
   GEAR,
@@ -925,10 +935,10 @@ const team = (red: boolean) => {
   return {
     base: side(on(DAIS)),
     spawns: red ? SPAWNS : SPAWNS.map(([x, y, z]): Spawn => [x, y, ZED - z, Math.PI]),
-    rack: side(on(GUNS)),
-    blade: side(on(BLADES)),
-    rifle: side(on(RIFLES)),
-    rail: side(on(RAILS)),
+    rack: side(GUNS),
+    blade: side(BLADES),
+    rifle: side(RIFLES),
+    rail: side(RAILS),
   };
 };
 /** Where red's buggy is parked, x and z: by the camp's east crate, inside the level sand (FLATS). */

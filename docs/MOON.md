@@ -204,13 +204,62 @@ The far crest of the crater wall showed as a row of big triangles against the sk
 - Falls short: the ranges read as modelled hills with pleated flanks rather than as a photograph (three or four rows of points from foot to crest carry no fine shadow), and the fully lit west range is flat.
 - Lower and darker since (the user, 2026-11-12: more discreet): highest peaks 75, 95 and 115 m (were 140, 180 and 220), greys about half, no finest teeth on the crest. From the middle they show over the wall on about half the bearings, at most 3.5 degrees over it; in a pass they are behind it.
 
-### More craters, three pits, rims with an outline (2026-11-11)
+### More craters, three pits (gone since, see the rift), rims with an outline (2026-11-11)
 
 - `BOWLS` in `src/shared/moon.ts` has 16 entries (31 craters with the twins, 9 to 46 m in radius): the old ones, ten more, some as secondaries on a big one's rim. Each rim wanders with the bearing (0.03 to 0.075 of the radius high, up to 10 % nearer or further), from two noises of the unit vector from the middle (no angle, so no `Math.atan2` in the lattice).
 - **Pits.** The Bowl and the twins at (-4, 364) and (-4, -84) are a level terrace (22 m and more, about 5 m down) and one wall up to the rim; in the terrace a pit is cut (`PITS`, `pit()`): 9 m in radius, wandering by 12 %, its floor a brush at `PIT_FLOOR` (-19), 18 m and more under the crest. The lattice cannot carry a cliff (the relief is a floor at any height), so the pit is made as the rille's notches are: a row of void a metre of z at a time, each a pit of the relief, the terrace round it as brushes level with the relief, the wall their sides. The kill floor went from -20 to -26 for it (7 m under the pits' floors, still over the rille's bottom at -30); nothing else reads it but the fall of a body or a rover.
 - A pit traps a rover by design: one that drives in lands on its wheels 13 to 15 m down, is not lost (it is over the kill floor) and cannot drive out; its crew walks out. The way out on foot is a flight of six steps against the east wall, each 1.3 m deep and 2 m high (a jump at half gravity rises 2.45 m); the other walls are not climbed (tested). Blocks stand round the edge and the terrace darkens toward it. The Bowl's wreck is on its pit's floor.
 - Every other crater is walked and driven out of (tested from each middle).
 - Drawn only (`moonscape.ts`): `pits()` (the terrace to an outline through the rows, never short of a brush's edge, the walls in basalt, the floor, a rock on each step, the blocks); `rims()`, a band of detail on the rim of each crater of 12 m and more, five rings 1.2 m apart round the crest, a point every 1.5 m, laid on the lattice and 4 to 25 cm proud of it (it does not replace the lattice's triangles): the crest raised and light, the inner ring dark and streaked; stones on the crests and blocks thrown out; lighter rays in the ground's tone; 72 small craters in the field (were 60), their rims broken by a hash. 437,511 vertices (cap 440,000), 614 brushes (cap 640).
+
+### The rift: cracks, sinkholes, pylons, islands (the user, 2026-11-27)
+
+The user: more parkour by the rille, holes with pylons to jump on, cracks of no square shape that
+run almost to the bases' doors and join at their sides, so that a player jumps from island to
+island; the pits were of no use and are gone (the Bowl and its twins are plain craters again, the
+wreck on the Bowl's floor).
+
+- **One grid** (`src/shared/moon/rift.ts`): half-metre cells over red's side out to 76 m from the
+  centre line, blue's the mirror. A cell is open in the rille or a notch of its lip (`LIP`, cell
+  for cell), or where three of its corners or four lie in a crack or a sinkhole and it is in a
+  square of four such cells (no slot under a metre). The cracks are lines of points with a half
+  width that a noise swells (0.8 to 1.2 times) and a finer one breaks; the sinkholes, circles that
+  wander with the bearing. The floor's boxes (`floor()`), the relief's voids (`voids()`, indexed
+  per lattice square in `relief.ts`) and the scenery all read the same cells. Boxes are merged
+  row to row in columns of 8 m, so away from a crack the field is a few big boxes.
+- **The islands.** A front crack runs wall to wall in front of the base; two long ones from the
+  rille end 6 m short of the dome's door and 5 m short of the east module's airlock; side ones
+  join them and the two sinkholes. Seven islands a side: the west jump's, the north-west, the west
+  mound's, the bridge's, the middle one in front of the dome, the hollow's and the east one with
+  the stones and the east mound. Kept whole: the west jump's run-up (it starts at z 169 now), the
+  bridge's landing, the east stones' approach, each mound and the rover's run-up behind it.
+- **Jumps** (`CROSSINGS`, `hops()`): a point in a crack and the way across; the take-off a metre
+  short of the edge, the landing 1.5 m past the far one, a sprint over 5 m of void. The bots' nav
+  links them both ways (`nav.ts`), each flown with the physics in `moon.test.ts`.
+- **Pylons** (`PYLONS`): nine a side in the sinkholes and the cracks' wide parts, tops from -0.4
+  to 1.2 m, each within 3.5 m of another or an edge.
+- **Rovers.** Ramps in the relief (`KICKERS`, 1.2 m up over 7 m to the crack's edge, level 4 m
+  across), each marked by an orange band painted along the crack's edge at its top, as the west
+  long jump's spur is (the user: discreet; white wing debris first, then this): one on each crack branch between two islands
+  where there is room, toward the rille, and both ways over the front crack at x 62 and x 154.
+  None on the short branch west of the west sinkhole (the west jump's strip and a rock), on the
+  east one from the sinkhole to the front (a rack, a rock and the east run-up) nor on the second
+  long crack's lower half and the east side crack (their south side is a strip of lip, no room to
+  land). Three rovers a team, parked in sight before the base:
+  one facing each two-way ramp, (57, 219) turned toward the west one, off the bots' way to the
+  door, and (154, 218); one in front of the dome (90, 208), facing the middle ramp, which a bot
+  boards on its way out. Each ramp is flown by a rover both sides in `moon.test.ts`.
+- **Moved for room:** the ammo packs to (103, 164.5) and (131, 188), three rocks a few metres
+  (36, 156.5), (100, 167), and two pebble sites.
+- **Drawn** (`src/client/moonscape/rift.ts`): every lattice square with an open corner is the
+  rift's. Closed cells drawn whole (runs merged, across rows too where the square is level, split
+  on the lattice's diagonal where it is not), a cell with three open corners as a triangle at its
+  closed one: the chamfers that keep the edges from reading as steps. Basalt walls in two courses
+  (to 4 m, then to 30 m, darker) along every bare edge, in pieces of 3 m, each broken by a hash; a
+  black bottom; a pillar under each pylon. The old apron, rim and ravine walls are gone.
+- **Numbers:** 467,151 vertices for the scenery (431,799 before, cap 470,000), about 2,300
+  brushes with the station (cap 2,500), budgets: main 300,288 B, local 62,208 B, tranquility
+  24,192 B.
 
 ## The combat ships (2026-11-11)
 
@@ -238,7 +287,7 @@ Known limits: a rover never pushes a ship, nor a ship another vehicle: each stop
 
 The user: the wings went through everything, shots on another ship or a rover seemed to do nothing, and a ship should be heard and hurt when it crashes.
 
-- `WING` (the wings' three sections) moved from `craft.ts` to `ship.ts`: what is drawn is what collides. `wings()` are four stadiums along the middle of the chord (two a side, `WING_H` thick over the wing's bottom), added to the hull by `shipBodies()` and `hulls()` (`rover.ts`): players on foot walk into the wings and stand on them, rovers and cuts meet them. `struck()` and `reach()` add the wings as boxes along the span in the ship's frame (`WING_BOXES`), so a bolt, a ball or a missile on a wing hurts the ship.
+- `WING` (the wings' three sections) moved from `craft.ts` to `ship.ts`: what is drawn is what collides. `wings()` are four stadiums along the middle of the chord (two a side, `KICK_H` thick over the wing's bottom), added to the hull by `shipBodies()` and `hulls()` (`rover.ts`): players on foot walk into the wings and stand on them, rovers and cuts meet them. `struck()` and `reach()` add the wings as boxes along the span in the ship's frame (`WING_BOXES`), so a bolt, a ball or a missile on a wing hurts the ship.
 - In flight (`pilot()`): the wing tips are pushed out of the brushes' sides like the hull's circles, the wings' undersides (`TOUCH`) lift the ship over the floor under them (banked low, a tip went into the ground) without landing it, and the hull's circles and the tips stop on the other vehicles' bodies (`drive()` hands them in), `SHIP.BOUNCE` of the speed into them sent back. Ships now collide with rovers and with each other.
 - A crash: the speed a step's collisions take away (the vertical part halved: sinking onto a pad on C is no crash) is the jolt; past `SHIP.CRASH` (12 m/s) it costs 1 hp each `SHIP.CRASH_HP` (4) more (`Room.crash()`, nobody's shot, the blast its own team's). A wall at the top speed takes 9, at full boost the ship blows up. Piloted or not.
 - The lasers' aim (`aimOf()`, the room's `sight()`): the two beams crossed at a fixed `GUN_AIM` (50 m for a rover, 80 m for a ship), so on a rover nearer than that they went either side of it. They now cross on what the look meets within the guns' range (a brush, an enemy vehicle's hull, an enemy on foot as the driver drew him), `AIM_MIN` (8 m) at least; the missiles fly there too, and the reticle shows the same point.

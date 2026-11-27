@@ -5,7 +5,7 @@ import type { Seen } from './bot';
 import { KITS, ROLE } from './kit';
 import type { Kit } from './kit';
 import { HIGHLINE } from './map';
-import { MOON } from './moon';
+import { MOON, hops } from './moon';
 import { ROUTES, navBuilt, navOf, path } from './nav';
 import * as navigation from './nav';
 import { move, spawn } from './physics';
@@ -443,9 +443,16 @@ describe('Bot: on the moon', () => {
         .flatMap(st => (st.leg?.k === 'leap' ? [st.leg] : []))
         .map(l => l.to.join(',')),
     );
-    expect(legs[0]).toEqual([]);
-    expect(legs[1]).toEqual(['18,125']);
-    expect(legs[2]).toHaveLength(4);
+    // Each also jumps between the rift's islands (moon/rift.ts), on both sides: those set apart.
+    const isles = new Set(
+      hops().flatMap(({ from, to }) =>
+        [from, to].flatMap(([x, z]) => [`${x},${140 + z}`, `${x},${140 - z}`]),
+      ),
+    );
+    const rille = (l: string[]) => l.filter(t => !isles.has(t));
+    expect(rille(legs[0])).toEqual([]);
+    expect(rille(legs[1])).toEqual(['18,125']);
+    expect(rille(legs[2])).toHaveLength(4);
   });
 });
 

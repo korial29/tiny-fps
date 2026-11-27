@@ -485,7 +485,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
     sighted.clear();
     vision = false;
     make = (kind, names = UNIFORMS, sight = false) => {
-      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock, sight), names);
+      const [p, l] = link(VERT, fragOf(world.def, kind, d.rock, sight, d.glaze), names);
       return { p, u: l, sent: new Map(), kind };
     };
     const variant = (kind: string, names = UNIFORMS) => make(kind, names);

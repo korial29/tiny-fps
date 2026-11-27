@@ -105,6 +105,8 @@ export type Decor = {
   glass?: number[];
   /** GLSL for the map's rocks (TEX.ROCK) under BEACH, spliced in by fragOf(): Landfall's granite, which its chunk brings. */
   rock?: string;
+  /** GLSL for the map's indoor windows under MOON, spliced in by fragOf(): Tranquility's traced reflections, which its chunk brings. */
+  glaze?: string;
   /** How the map's rovers look, if not as the moon's: Landfall's buggy, which its chunk brings. */
   car?: Look;
 };

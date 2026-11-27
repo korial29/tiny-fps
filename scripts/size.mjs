@@ -113,7 +113,8 @@ const BUDGETS = [
   // 291,328 B: the porthole's glints (#455).
   // 291,584 B: Landfall's airliner cabin, its cloth and leather textures and its tints (the user, 2026-11-27).
   // 292,352 B: Landfall's buggies, the rover's model shared with their chunk (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 292_352 },
+  // 292,416 B: the splice of the moon base's traced window reflections (fragOf()'s glaze; the user, 2026-11-27).
+  { file: 'dist/index.js', max: 292_416 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -150,7 +151,8 @@ const LAZY = {
   // Tranquility's and Landfall's scenery (render/scene.ts decor()), the rounded stones that both draw
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
   // 20,096 B: the base's bevelled kit and round lit buttons (moonbase/round.ts; the user, 2026-11-27).
-  tranquility: 20_096,
+  // 21,120 B: the reflections traced in the base's windows (moonbase/mirror.ts; the user, 2026-11-27).
+  tranquility: 21_120,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

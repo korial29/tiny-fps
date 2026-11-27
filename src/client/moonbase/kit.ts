@@ -71,6 +71,14 @@ export const inside = (o: Out, make: () => void) => {
   }
 };
 
+/** Makes what was drawn from `from` glass on the layer `l`, facing n: the reflection traced in it needs its true normal. */
+export const glazed = (o: Out, from: number, n: number[], l: number) => {
+  const buf = room(o, 0);
+  for (let i = from; i < o.length; i += STRIDE) {
+    [buf[i + 3], buf[i + 4], buf[i + 5], buf[i + 8]] = [n[0], n[1], n[2], l];
+  }
+};
+
 /** A lit frame just inside a doorway h high from c0 to c1, in the plane of the axis k at `at`. */
 export const frame = (o: Out, k: number, at: number, c0: number, c1: number, h: number) => {
   for (const [a, b, y0] of [

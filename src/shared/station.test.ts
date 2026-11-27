@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { IDLE } from '../../test/teams';
-import { DOWN_TICKS, ORBIT, TICK_HZ } from './constants';
+import { DOWN_TICKS, ORBIT, STEP_H, TICK_HZ } from './constants';
 import { MOON, ZED } from './moon';
 import { STILL, floorAt } from './physics';
 import { decodeSnapshot, encodeInput, encodeSnapshot } from './protocol';
 import { Room } from './room';
 import { SHIP } from './ship';
-import { PHASE, STATION, Station, inside, reaches, station } from './station';
+import { COMMAND, PHASE, STATION, Station, inside, reaches, station } from './station';
 import { KEY, MODE } from './types';
 import type { Conn, PlayerState, Snapshot } from './types';
 import { build, ray } from './world';
@@ -14,6 +14,7 @@ import { build, ray } from './world';
 const DEF = MOON.station!;
 const [LO, HI] = DEF.post;
 const Y = LO[1];
+const DECK = DEF.deck;
 
 describe('the station, its rules', () => {
   it('arms for the team that presses, strikes after 30 s, holds the struck 15 s, recharges 90 s from the strike', () => {
@@ -77,10 +78,18 @@ describe('the station, its place', () => {
     // The mouths: 32 m between the walls, 11 m from the deck to the lintel.
     for (const z of [ZED / 2 - 35, ZED / 2 + 35]) {
       for (let x = 60.5; x < 100; x += 1) {
-        expect(floorAt(w, x, z, Y + 10.5)).toBe(Y);
+        expect(floorAt(w, x, z, DECK + 10.5)).toBe(DECK);
       }
     }
+    // The console on the dais, up a flight of steps no higher than a stride from the doorway.
+    expect(Y - DECK).toBe(COMMAND.DAIS);
     expect(floorAt(w, LO[0] - 0.5, ZED / 2, Y + 0.5)).toBe(Y);
+    let last = DECK;
+    for (let x = DEF.hull[0] + COMMAND.X0 + 0.2; x < LO[0]; x += 0.1) {
+      const f = floorAt(w, x, ZED / 2, last + STEP_H);
+      expect(f - last).toBeLessThanOrEqual(STEP_H);
+      last = f;
+    }
     expect(HI[1] - Y).toBeCloseTo(1.1, 9);
   });
 
@@ -92,8 +101,10 @@ describe('the station, its place', () => {
     expect(ray(w, [cx + 400, Y + 60, cz + 5], [-1, 0, 0], 800)).toBeCloseTo(400 - 44, -1);
     expect(ray(w, [cx - 400, Y + 6, cz + 5], [1, 0, 0], 800)).toBeCloseTo(400 - 44, -1);
     // A wing, out past the body, from either side; the cannon's barrel under it.
+    // Over each mouth, so the command room's window looks out between them.
     for (const s of [-1, 1]) {
-      expect(ray(w, [cx + s * 100, Y + 40, cz - 50], [0, 0, 1], 100)).toBeCloseTo(49.6, 6);
+      expect(ray(w, [cx - 50, DECK + 50, cz + s * 100], [1, 0, 0], 100)).toBeCloseTo(49.6, 6);
+      expect(ray(w, [cx - 50, DECK + 20, cz + s * 100], [1, 0, 0], 100)).toBe(100);
     }
     expect(ray(w, [cx, DEF.gun[1] + 2, cz - 100], [0, 0, 1], 200)).toBeCloseTo(100 - 33, -1);
     expect(ray(w, [cx, y1 + 100, cz], [0, -1, 0], 400)).toBeCloseTo(95, 6);

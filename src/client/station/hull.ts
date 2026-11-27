@@ -3,11 +3,12 @@
 // blocks on the wall and rows of lit windows, on the grey bands under and over the gold foil
 // (satellite.ts). Everything is placed at an angle and its mirror across the station's z, as the map
 // is, and kept off the hangar's mouths and the wings' booms. Drawn only: the ghost cylinder stops ships.
-import { HULL, PARTS } from '../../shared/station';
+import { COMMAND, HULL, PARTS } from '../../shared/station';
 import type { StationDef } from '../../shared/station';
 import { face } from '../brick';
 import { glow } from '../flag';
 import type { Vec3 } from '../mesh';
+import { hole } from './command';
 
 type Out = number[];
 
@@ -32,12 +33,13 @@ const hash = (i: number, k: number) => {
 export const foiled = (y: number, deck: number, y1: number) => y >= deck + 44 && y < y1 - 36;
 
 /** Adds the plated hull's detail to `o`, and returns it. */
-export const plating = (
-  { hall: [lo], post, hull: [cx, y0, cz, y1] }: StationDef,
-  o: Out = [],
-): Out => {
+export const plating = (def: StationDef, o: Out = []): Out => {
+  const {
+    hall: [lo],
+    deck,
+    hull: [cx, y0, cz, y1],
+  } = def;
   const { R } = HULL;
-  const deck = post[0][1];
   const [w, e] = [lo[0], lo[0] + 48];
   const wing = y0 + (y1 - y0) * PARTS.WING;
   /** A point at angle t round the axis, s along the wall's tangent, r from the axis, height y. */
@@ -50,8 +52,10 @@ export const plating = (
   const clear = (t: number, hw: number, a: number, b: number) => {
     const x = cx + R * Math.cos(t);
     const mouth = x > w - 4 - hw && x < e + 4 + hw && b > deck - 4 && a < deck + 19;
-    const boom = Math.abs(Math.sin(t)) < 0.2 && b > wing - 10 && a < wing + 10;
-    return !mouth && !boom;
+    const boom = Math.abs(Math.cos(t)) < 0.2 && b > wing - 10 && a < wing + 10;
+    const z = cz + R * Math.sin(t);
+    const glass = hole(def, x, z, Math.max(a, Math.min(b, deck + COMMAND.DAIS + COMMAND.UP)), hw);
+    return !mouth && !boom && !glass;
   };
   /**
    * A block on the wall at angle t: w wide, from height a to b, standing out from d0 to d1 past the

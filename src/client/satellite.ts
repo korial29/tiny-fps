@@ -1,15 +1,17 @@
 // The orbital station drawn as a satellite (the user, 2026-11-14, after a picture): a cylinder
 // standing on its axis wrapped in crinkled gold foil between bands of silver, the hangar's mouths
 // cut in its wall toward each base, a domed cap with a small dish on top, a wing of four solar
-// panels on a boom each side, and under it the laser cannon: a black aperture barrel pointed down at
+// panels on a boom over each mouth, and under it the laser cannon: a black aperture barrel pointed down at
 // the moon, a sunshade beside it, its lens glowing red. Drawn once with the scenery; the cylinder's
 // volume is the station's ghost brushes. Symmetric across the station's z, as the map is. No DOM.
 import { SORTIE } from '../shared/sortie';
 import { HULL, PARTS } from '../shared/station';
 import type { StationDef } from '../shared/station';
-import { GILT, SHINE, aim, dress, place, segment, smooth } from './mesh';
+import { GILT, SHINE, aim, place } from './mesh';
 import type { Vec3 } from './mesh';
+import { command, cut } from './station/command';
 import { PLATE, foiled, plating } from './station/hull';
+import { bar, lathed, slab, vert } from './station/kit';
 
 type Out = number[];
 
@@ -22,84 +24,6 @@ const COPPER = [0.75, 0.42, 0.2];
 /** The lens: bright and unlit, so the bloom makes it glow. */
 const LENS = [3.2, 0.35, 0.15];
 const TAU = 2 * Math.PI;
-const vert = (o: Out, p: Vec3, n: Vec3, rgb: number[], layer: number) =>
-  o.push(...p, ...n, rgb[0], rgb[1], layer, rgb[2]);
-
-/** A box from a to b with outward normals, a flat colour on layer `layer`. */
-const slab = (o: Out, a: Vec3, b: Vec3, rgb: number[], layer = -1) => {
-  const [[x0, x1], [y0, y1], [z0, z1]] = [0, 1, 2].map(k => [a[k], b[k]]);
-  const faces: [Vec3, Vec3[]][] = [
-    [
-      [0, 1, 0],
-      [
-        [x0, y1, z0],
-        [x0, y1, z1],
-        [x1, y1, z1],
-        [x1, y1, z0],
-      ],
-    ],
-    [
-      [0, -1, 0],
-      [
-        [x0, y0, z0],
-        [x1, y0, z0],
-        [x1, y0, z1],
-        [x0, y0, z1],
-      ],
-    ],
-    [
-      [1, 0, 0],
-      [
-        [x1, y0, z0],
-        [x1, y1, z0],
-        [x1, y1, z1],
-        [x1, y0, z1],
-      ],
-    ],
-    [
-      [-1, 0, 0],
-      [
-        [x0, y0, z0],
-        [x0, y0, z1],
-        [x0, y1, z1],
-        [x0, y1, z0],
-      ],
-    ],
-    [
-      [0, 0, 1],
-      [
-        [x0, y0, z1],
-        [x1, y0, z1],
-        [x1, y1, z1],
-        [x0, y1, z1],
-      ],
-    ],
-    [
-      [0, 0, -1],
-      [
-        [x0, y0, z0],
-        [x0, y1, z0],
-        [x1, y1, z0],
-        [x1, y0, z0],
-      ],
-    ],
-  ];
-  for (const [n, q] of faces) {
-    for (const i of [0, 1, 2, 0, 2, 3]) {
-      vert(o, q[i], n, rgb, layer);
-    }
-  }
-};
-
-/** smooth() of a profile, `sides` round, in a flat colour on `layer`. */
-const lathed = (profile: [number, number][], rgb: number[], layer: number, sides: number) => {
-  const v = dress(smooth(profile, sides), rgb);
-  for (let i = 8; i < v.length; i += 10) {
-    v[i] = layer;
-  }
-  return v;
-};
-
 /** A revolved profile ([radius, length] from back to front) along `to` from `at`. */
 const lathe = (
   o: Out,
@@ -119,27 +43,6 @@ const lathe = (
     1,
   );
 
-/** A round bar of radius r from a to b. */
-const bar = (o: Out, a: Vec3, b: Vec3, r: number, rgb: number[], layer = SHINE) =>
-  segment(
-    o,
-    lathed(
-      [
-        [0, 0],
-        [r, 0],
-        [r, 1],
-        [0, 1],
-      ],
-      rgb,
-      layer,
-      8,
-    ),
-    a,
-    b,
-    [0, 1, 0],
-    1,
-  );
-
 /** A small hash in [-1, 1): the foil's crinkles, the same on every screen. */
 const crinkle = (i: number, j: number, k: number) => {
   const h = Math.sin(i * 127.1 + j * 311.7 + k * 74.7) * 43758.5453;
@@ -155,13 +58,12 @@ const tone = (t: number, y: number) => {
 export const satellite = (def: StationDef): number[] => {
   const {
     hall: [lo],
-    post,
+    deck,
     hull: [cx, y0, cz, y1],
     gun,
   } = def;
   const o: Out = [];
   const { R } = HULL;
-  const deck = post[0][1];
   const [w, e] = [lo[0], lo[0] + 48];
   // The wall in 2 m rows; the angles where the hangar's sides meet it are among the columns, so its
   // mouths are cut on their edges.
@@ -179,7 +81,10 @@ export const satellite = (def: StationDef): number[] => {
       const [a, b] = [cols[i], cols[i + 1]];
       const m = (a + b) / 2;
       const mx = cx + R * Math.cos(m);
-      if (mx > w && mx < e && y >= deck - 2 && y < deck + 16) {
+      if (
+        (mx > w && mx < e && y >= deck - 2 && y < deck + 16) ||
+        cut(def, cx + R * Math.cos(m), cz + R * Math.sin(a), cz + R * Math.sin(b), y, y + 2)
+      ) {
         continue;
       }
       const gold = foil;
@@ -296,30 +201,28 @@ export const satellite = (def: StationDef): number[] => {
   // The sunshade: a white panel hung off the lip on the west.
   slab(o, [cx - B - 8, gun[1] - 18, cz - 16], [cx - B - 7.2, gun[1] + 8, cz + 16], WHITE, SHINE);
   bar(o, [cx - B - 1, gun[1] + 3, cz], [cx - B - 7.2, gun[1] + 3, cz], 0.6, SILVER);
-  // A wing each side, longer than the body as in the picture: a boom and its yoke, four panels of
-  // cells in a row facing either base, a copper spar along them, frames and cell lines in silver.
+  // A wing each side over the hangar's mouths, longer than the body as in the picture, so the
+  // command room's window looks out between them: a boom and its yoke, four panels of cells in a row
+  // facing east and west, a copper spar along them, frames and cell lines in silver. u runs out
+  // along the wing (z), v across it (x).
   const mid = y0 + (y1 - y0) * PARTS.WING;
   const [P, H, G] = [PARTS.PANEL, PARTS.SPAN, PARTS.GAP];
+  const box = (u0: number, u1: number, ya: number, yb: number, v: number, rgb: number[]) =>
+    slab(o, [cx - v, ya, cz + Math.min(u0, u1)], [cx + v, yb, cz + Math.max(u0, u1)], rgb, SHINE);
   for (const s of [-1, 1]) {
-    const start = cx + s * (R + PARTS.BOOM);
-    bar(o, [cx + s * R, mid, cz], [start, mid, cz], 1.4, SILVER);
-    slab(
-      o,
-      [Math.min(start, start + s * 3), mid - 6, cz - 2],
-      [Math.max(start, start + s * 3), mid + 6, cz + 2],
-      SILVER,
-      SHINE,
-    );
-    bar(o, [start, mid, cz], [start + s * (4 * (P + G) + 2), mid, cz], 0.6, COPPER);
+    const start = s * (R + PARTS.BOOM);
+    bar(o, [cx, mid, cz + s * R], [cx, mid, cz + start], 1.4, SILVER);
+    box(start, start + s * 3, mid - 6, mid + 6, 2, SILVER);
+    bar(o, [cx, mid, cz + start], [cx, mid, cz + start + s * (4 * (P + G) + 2)], 0.6, COPPER);
     for (let k = 0; k < 4; k++) {
       const a = start + s * (3 + k * (P + G));
-      const [x0, x1] = [Math.min(a, a + s * P), Math.max(a, a + s * P)];
-      slab(o, [x0, mid - H / 2, cz - 0.2], [x1, mid + H / 2, cz + 0.2], CELLS, SHINE);
+      const [u0, u1] = [Math.min(a, a + s * P), Math.max(a, a + s * P)];
+      box(u0, u1, mid - H / 2, mid + H / 2, 0.2, CELLS);
       for (const p of [mid - H / 2, mid + H / 2 - 0.6, mid - 0.3, mid - H / 4, mid + H / 4 - 0.3]) {
-        slab(o, [x0, p, cz - 0.3], [x1, p + 0.6, cz + 0.3], SILVER, SHINE);
+        box(u0, u1, p, p + 0.6, 0.3, SILVER);
       }
-      for (const c of [x0, x0 + P / 2 - 0.3, x1 - 0.6]) {
-        slab(o, [c, mid - H / 2, cz - 0.3], [c + 0.6, mid + H / 2, cz + 0.3], SILVER, SHINE);
+      for (const c of [u0, u0 + P / 2 - 0.3, u1 - 0.6]) {
+        box(c, c + 0.6, mid - H / 2, mid + H / 2, 0.3, SILVER);
       }
     }
   }
@@ -339,19 +242,21 @@ const VALVE = [0.9, 0.45, 0.08];
 const PAINT = [0.95, 0.75, 0.1];
 const EXIT = [0.4, 2.6, 1.6];
 const AMBER = [2.6, 1.3, 0.25];
-const SCREEN = [0.08, 0.35, 0.8];
 const LAMP = [2.2, 2.3, 2.6];
 
 /**
  * The station's inside (the user, 2026-11-14): pipes along the hangar's walls and ducts under its
  * roof, a painted landing circle with its lights where each team's ship sets down (sortie.ts lands
  * there), the way out to space lit (a green bar across each mouth's edge and up its sides, amber
- * chevrons on the deck toward it), lamps under the roof, and in the command room consoles with
- * glowing screens. The hangar's x0..x1 inside its walls, its mouths at z0 and z1.
+ * chevrons on the deck toward it), lamps under the roof, and the command room (station/command.ts). The hangar's x0..x1 inside its walls, its mouths at z0 and z1.
  */
-export const hangar = ({ hall: [lo], post, hull: [cx, , cz] }: StationDef): number[] => {
+export const hangar = (def: StationDef): number[] => {
+  const {
+    hall: [lo],
+    deck: Y,
+    hull: [cx, , cz],
+  } = def;
   const o: Out = [];
-  const Y = post[0][1];
   const [x0, x1] = [lo[0] + 4, lo[0] + 44];
   const [z0, z1] = [cz - HULL.R, cz + HULL.R];
   // Pipes along the walls: low ones on the west, high ones on the east over the door; brackets.
@@ -447,27 +352,6 @@ export const hangar = ({ hall: [lo], post, hull: [cx, , cz] }: StationDef): numb
     }
     slab(o, [x0, Y + 10.94, edge - s * 0.6 - 0.2], [x1, Y + 11.0, edge - s * 0.6 + 0.2], EXIT, -2);
   }
-  // The command room: a console along each side wall, its screens glowing over it, a big one east.
-  const [rx0, rx1] = [x1 + 4.2, x1 + 13.5];
-  for (const s of [-1, 1]) {
-    const wall = cz + s * 8;
-    slab(
-      o,
-      [rx0, Y, Math.min(wall, wall - s * 1.1)],
-      [rx1, Y + 1, Math.max(wall, wall - s * 1.1)],
-      DARK,
-      SHINE,
-    );
-    for (let x = rx0 + 0.4; x < rx1 - 1.5; x += 2.3) {
-      slab(
-        o,
-        [x, Y + 1.4, Math.min(wall, wall - s * 0.05)],
-        [x + 1.9, Y + 2.6, Math.max(wall, wall - s * 0.05)],
-        SCREEN,
-        -2,
-      );
-    }
-  }
-  slab(o, [x1 + 17.94, Y + 1.2, cz - 4], [x1 + 18, Y + 3.4, cz + 4], SCREEN, -2);
+  command(o, def);
   return o;
 };

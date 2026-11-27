@@ -18,7 +18,7 @@ import { createDust } from './dust';
 import { base, flag, teamRgb } from './flag';
 import { STRIDE, basis } from './mesh';
 import { MAX_SHADOWS, beams } from './lights';
-import { mouths, rooms } from '../shared/station';
+import { mouths, rooms, vista } from '../shared/station';
 import { lagoon } from './shore';
 import { createPrints } from './prints';
 import type { Prints } from './prints';
@@ -932,12 +932,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       uni('uniform4f', 'Ob', globe, fade, edge, 0);
       // The view ray of each pixel from the camera's axes, for the sky and the globe.
       const rays = [right.map(c => c * tan * (w / h)), up.map(c => c * tan), fwd].flat();
-      // In the station's rooms space shows only through the hangar's mouths: the sky's pixels
+      // In the station's rooms space shows only through the hangar's mouths and the command room's window: the sky's pixels
       // elsewhere are behind a wall, and the GPU would still shade them (the globe's craters).
       const { station } = world.def;
       const sky =
         station && rooms(station).some(([lo, hi]) => eye.every((c, i) => c > lo[i] && c < hi[i]))
-          ? cover(vp, mouths(station), w, h)
+          ? cover(vp, [...mouths(station), ...vista(station)], w, h)
           : [0, 0, w, h];
       // The globe at half the frame's size, read by the sky and the crater fading into it on unit 2
       // (the composite of the last frame left it empty): its craters, shaded on every pixel, were

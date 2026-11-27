@@ -61,11 +61,11 @@ const toward = (x0: number, z0: number, x1: number, z1: number) =>
 const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 
 /** A team's way into the station: in front of its mouth (red's is the +z one), then down on the deck inside. */
-export const approach = ({ hull: [cx, , cz], post }: StationDef, team: number): [Vec3, Vec3] => {
-  const [s, x, y] = [team ? -1 : 1, cx + SORTIE.EAST, post[0][1] + SORTIE.ABOVE];
+export const approach = ({ hull: [cx, , cz], deck }: StationDef, team: number): [Vec3, Vec3] => {
+  const [s, x, y] = [team ? -1 : 1, cx + SORTIE.EAST, deck + SORTIE.ABOVE];
   return [
     [x, y, cz + s * (HULL.R + SORTIE.OUT)],
-    [x, post[0][1] + SHIP.DROP + 0.3, cz + s * SORTIE.LAND],
+    [x, deck + SHIP.DROP + 0.3, cz + s * SORTIE.LAND],
   ];
 };
 

@@ -115,7 +115,8 @@ const BUDGETS = [
   // 292,352 B: Landfall's buggies, the rover's model shared with their chunk (the user, 2026-11-27).
   // 292,416 B: the splice of the moon base's traced window reflections (fragOf()'s glaze; the user, 2026-11-27).
   // 297,536 B: the dead captain in the marine's body, posed once by Landfall's chunk (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 297_536 },
+  // 298,368 B: the station's command room, its red button, beacons, red beams and klaxon (the user, 2026-11-27).
+  { file: 'dist/index.js', max: 298_368 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -132,7 +133,8 @@ const BUDGETS = [
   // 59,776 B: the Hunter's pistol in the step and the snapshot (the user, 2026-11-26).
   // 60,800 B: the bots at the wheel of the moon's rovers (the user, 2026-11-26).
   // 60,928 B: the cloth and leather textures and a world's own tints (the user, 2026-11-27).
-  { file: 'dist/local.js', max: 60_928 },
+  // 61,184 B: the station's command room and its window (the user, 2026-11-27).
+  { file: 'dist/local.js', max: 61_184 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
@@ -154,7 +156,8 @@ const LAZY = {
   // 20,096 B: the base's bevelled kit and round lit buttons (moonbase/round.ts; the user, 2026-11-27).
   // 21,120 B: the reflections traced in the base's windows (moonbase/mirror.ts; the user, 2026-11-27).
   // 21,504 B: the hall's round control station (moonbase/console.ts; the user, 2026-11-27).
-  tranquility: 21_504,
+  // 23,936 B: the station's command room, its window and its computer (the user, 2026-11-27).
+  tranquility: 23_936,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

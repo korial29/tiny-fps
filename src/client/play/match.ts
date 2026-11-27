@@ -41,6 +41,7 @@ import { createGloryFx } from '../gloryfx';
 import { KILLCAM, createKillCam, sees } from '../killcam';
 import { createCombat, sight, voiceOf } from '../combat';
 import { createDoors } from '../doors';
+import { createButton } from '../station/button';
 import { createEffects } from '../effects';
 import { flagDraws } from '../flag';
 import { createFoley } from '../foley';
@@ -72,6 +73,9 @@ import { FELL, MAX_STEPS, NEAR_HULL, PREVIEW_HZ, SCOPE_FOV, SCOPE_IN, STEP } fro
  * The game on one map, talking through `ws`: the scene, the HUD, the input, the sound. `progress`
  * hears each step of STEPS (loading.ts) as it starts, then STEPS.length once the first frame is drawn.
  */
+/** Milliseconds between two sounds of the station's klaxon while a strike counts down, in it. */
+const KLAXON = 1500;
+
 export const play = (
   container: HTMLElement,
   key: string,
@@ -182,6 +186,7 @@ export const play = (
   const tracer = createTracer();
   const balls = createBalls(world);
   const doors = createDoors(world);
+  const button = world.def.station && createButton(world.def.station);
   const combat = createCombat(
     world,
     audio,
@@ -317,6 +322,8 @@ export const play = (
   const [heart, hiss] = [audio.loop(SOUND.HEARTBEAT), audio.loop(SOUND.STATIC)];
   /** The shoulder cannon's hum while it tracks a foe, before the lock. */
   const seek = audio.loop(SOUND.HUNTER_SEEK);
+  /** When the station's klaxon last sounded: again every KLAXON ms in it while a strike counts down. */
+  let blared = -1;
   let displayed: number | undefined;
   let acc = 0;
   let raf = 0;
@@ -598,6 +605,16 @@ export const play = (
     const gone = (id: number) => struck && team(id) != st.team;
     const visible = struck ? others.filter(p => !(p.down && gone(p.id))) : others;
     const eye: [number, number, number] = me ? [me.x, me.y + eyeHeight(me), me.z] : [0, 0, 0];
+    const { station } = world.def;
+    // The arming's beat sounds it first (beats.ts): the repeats start KLAXON after.
+    if (st?.phase !== PHASE.ARMED || !station || !inside(station, ...eye)) {
+      blared = -1;
+    } else if (blared < 0) {
+      blared = now;
+    } else if (now - blared > KLAXON) {
+      audio.play(SOUND.ALARM, undefined, -4);
+      blared = now;
+    }
     // The rovers, and the own seat: at the wheel the camera chases the rover, beside it the view
     // stays in the rider's head, where his shots leave from.
     const rovers = predictor.rovers(now, acc / STEP);
@@ -1011,6 +1028,7 @@ export const play = (
         k > 0.2 || spy ? me : undefined,
         v => {
           doors.draw(v, pov, dt);
+          button?.draw(v, pov, st?.phase ?? PHASE.READY, now / 1000, dt);
           wrecks.draw(v);
         },
         { width, height, now },

@@ -14,7 +14,7 @@ describe('the satellite round the station', () => {
     expect(v.length % (3 * STRIDE)).toBe(0);
     expect(v.every(Number.isFinite)).toBe(true);
     const [lo] = def.hall;
-    const deck = def.post[0][1];
+    const { deck } = def;
     const into = points.filter(
       ([x, y]) => x > lo[0] + 4.1 && x < lo[0] + 43.9 && y > deck + 0.1 && y < deck + 13.9,
     );

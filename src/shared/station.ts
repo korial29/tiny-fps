@@ -17,6 +17,8 @@ type Vec3 = [number, number, number];
  */
 export interface StationDef {
   post: [min: Vec3, max: Vec3];
+  /** The height of the hangar's deck and of the command room's floor. */
+  deck: number;
   hall: [min: Vec3, max: Vec3];
   /** The satellite's cylinder (HULL.R wide): its axis at (x, z), from y0 to y1. */
   hull: [x: number, y0: number, z: number, y1: number];
@@ -40,6 +42,13 @@ export const STATION = {
   RECALL: 20 * TICK_HZ,
 };
 
+/** Where the console's red button stands on its desk (client/station/): its middle and the desk's top. */
+export const knob = ({ post: [lo, hi] }: StationDef): Vec3 => [
+  lo[0] + 0.55,
+  hi[1],
+  (lo[2] + hi[2]) / 2,
+];
+
 /** True when the feet of `p` are within STATION.REACH of the console's sides, at its foot. */
 export const reaches = ({ post: [min, max] }: StationDef, { x, y, z }: PlayerState): boolean =>
   y > min[1] - 1 &&
@@ -55,20 +64,58 @@ export const inside = (
   z: number,
 ): boolean => x > min[0] && x < max[0] && y > min[1] && y < max[1] && z > min[2] && z < max[2];
 
+/**
+ * The command room east of the hangar (the user, 2026-11-27, after a picture of a throne room): from
+ * the hangar's east wall (X0) to the window (X1) over the station's axis, Z either side of its middle
+ * along z, H high. A flight of steps (STEPS of RISE, from STAIR0 to STAIR1, W either side) climbs to
+ * the dais (from STAIR1 to the window, DAIS high, the console on it); galleries as high stand along
+ * the side walls from GALLERY to STAIR1, from SIDE out. The window is a round pane in the east wall,
+ * R across, its middle UP over the dais, which shows space: the wall there is a ghost, the hull cut.
+ */
+export const COMMAND = {
+  X0: 24,
+  X1: 41,
+  Z: 13,
+  H: 30,
+  STAIR0: 29,
+  STAIR1: 35,
+  STEPS: 10,
+  W: 4,
+  DAIS: 4,
+  GALLERY: 27,
+  SIDE: 9,
+  R: 11,
+  UP: 11,
+};
+
 /** The hangar and the command room, each [min, max]: shut but for the hangar's mouths (station()). */
-export const rooms = ({ hull: [x, , z], post: [[, Y]] }: StationDef): [Vec3, Vec3][] => [
+export const rooms = ({ hull: [x, , z], deck: Y }: StationDef): [Vec3, Vec3][] => [
   [
     [x - 24, Y, z - HULL.R],
     [x + 24, Y + 14, z + HULL.R],
   ],
   [
-    [x + 24, Y, z - 10],
-    [x + 40, Y + 4, z + 10],
+    [x + COMMAND.X0, Y, z - COMMAND.Z],
+    [x + COMMAND.X1, Y + COMMAND.H, z + COMMAND.Z],
   ],
 ];
 
+/** The command room's window: the square round its pane, four corners on the east wall. */
+export const vista = ({ hull: [x, , z], deck: Y }: StationDef): Vec3[][] => {
+  const { X1, R, DAIS, UP } = COMMAND;
+  const y = Y + DAIS + UP;
+  return [
+    [
+      [x + X1, y - R, z - R],
+      [x + X1, y - R, z + R],
+      [x + X1, y + R, z + R],
+      [x + X1, y + R, z - R],
+    ],
+  ];
+};
+
 /** The hangar's two mouths, between its side walls and under the lintels: four corners each. */
-export const mouths = ({ hull: [x, , z], post: [[, Y]] }: StationDef): Vec3[][] =>
+export const mouths = ({ hull: [x, , z], deck: Y }: StationDef): Vec3[][] =>
   [z - HULL.R, z + HULL.R].map(m => [
     [x - 20, Y, m],
     [x + 20, Y, m],
@@ -158,7 +205,7 @@ export const PARTS = {
   PANEL: 44,
   SPAN: 50,
   GAP: 2,
-  WING: 0.45,
+  WING: 0.54,
   DOME: 7,
   MAST: 16,
 };
@@ -179,9 +226,11 @@ export const station = (x: number, Y: number, z: number): [Brush[], StationDef, 
   const [w, e, s, n] = [x - 24, x + 24, z - R, z + R];
   const grey: Vec3 = [0.78, 0.8, 0.84];
   const lit: Vec3 = [0.95, 0.55, 0.15];
+  const { X0, X1, Z, H, STAIR0, STAIR1, STEPS, W, DAIS, GALLERY, SIDE } = COMMAND;
+  const [rx0, rx1] = [x + X0, x + X1];
   const post: [Vec3, Vec3] = [
-    [x + 30.5, Y, z - 1.5],
-    [x + 32.5, Y + 1.1, z + 1.5],
+    [x + 37, Y + DAIS, z - 1.5],
+    [x + 39, Y + DAIS + 1.1, z + 1.5],
   ];
   // The body's slices: whole under the deck and over the roof, round the hangar and the room between.
   const body: Brush[] = [];
@@ -191,10 +240,13 @@ export const station = (x: number, Y: number, z: number): [Brush[], StationDef, 
     const slice = (y0: number, y1: number, z0: number, z1: number) =>
       z1 > z0 && body.push({ ...box(a, y0, z0, a + 4, y1, z1, METAL), ghost: true });
     slice(Y + LOW, Y - 2, z - h, z + h);
-    slice(Y + 16, Y + TOP, z - h, z + h);
-    const [h0, h1] = a < e ? (a + 4 > w ? [s, n] : [z, z]) : a < x + 40 ? [z - 10, z + 10] : [z, z];
-    slice(Y - 2, Y + 16, z - h, Math.min(h0, z + h));
-    slice(Y - 2, Y + 16, Math.max(h1, z - h), z + h);
+    // Round the command room the band is H + 2 high, round the hangar 18.
+    const room = a >= e && a < rx1 + 1;
+    const top = room ? Y + H + 2 : Y + 16;
+    slice(top, Y + TOP, z - h, z + h);
+    const [h0, h1] = a < e ? (a + 4 > w ? [s, n] : [z, z]) : room ? [z - Z - 1, z + Z + 1] : [z, z];
+    slice(Y - 2, top, z - h, Math.min(h0, z + h));
+    slice(Y - 2, top, Math.max(h1, z - h), z + h);
     // The cap's dome, a slice of its top.
     const d = Math.sqrt(Math.max(0, (0.75 * R) ** 2 - off * off));
     slice(Y + TOP, Y + TOP + PARTS.DOME - 2, z - d, z + d);
@@ -207,20 +259,20 @@ export const station = (x: number, Y: number, z: number): [Brush[], StationDef, 
   const mid = Y + LOW + (TOP - LOW) * PARTS.WING;
   const reach = PARTS.BOOM + 4 * (PARTS.PANEL + PARTS.GAP) + 3;
   for (const k of [-1, 1]) {
-    const [a, b] = [x + k * R, x + k * (R + reach)];
+    const [a, b] = [z + k * R, z + k * (R + reach)];
     body.push(
       {
-        ...box(Math.min(a, b), mid - 1.5, z - 1.5, Math.max(a, b), mid + 1.5, z + 1.5, METAL),
+        ...box(x - 1.5, mid - 1.5, Math.min(a, b), x + 1.5, mid + 1.5, Math.max(a, b), METAL),
         ghost: true,
       },
       {
         ...box(
-          Math.min(a, b),
+          x - 0.4,
           mid - PARTS.SPAN / 2,
-          z - 0.4,
-          Math.max(a, b),
+          Math.min(a, b),
+          x + 0.4,
           mid + PARTS.SPAN / 2,
-          z + 0.4,
+          Math.max(a, b),
           METAL,
         ),
         ghost: true,
@@ -246,20 +298,43 @@ export const station = (x: number, Y: number, z: number): [Brush[], StationDef, 
       box(e - 4, Y + 3.2, z - 3, e, Y + 14, z + 3, PAINT, PAINT, grey),
       box(w + 4, Y + 11, s, e - 4, Y + 14, s + 4, STEEL, STEEL, lit),
       box(w + 4, Y + 11, n - 4, e - 4, Y + 14, n, STEEL, STEEL, lit),
-      // The command room, its window east, and the console.
-      box(e, Y - 2, z - 10, x + 40, Y, z + 10, METAL),
-      box(e, Y + 4, z - 10, x + 40, Y + 5, z + 10, METAL),
-      box(e, Y, z - 10, x + 40, Y + 4, z - 8, PAINT, PAINT, grey),
-      box(e, Y, z + 8, x + 40, Y + 4, z + 10, PAINT, PAINT, grey),
-      box(x + 38, Y, z - 8, x + 40, Y + 4, z + 8, GLASS),
-      box(...post[0], ...post[1], STEEL, STEEL, lit),
+      // The command room: floor, ceiling, its side walls, its west wall over the hangar's roof, the
+      // window east (a ghost: space shows through, client/station/command.ts draws its frame).
+      box(rx0, Y - 2, z - Z - 1, rx1 + 0.5, Y, z + Z + 1, METAL),
+      box(rx0, Y + H, z - Z - 1, rx1 + 0.5, Y + H + 1, z + Z + 1, METAL),
+      box(rx0, Y, z - Z - 1, rx1 + 0.5, Y + H, z - Z, PAINT, PAINT, grey),
+      box(rx0, Y, z + Z, rx1 + 0.5, Y + H, z + Z + 1, PAINT, PAINT, grey),
+      box(e - 2, Y + 14, z - Z, rx0, Y + H, z + Z, PAINT, PAINT, grey),
+      { ...box(rx1, Y, z - Z, rx1 + 0.5, Y + H, z + Z, GLASS), ghost: true },
+      // The steps, the dais and the galleries each side.
+      ...Array.from({ length: STEPS }, (_, k) => {
+        const run = (STAIR1 - STAIR0) / STEPS;
+        return box(
+          x + STAIR0 + run * k,
+          Y,
+          z - W,
+          x + STAIR0 + run * (k + 1),
+          Y + (DAIS * (k + 1)) / STEPS,
+          z + W,
+          METAL,
+          PAINT,
+          grey,
+        );
+      }),
+      box(x + STAIR1, Y, z - Z, rx1, Y + DAIS, z + Z, METAL, PAINT, grey),
+      box(x + GALLERY, Y, z - Z, x + STAIR1, Y + DAIS, z - SIDE, METAL, PAINT, grey),
+      box(x + GALLERY, Y, z + SIDE, x + STAIR1, Y + DAIS, z + Z, METAL, PAINT, grey),
+      // The console: a ghost with no tint (a tinted one is drawn as furniture on the moon, client/
+      // moonbase/), drawn as a computer with its button (client/station/).
+      { ...box(...post[0], ...post[1], STEEL), ghost: true },
       ...body,
     ],
     {
       post,
+      deck: Y,
       hall: [
         [w, Y - 1, s],
-        [x + 40, Y + 16, n],
+        [rx1, Y + H, n],
       ],
       hull: [x, Y + LOW, z, Y + TOP],
       gun: [x, Y + LOW - PARTS.GUN, z],

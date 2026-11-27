@@ -117,7 +117,8 @@ bots' routes described above.
 - **Fairings**: a shoulder along each flank at the belt; on the middle section its top is a ledge
   at 8.5 m, level with the gallery.
 - **Wings** (`WING`, `thick()`): from the fairing's ledge down to the sand in three pieces, two
-  breaks of 3.6 m crossed by a walking jump or on one of two rails 0.45 m wide. Thin: 0.6 m at the
+  breaks of 0.98 m crossed in a stride or on one of two rails 0.45 m wide (a buggy drives up it,
+  below). Thin: 0.6 m at the
   root, 0.15 m at the tip, drawn and collided alike. Rows rise 0.15 m at most, so a foot is within
   0.075 m of the drawn plane.
 - **Engines**: both flank engines are torn off, one on the sand in each half (`ENGINES[0]`,
@@ -130,7 +131,8 @@ bots' routes described above.
   1 m with dark sunk cracks, a few glowing, out to the banks, then scorched sand; the trees ahead
   of the nose are snapped and burnt (`snags`), the undergrowth gone in a fan.
 - **Ways across**, a runner from red's spawn to blue's flag: west gap 21.3 s, hold 22.0 s, high
-  road (wing, ledge, gallery, wing) 23.1 s by jumps and 25.9 s on the rails, east gap 25.8 s,
+  road (wing, ledge, gallery, wing) 23.1 s by jumps and 25.9 s on the rails (before the breaks
+  closed, below), east gap 25.8 s,
   lagoon 26.9 s. The back is also reached from the ledge by two jumps up the skin.
 - **Bots**: the nav joins no two floors with a third between them, knows a jump and pull up of at
   most 2.8 m as a link, and keeps five ways on the line (any floor over 4 m is the high road).
@@ -367,3 +369,17 @@ at x 80 the sand rises toward the node at x 84 and a wheel there sat 8 cm high.
   3,714). Match-frame JavaScript at red's camp looking at its buggy (headless Chrome on Metal,
   800 × 450, medians of 120 frames, alternated three times): 0.1 ms without the two buggies, 0.6
   ms with them; Tranquility's eight vehicles cost 1.2 ms the same way. Highline draws none.
+
+## A wing to drive up (the user, 2026-11-27)
+
+"On Landfall, the buggy must get up the plane's wings." It could not: the tip stood 0.3 m over the
+sand at the end of a narrow ramp, and the first break was 3.56 m long, longer than the buggy's
+2.5 m wheelbase. The buggy dropped into it and drove on _under_ the wing to the hull.
+
+- **Breaks**: the pieces were pushed out 0.2 and 0.4 m instead of 2 and 4 m, and each break is a
+  unit of span (0.78 m) instead of two. Each break is 0.98 m long, shorter than half the wheelbase:
+  one axle at a time hangs over it. A runner crosses it in a stride; the rails stay.
+- **Lower**: the tip lies on the sand (top 1.45 m, its 0.15 m under it), and the outer piece
+  meets the middle one at 3.0 and 3.2 m instead of 3.3 and 3.6 m. The wing is 3.6 m shorter.
+- **Check**: from the sand at x 54.5 to 56.5, at full throttle or half, the buggy drives up onto
+  the fairing's ledge (`beach.buggy.test.ts`). The routes on foot no longer jump on the wing.

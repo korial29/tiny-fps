@@ -108,6 +108,9 @@ export const chirr = (): Float32Array =>
 /** Where something burns on Landfall (x, z): by the four torn engines and at the hull's four broken ends. */
 export const FIRES = BURNING.map(([x, , z]) => [x, z]);
 
+/** The surf's share of the world's bus at the waterline: half (-6 dB), the sea drowned the game (the user, 2026-11-27). */
+export const SURF = 0.5;
+
 /**
  * Landfall's ambience: the surf, loudest at the waterline; the wind in the palms, in gusts, and
  * the insects, both rising toward the trees; a fire's crackle within some 25 m of one; and a gull
@@ -121,7 +124,7 @@ export const LANDFALL: Air = {
     for (let i = 0; i < FIRES.length; i++) {
       d = Math.min(d, Math.hypot(x - FIRES[i][0], z - FIRES[i][1]));
     }
-    out[0] = 0.2 + 0.8 / (1 + ((x - FRAME.shore) / 14) ** 2);
+    out[0] = SURF * (0.2 + 0.8 / (1 + ((x - FRAME.shore) / 14) ** 2));
     out[1] = (0.25 + 0.75 * wood) * (0.55 + 0.45 * Math.sin(t * 0.31) * Math.sin(t * 0.13 + 1));
     out[2] = 0.5 * wood * wood;
     out[3] = Math.max(1 - d / 28, 0) ** 2;

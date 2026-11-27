@@ -32,7 +32,7 @@ import {
   prism,
   stand,
 } from './common';
-import { coat, BELL } from './hull';
+import { coat, BELL, SET_BACK } from './hull';
 
 // ---------------------------------------------------------------------------------------------
 // The debris and the camps.
@@ -369,7 +369,15 @@ export const KIND: Record<
   // shut (`jam`, d = 0): the same plates across it, on the face toward the gap.
   heap: ({ min: a, max: b }, t = STRIPE, _s = 1, d = 0) => {
     const [o, u] = d ? [0, 2] : [2, 0];
-    box(a, b, IRON, d ? IRON : ink(t, 0.55));
+    // A jam's core stands back from its broken end: its face lay in the end's plane, on the edge
+    // of the ring of the skin's thickness, and the two fought for the depth (2026-11-27).
+    const [p, r] = [a.slice(), b.slice()];
+    if (d > 0) {
+      r[0] -= SET_BACK;
+    } else if (d < 0) {
+      p[0] += SET_BACK;
+    }
+    box(p, r, IRON, d ? IRON : ink(t, 0.55));
     const n = Math.round((b[u] - a[u]) / 1.6);
     for (const e of d ? [d] : [-1, 1]) {
       const w = (e < 0 ? a : b)[o];
@@ -396,7 +404,12 @@ export const KIND: Record<
     }
   },
   // A frame fallen at a broken end, two girders of it on the sand and a rib still standing against the hull.
-  frame: ({ min: a, max: b }, _t, s) => {
+  frame: ({ min: c, max: e }, _t, s) => {
+    // The girders stand back from the broken end they lean on: their ends lay in its plane, on
+    // the ring of the skin's thickness, and the two fought for the depth (2026-11-27).
+    const east = SHAPE.sections.some(([, x1]) => Math.abs(x1 - c[0]) < 0.01);
+    const a = [c[0] + (east ? SET_BACK : 0), c[1], c[2]];
+    const b = [e[0] - (east ? 0 : SET_BACK), e[1], e[2]];
     // The rib in two lengths between the girders, none of its faces in theirs (as rail's web).
     box([a[0] + 0.2, a[1], a[2]], [b[0] - 0.2, b[1] - 0.8, b[2]], IRON, IRON, 12);
     box([a[0] + 0.2, b[1] - 0.64, a[2]], [b[0] - 0.2, b[1] - 0.16, b[2]], IRON, IRON, 12);

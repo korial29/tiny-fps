@@ -237,6 +237,13 @@ export const ends = (n: number) => [
   ...(n ? [[SHAPE.sections[n][0], -1]] : []),
   ...(n < 2 ? [[SHAPE.sections[n][1], 1]] : []),
 ];
+/** Whether x is one of section n's broken ends. */
+export const broken = (n: number, x: number) => ends(n).some(([e]) => Math.abs(e - x) < 0.01);
+/**
+ * How far a fairing's cap at a broken end stands back into its section: in the end's plane it
+ * lay on the ring of the skin's thickness, and the two fought for the depth (2026-11-27).
+ */
+export const SET_BACK = 0.03;
 /** The light left on burnt skin: dark, yet its panels' lines still read (at 0.1 it was a flat black void). */
 const BURNT = 0.22;
 /**
@@ -370,6 +377,11 @@ export const skin = (n: number, only?: 'glass') => {
         [p, 0.4],
         [q, -0.4],
       ]) {
+        // A tear that runs out at a broken end has no side there: the end's ring and torn skin
+        // are drawn in the same place, and the two fought for the depth in stripes (2026-11-27).
+        if (broken(n, x)) {
+          continue;
+        }
         const out = hs.map(([h]) => shell(n, x, h, sg));
         loft(
           out,
@@ -541,7 +553,9 @@ export const tip = () => {
 export const fairings = () => {
   SHIP.forEach(({ fair }, n) => {
     const lit = paint(n);
-    for (const [p, q, e] of fair) {
+    for (const [p0, q0, e] of fair) {
+      const p = broken(n, p0) ? p0 + SET_BACK : p0;
+      const q = broken(n, q0) ? q0 - SET_BACK : q0;
       // The nose's last fairing runs out along the chine.
       const far = n > 1 && q > ARCH ? FOOT : q;
       const steps = Math.ceil((far - p) / 2);

@@ -288,29 +288,73 @@ export const prism = (a: V, b: V, cut: number, m: Mat, top?: Mat, grow = 0, k = 
   }
 };
 
-/** Sand blown against the foot of a box that stands in the dry beach. */
+/** How far a drift runs out from its box's foot, metres; and its rings across that, its points round each corner. */
+const [REACH, RINGS, ARC] = [1.3, 3, 3];
+
+/**
+ * Sand blown against the foot of a box that stands in the dry beach: a soft bank all round it,
+ * its height over the sand set by the distance to the box's footprint (so it rounds the corners)
+ * and falling to the sand with a smoothstep, level at both ends, so it shows no crease against
+ * the box nor where it meets the beach. Its height wanders round the box; its normals are the
+ * bank's own, smooth from one strip to the next.
+ */
 export const drift = ({ min: a, max: b }: Piece) => {
   const c = mid(a, b);
-  if (gy(c[0], c[2]) < 0.3 || a[1] > gy(c[0], c[2])) {
+  const g0 = gy(c[0], c[2]);
+  if (g0 < 0.3 || a[1] > g0) {
     return;
   }
-  const at = (i: number, out: number) => {
-    const [x, z] = [(i + 1) & 2 ? b[0] + out : a[0] - out, i & 2 ? b[2] + out : a[2] - out];
-    const g = gy(x, z);
-    return [
-      x,
-      g + (out ? -0.04 : Math.min(0.12 + 0.35 * hash(i % 4, c[0] + c[2], 5), b[1] - g)),
-      z,
-    ];
+  const s = c[0] + c[2];
+  /** The bank's crest against the box at (x, z), under the box's top. */
+  const crest = (x: number, z: number) =>
+    Math.min(0.1 + 0.3 * noise(x / 1.6 + s, z / 1.6, 5), b[1] - g0 - 0.04);
+  const y = (x: number, z: number) => {
+    const d = Math.hypot(Math.max(a[0] - x, 0, x - b[0]), Math.max(a[2] - z, 0, z - b[2]));
+    // A touch under the sand at its rim, which hides the seam.
+    return gy(x, z) + (crest(x, z) + 0.05) * (1 - sm(d / REACH)) - 0.05;
   };
-  for (let i = 0; i < 4; i++) {
-    const q = [at(i, 0), at(i + 1, 0), at(i + 1, 0.9), at(i, 0.9)];
-    face(
-      q,
-      DUNE,
-      DOWN,
-      q.map(p => 0.92 + 0.16 * noise(p[0] / 11, p[2] / 11, 5)),
-    );
+  const normal = (x: number, z: number) =>
+    unit([y(x - 0.05, z) - y(x + 0.05, z), 0.1, y(x, z - 0.05) - y(x, z + 0.05)]);
+  // Round the footprint: each corner's arc of ARC + 1 outward directions, the sides split every 1.5 m.
+  const foot: [number, number, number, number][] = [];
+  const corners = [
+    [b[0], a[2]],
+    [b[0], b[2]],
+    [a[0], b[2]],
+    [a[0], a[2]],
+  ];
+  corners.forEach(([x, z], i) => {
+    for (let j = 0; j <= ARC; j++) {
+      const t = ((i - 1 + j / ARC) * Math.PI) / 2;
+      foot.push([x, z, Math.cos(t), Math.sin(t)]);
+    }
+    const [nx, nz] = corners[(i + 1) % 4];
+    const n = Math.ceil(Math.hypot(nx - x, nz - z) / 1.5);
+    const [ox, oz] = [Math.cos((i * Math.PI) / 2), Math.sin((i * Math.PI) / 2)];
+    for (let j = 1; j < n; j++) {
+      foot.push([x + ((nx - x) * j) / n, z + ((nz - z) * j) / n, ox, oz]);
+    }
+  });
+  const ring = (r: number) =>
+    foot.map(([x, z, dx, dz]) => {
+      const [px, pz] = [x + dx * r, z + dz * r];
+      return {
+        p: [px, y(px, pz), pz],
+        n: normal(px, pz),
+        k: 0.92 + 0.16 * noise(px / 11, pz / 11, 5),
+      };
+    });
+  let inner = ring(0);
+  for (let r = 1; r <= RINGS; r++) {
+    // Closer rings near the box, where the bank turns over.
+    const outer = ring(REACH * (r / RINGS) ** 1.3);
+    for (let i = 0; i < foot.length; i++) {
+      const j = (i + 1) % foot.length;
+      for (const v of [inner[i], inner[j], outer[j], inner[i], outer[j], outer[i]]) {
+        put(v.p, v.n, DUNE, v.k);
+      }
+    }
+    inner = outer;
   }
 };
 

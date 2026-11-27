@@ -24,6 +24,7 @@ import { GRAIN, SAND, SKY, WATER, WET } from '../shore';
 import { N as PRINT_TEXELS, SPAN } from '../prints';
 import { FRAME } from '../../shared/beach';
 import { PLUME, SMOKE } from '../smoke';
+import { FOLIAGE_SHADOW } from '../foliage/layers';
 import { CANOPY, CANOPY_GLSL, DULL, GLOSS as SHEEN, HULL, PANEL, TARP, TARP_GLSL } from '../paint';
 import { JOINTS } from '../rig';
 import { BARE_REGIONS, COLOURS, REGION, TOP, UNLIT } from '../skin';
@@ -468,6 +469,7 @@ float f=1.-smoothstep(.6,2.5,${SIZE / TILE}.*max(length(dFdx(C.xy)),length(dFdy(
 #ifdef BEACH
 float bw=0.,hk=0.;bool bs=abs(L-(${SAND}))<.005;if(bs)${GRAIN}
 if(abs(L-(${TARP}))<.001)${TARP_GLSL}
+//FOREST
 if(abs(L-${TEX.GRATE}.)<.5)h*=${GRATE_RELIEF}.;
 #ifdef PRINTS
 if(bs){float pr=smoothstep(.1,.45,P.y-${FRAME.water}.);h+=prh*pr;c*=1.-.38*prk*pr;}
@@ -490,7 +492,7 @@ sd=mix(sd,.5*sqrt(max(1.-dot(Tn,O)*dot(Tn,O),0.))*smoothstep(-.3,.4,dot(n,O)),kx
 vec3 wr=vec3(.38,.16,.1),sw=clamp((dot(m,O)+wr)/(1.+wr),0.,1.)*smoothstep(-.35,.1,dot(n,O));
 if(sd>0.&&g<1.){
 vec4 q=W*vec4(P+n*.08,1);q.xyz=q.xyz*.5+.5;
-float v=0.;
+float v=0.;${FOLIAGE_SHADOW}
 for(int j=0;j<4;j++)v+=texture(D,vec4(q.xy+(vec2(j&1,j>>1)*2.-1.)*${0.75 / SHADOW},0,q.z-.0004));
 sv=mix(v/4.,1.,smoothstep(.8,1.,max(max(abs(q.x-.5),abs(q.y-.5)),abs(q.z-.5))*2.));}
 vec3 l=y*(mix(mix(H[1],H[0],max(w.y,0.)),H[2],max(-w.y,0.))+X*mix(vec3(sd),sw,kb)*sv),sp=X*sv*sd*pow(max(dot(m,nz(O+V)),0.),R.y);
@@ -671,7 +673,8 @@ export const mirrors = (brushes: readonly Brush[] = []): boolean =>
  * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
  * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon. `rock` is the GLSL of the
  * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk), `glaze` that of its indoor
- * windows under MOON (Decor.glaze: Tranquility's traced reflections, from its chunk). `sight` adds the
+ * windows under MOON (Decor.glaze: Tranquility's traced reflections, from its chunk), `forest` that of
+ * the forest's own layers under BEACH (Decor.forest: Landfall's burnt earth, from its chunk). `sight` adds the
  * vision's filter and its glowing prey (VISION), for a frame in a xenomorph's or the Hunter's
  * vision: its loop and palettes were 4.6 ms a frame on Highline with none ever drawn, 1.4 on
  * Tranquility and none on Landfall, through the registers they take from every pixel.
@@ -683,13 +686,15 @@ export const fragOf = (
   rock = '',
   sight = false,
   glaze = '',
+  forest = '',
 ) =>
   FRAG.replace(
     '\n',
     `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${kind.startsWith('LAND') && mirrors(def.brushes) ? '#define MIRROR\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}${sight ? '#define VISION\n' : ''}`,
   )
     .replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`)
-    .replace('//GLAZE', kind.startsWith('LAND') ? glaze : '');
+    .replace('//GLAZE', kind.startsWith('LAND') ? glaze : '')
+    .replace('//FOREST', kind.startsWith('LAND') ? forest : '');
 
 /** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */
 export const printed = (def: Pick<WorldDef, 'scenery' | 'relief'>) =>

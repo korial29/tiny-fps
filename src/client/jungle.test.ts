@@ -8,6 +8,12 @@ import { STRIDE } from './mesh';
 
 const made = parts(BEACH);
 const count = (v: number[]) => v.length / STRIDE;
+/** Every palm as drawn near (Decor.groves), and as drawn far. */
+const near = (p = made) => [...p.groves.values()].flatMap(g => g.near);
+const far = (p = made) => [...p.groves.values()].flatMap(g => g.far);
+/** Whether a vertex is on a palm of TRUNKS or its twin, the row the map collides with. */
+const onTrunk = (v: number[]) =>
+  TRUNKS.some(([x, z]) => [z, ZED - z].some(t => Math.hypot(v[0] - x, v[2] - t) < 1));
 /** A part's vertices, one array each. */
 const verts = (v: number[]) =>
   Array.from({ length: count(v) }, (_, i) => v.slice(i * STRIDE, (i + 1) * STRIDE));
@@ -31,24 +37,48 @@ const onForm = (rocks: number[][], [x, z, R, H, s]: number[], g: number, twin: b
 
 describe('jungle', () => {
   it('is the same every time: whole triangles of finite numbers, their normals unit', () => {
-    const v = jungle(BEACH);
-    expect(v).toEqual(jungle(BEACH));
+    // Counted in plain loops: a million vertices, one expect each, took seconds.
+    const [v, w] = [jungle(BEACH), jungle(BEACH)];
+    expect(w.length).toBe(v.length);
     expect(v.length % (3 * STRIDE)).toBe(0);
-    expect(v.every(Number.isFinite)).toBe(true);
-    for (let i = 0; i < v.length; i += STRIDE) {
-      expect(Math.hypot(v[i + 3], v[i + 4], v[i + 5])).toBeCloseTo(1, 5);
+    let [differ, odd] = [0, 0];
+    for (let i = 0; i < v.length; i++) {
+      differ += +(v[i] !== w[i]);
+      odd += +!Number.isFinite(v[i]);
     }
-    expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
+    let skew = 0;
+    for (let i = 0; i < v.length; i += STRIDE) {
+      skew += +(Math.abs(Math.hypot(v[i + 3], v[i + 4], v[i + 5]) - 1) > 1e-5);
+    }
+    expect([differ, odd, skew]).toEqual([0, 0, 0]);
+    const rest = Object.entries(made).filter(([k]) => k != 'groves');
+    expect(v.length).toBe(rest.reduce((n, [, p]) => n + (p as number[]).length, near().length));
   });
 
-  it('keeps each part within its share of the level: under 145,000 vertices in all', () => {
+  it('keeps each part within its share of the level', () => {
     expect(count(made.rocks)).toBeLessThan(45_500);
-    expect(count(made.palms)).toBeLessThan(40_000);
-    expect(count(made.forest)).toBeLessThan(22_500);
-    expect(count(made.brush)).toBeLessThan(16_500);
-    expect(count(made.canopy)).toBeLessThan(15_500);
-    expect(count(made.snags)).toBeLessThan(4_000);
-    expect(count(jungle(BEACH))).toBeLessThan(145_000);
+    // The palms near and far (each tile drawn in one of the two, render.ts), the undergrowth
+    // near only (Decor.grass): what a frame draws of them is bounded by the distances, not these.
+    expect(count(near())).toBeLessThan(250_000);
+    expect(count(far())).toBeLessThan(85_000);
+    expect(count(made.brush)).toBeLessThan(880_000);
+    expect(count(made.canopy)).toBeLessThan(76_000);
+    expect(count(made.snags)).toBeLessThan(11_000);
+    expect(count(jungle(BEACH))).toBeLessThan(1_260_000);
+  });
+
+  it('draws each palm twice, near and far, the far one cheaper and as tall, both in its tile', () => {
+    for (const g of made.groves.values()) {
+      expect(g.near.length).toBeGreaterThan(g.far.length);
+      expect(g.far.length).toBeGreaterThan(0);
+      const top = (v: number[]) => Math.max(...verts(v).map(p => p[1]));
+      expect(Math.abs(top(g.near) - top(g.far))).toBeLessThan(1);
+      // The feet in the tile: its middle within half a tile and the fronds' reach of each point.
+      for (const v of [...verts(g.near), ...verts(g.far)]) {
+        expect(Math.abs(v[0] - g.x)).toBeLessThan(8 + 9);
+        expect(Math.abs(v[2] - g.z)).toBeLessThan(8 + 9);
+      }
+    }
   });
 
   it('draws every rock of ROCKS and its twin on the form the map collides with, in granite', () => {
@@ -63,7 +93,7 @@ describe('jungle', () => {
   });
 
   it('stands a palm on every trunk of TRUNKS and its twin, upright as high as a runner', () => {
-    const palms = verts(made.palms);
+    const palms = verts(near());
     for (const [x, z0, r] of TRUNKS) {
       for (const z of [z0, ZED - z0]) {
         // Each foot is on its own ground: the sand rises to the trees.
@@ -86,8 +116,8 @@ describe('jungle', () => {
 
   it('leaves the sand clear: what is only drawn is behind the first trunks and past the headlands', () => {
     const open = (v: number[]) => v[2] > 20 && v[2] < ZED - 20;
-    for (const part of [made.forest, made.brush, made.canopy]) {
-      const low = verts(part).filter(v => open(v) && v[1] < 3);
+    for (const part of [near(), made.brush, made.canopy]) {
+      const low = verts(part).filter(v => open(v) && v[1] < 3 && !onTrunk(v));
       expect(Math.min(...low.map(v => v[0]))).toBeGreaterThan(FRAME.trees);
     }
     expect(verts(made.rocks).filter(v => open(v) && v[0] > 5).length).toBe(0);
@@ -120,7 +150,7 @@ describe('jungle', () => {
     expect(Math.max(...tops)).toBeGreaterThan(4);
     expect(tops.filter(y => y < 1.5).length).toBeGreaterThan(snags.length / 3);
     // Before the nose nothing stands: the mass of leaves is down on the ground, the trees and the undergrowth gone.
-    for (const part of [made.forest, made.brush, made.canopy]) {
+    for (const part of [near(), made.brush, made.canopy]) {
       const left = verts(part).filter(v => Math.hypot(v[0] - tip - 4, v[2] - mid) < 8);
       expect(left.every(v => v[1] < walked(v[0], v[2]) + 0.2)).toBe(true);
     }
@@ -131,12 +161,11 @@ describe('jungle', () => {
     expect(leaves(mid).every(v => v[6] > v[7])).toBe(true);
     expect(leaves(mid + 60).every(v => v[7] > v[6])).toBe(true);
     // The first row is collision: every palm of it still stands (the test above), singed at most.
-    expect(count(made.palms)).toBe(39_648);
   });
 
   it('stands on the relief where there is one', () => {
     const sloped = parts(SLOPE);
-    const palms = verts(sloped.palms);
+    const palms = verts(near(sloped));
     for (const [x, z, r] of TRUNKS) {
       const foot = palms.filter(v => Math.hypot(v[0] - x, v[2] - z) < 1.2 * r);
       // The lowest ring is square to a trunk that already leans a hair: within 2 cm of the ground.
@@ -155,7 +184,7 @@ describe('jungle', () => {
     TRUNKS[0][0] = was + 1.5;
     try {
       const [, z] = TRUNKS[0];
-      const foot = verts(parts(BEACH).palms).filter(
+      const foot = verts(near(parts(BEACH))).filter(
         v =>
           v[1] < walked(was + 1.5, z) + 0.02 &&
           Math.abs(v[2] - z) < 0.5 &&

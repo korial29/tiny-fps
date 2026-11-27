@@ -47,18 +47,21 @@ const ball = (
   }
 };
 
-const made = new WeakMap<WorldDef, number[]>();
+/** Each map's vertices, and the fires of its chunk they were made with. */
+const made = new WeakMap<WorldDef, [number[][], number[]]>();
 
 /**
  * The smoke's and the fires' vertices, in the renderer's format: drawn after the sky, blended
  * (render.ts). A column's balls grow as they rise and lean inland, each overlapping the last;
- * three flames stand round its foot.
+ * three flames stand round its foot. `blazes` are fires drawn only (Decor.blazes), after the map's.
  */
-export const plumes = (def: WorldDef): number[] => {
-  let o = made.get(def);
-  if (!o) {
-    made.set(def, (o = []));
-    FIRES.forEach(([x, y, z, tall, r0, r1], id) => {
+export const plumes = (def: WorldDef, blazes: number[][] = []): number[] => {
+  const [was, kept] = made.get(def) ?? [];
+  let o = kept;
+  if (!o || was != blazes) {
+    made.set(def, [blazes, (o = [])]);
+    // Then the small fires among the burnt trees past the nose, their flames k times as big.
+    [...FIRES, ...blazes].forEach(([x, y, z, tall, r0, r1, k = 1], id) => {
       for (let h = 0; h < tall;) {
         const t = h / tall;
         const r = r0 + (r1 - r0) * t ** 0.8;
@@ -73,14 +76,15 @@ export const plumes = (def: WorldDef): number[] => {
           id,
           0,
         );
-        h += 0.8 * r;
+        // A ball every 0.7 m at least: a thin column needs no more to look round.
+        h += Math.max(0.8 * r, 0.7);
       }
-      for (let k = 0; k < 3; k++) {
-        const [a, tip] = [id + k * 2.1, 1.6 + 0.5 * k];
+      for (let j = 0; j < 3; j++) {
+        const [a, tip] = [id + j * 2.1, (1.6 + 0.5 * j) * k];
         ball(
           o!,
           [x + 0.6 * r0 * Math.cos(a), y + 0.4 * tip, z + 0.6 * r0 * Math.sin(a)],
-          0.55,
+          0.55 * k,
           0.5 * tip,
           v => (v - y) / tip + 0.1,
           id,

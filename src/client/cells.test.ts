@@ -121,4 +121,26 @@ describe('cells', () => {
     const out = new Int32Array(2);
     expect(seen(c, m, out)).toBe(1);
   });
+
+  it('splits the runs by their distance from an eye: near ones within the reach, far ones past it, none past the limit', () => {
+    // Tiles of 16 m in a row along x, a triangle each: a frustum that holds them all.
+    const tri = (x: number) =>
+      [x, 0, 0, x + 1, 0, 0, x, 1, 0].flatMap((v, i) =>
+        i % 3 == 2 ? [v, 0, 1, 0, 0, 0, -1, 0] : [v],
+      );
+    const v = [0, 16, 32, 48, 64, 80].flatMap(tri);
+    const c = cells(v, v.length / STRIDE, 16);
+    const all = new Float32Array([0.01, 0, 0, 0, 0, 0.01, 0, 0, 0, 0, 0.01, 0, 0, 0, 0, 1]);
+    const firsts = (beyond: boolean, limit = Infinity) => {
+      const out = new Int32Array(c.n * 2);
+      const n = seen(c, all, out, -1, [0, 0, 0], 33, beyond, limit);
+      return Array.from({ length: n }, (_, i) => out[i * 2]);
+    };
+    const [near, far] = [firsts(false), firsts(true)];
+    expect(near).toEqual([0, 3, 6]);
+    expect(far).toEqual([9, 12, 15]);
+    // Together every run once, as the palms near and far (render.ts).
+    expect([...near, ...far].sort((a, b) => a - b)).toEqual([0, 3, 6, 9, 12, 15]);
+    expect(firsts(true, 70)).toEqual([9, 12]);
+  });
 });

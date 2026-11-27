@@ -451,3 +451,23 @@ vertices, the snags 15,270 with the denser rows, the decor built some 60 ms soon
 against 474 in headless Chrome). Wreck 238,158
 (debris 37,710, camps 12,684 with the sand banks); smoke 22,410. The user's Mac after it: 57 fps,
 95th centile 17.7 ms (master 17.6 ms).
+
+## The volcano (the user, 2026-11-27)
+
+Scenery only, in the island's middle behind the forest (`src/client/volcano/`, in `Decor.land`):
+no collision, no rule.
+
+- Its crater's axis is (700, 125), on the centre line; the rim stands about 340 m over the sea
+  (750, then 480, were too high). Rings of 160 points from the crater's floor to the foot, lit
+  paint (layer −1): 26,880 vertices, one level of detail.
+- Not a cone (the user: too symmetric): the foot runs out 560 to 800 m and the flank's concavity
+  changes round it (`swell()`), the rim is higher on one side and breached on the beach's side
+  toward +z (`BREACH`), the breach running on down the flank as a valley, and an older, lower
+  cone (`SHOULDER`, 190 m) stands on the −z flank, blended in by a soft maximum.
+- The foot never comes nearer the sea than x = 160 (`SHORE`), under the canopy's hills. Pulled
+  out by the noise, it once reached the waterline: a sheet a few metres over the camps that hid
+  the sky and shaded the beach (`volcano.test.ts`).
+- Radial gullies (ridged noise stretched down the slope) rib the flanks; forest on the foot,
+  scrub, then ash, the green climbing higher on the ribs than in the gullies.
+- Cost, camp toward it, headless Chrome (Metal), three alternated runs: match-frame JavaScript
+  median 0.5 to 0.8 ms against 0.5 to 0.6 ms without, first draw unchanged (about 1.65 s).

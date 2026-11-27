@@ -6,7 +6,7 @@ import { ZED } from '../../shared/moon';
 import { STRIDE } from '../mesh';
 import type { WorldDef } from '../../shared/world';
 import type { Out } from '../verts';
-import { LINTELS, METAL } from './constants';
+import { LINTELS, HULL } from './constants';
 import { block, frame, panel } from './kit';
 import { dressing } from './props';
 import { dome, modules, tubes } from './shell';
@@ -19,7 +19,7 @@ export const moonbase = (o: Out): void => {
   tubes(o);
   modules(o);
   for (const { min, max } of [...MODULES, ...TUBES]) {
-    panel(o, 1, 0.02, min, max, METAL, 1.99);
+    panel(o, 1, 0.02, min, max, HULL, 1.99);
   }
   for (const { min, max } of LINTELS) {
     const k = max[0] - min[0] < 1 ? 0 : 2;

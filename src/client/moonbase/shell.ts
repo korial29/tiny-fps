@@ -6,8 +6,8 @@ import { UP, box, face, lit } from '../brick';
 import { glaze } from '../glass/glaze';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
-import { CX, CZ, DARK, FRAME, LAMP, LINTELS, PAINT, R, WHITE } from './constants';
-import { lining, panel, quad } from './kit';
+import { CX, CZ, DARK, FRAME, LAMP, LINTELS, PAINT, R, ROOM_GLASS, WHITE } from './constants';
+import { glazed, lining, panel, quad } from './kit';
 
 /** The openings of the drawn drum, as angles about the centre and a height: the door, and the tubes' boxes where they come through. */
 export const GAPS = [
@@ -184,7 +184,9 @@ export const modules = (o: Out) => {
         lit(o, 0.5, () => face(o, pane(0.6, 2.7, 3.7, 0.04), [0.9, 0.95, 1], mid));
         glaze(o, from, [x, 3.2, z + s * 0.04], [0, 0, s], 0.6, 0.25);
         quad(o, pane(0.56, 2.6, 3.8, -WALL - 0.04), FRAME);
+        const inner = o.length;
         quad(o, pane(0.46, 2.7, 3.7, -WALL - 0.06), [0.45, 0.48, 0.5]);
+        glazed(o, inner, [0, 0, -s], ROOM_GLASS);
       }
     }
     // Inside: white walls open at the doorways, a ceiling and three lamps under it.

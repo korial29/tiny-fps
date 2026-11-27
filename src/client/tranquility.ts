@@ -3,6 +3,7 @@
 import type { WorldDef } from '../shared/world';
 import type { Decor } from './render';
 import { furnishing } from './moonbase';
+import { GLAZE } from './moonbase/mirror';
 import { HEAVENS, heavens, moonscaping } from './moonscape';
 import { hangar, satellite } from './satellite';
 
@@ -20,5 +21,5 @@ export default function* (def: WorldDef, keys: string[]): Generator<undefined, D
     land = land.concat(satellite(def.station), hangar(def.station));
   }
   yield;
-  return { land, sky: heavens(), heavens: HEAVENS };
+  return { land, sky: heavens(), heavens: HEAVENS, glaze: GLAZE };
 }

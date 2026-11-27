@@ -53,6 +53,25 @@ describe('textures', () => {
     expect(across).toBeGreaterThan(along * 2);
   });
 
+  it("lays the base's hull in smooth panels: dark seams every metre, no rivet or rust inside", () => {
+    const at = (x: number, y: number) =>
+      Array.from(layer(TEX.HULL).subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 3));
+    for (const s of [0, SIZE / 2]) {
+      expect(at(s, 40)[0]).toBeLessThan(at(s + 8, 40)[0] - 60);
+    }
+    expect(at(40, 0)[0]).toBeLessThan(at(40, 8)[0] - 60);
+    // Inside a panel, away from its seams: an even grey, never browner than it is blue.
+    const inner: number[] = [];
+    for (let y = 8; y < SIZE - 8; y++) {
+      for (let x = 8; x < SIZE / 2 - 8; x++) {
+        const [r, , b] = at(x, y);
+        expect(b).toBeGreaterThanOrEqual(r);
+        inner.push(r);
+      }
+    }
+    expect(Math.max(...inner) - Math.min(...inner)).toBeLessThan(30);
+  });
+
   it('frames glass panes in steel: the frame is light and the pane dark, and the pane is bluer', () => {
     const at = (x: number, y: number) =>
       Array.from(layer(TEX.GLASS).subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 3));

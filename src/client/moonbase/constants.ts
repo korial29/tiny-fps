@@ -24,11 +24,16 @@ export const UV = [
   [0, 2],
   [0, 1],
 ];
+/**
+ * The layers of the glass seen from inside (the user, 2026-11-27: reflections on the windows): glows
+ * whose reflection of the room is traced per pixel (mirror.ts), in a module and in the hall.
+ */
+export const [ROOM_GLASS, HALL_GLASS] = [-2.35, -2.4];
 /** Lamps, the windows' glass seen from inside, their frames. */
 export const LAMP = [1.25, 1.3, 1.4];
 export const GLASS = [0.56, 0.48, 0.28];
 export const FRAME = [0.04, 0.04, 0.05];
-export const { CONCRETE, METAL, PAINT: WHITE } = TEX;
+export const { CONCRETE, HULL, PAINT: WHITE } = TEX;
 
 /** Flat colours of the kit. */
 export const [SNOW, GREY, IRON, INK, BLUISH, SOIL] = [

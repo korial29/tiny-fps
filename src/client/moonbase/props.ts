@@ -24,6 +24,14 @@ import {
   SOIL,
 } from './constants';
 import { inside, panel } from './kit';
+import { bevel, ring } from './round';
+import { station } from './console';
+
+/** What a halo fades to at its rim: about the dark face it lies on, as drawn indoors. */
+const UP_Y: Vec3 = [0, 1, 0];
+const DUSK = [0.035, 0.037, 0.045];
+/** A lit cap's middle: its colour times k, a third of the way to white. */
+const hot = (rgb: number[], k: number) => rgb.map(v => (v + (1 - v) / 3) * k);
 
 /**
  * Draws a piece of kit, (kind, x0, z0, x1, z1, y0, y1, the way its front looks: 0 +x, 1 +z, 2 -x,
@@ -53,6 +61,62 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
       rgb,
     );
   };
+  /** c() with its edges bevelled `e` deep. */
+  const cb = (a: number[], b: number[], rgb: number[], e = 0.025) => {
+    const [p, q] = [P(a[0], a[1], a[2]), P(b[0], b[1], b[2])];
+    bevel(
+      o,
+      p.map((v, i) => Math.min(v, q[i])) as Vec3,
+      p.map((v, i) => Math.max(v, q[i])) as Vec3,
+      rgb,
+      e,
+    );
+  };
+  // The face's axes: along u, up, and across so that a ring() on them faces front.
+  const U: Vec3 = [0, 0, 0];
+  U[2 - k] = (k ? 1 : -1) * s;
+  const Y: Vec3 = [0, 1, 0];
+  /**
+   * A round light at (u, v) on the face at w, r its radius: a cap lit n times its colour and hotter
+   * in the middle; with `halo` its glow spread on the dark face round it.
+   * With `half`, a bar with round ends reaching `half` either side of (u, v) along u.
+   */
+  const button = (
+    u: number,
+    v: number,
+    r: number,
+    w: number,
+    rgb: number[],
+    n = 1.6,
+    halo = true,
+    sides = 8,
+    half = 0,
+  ) => {
+    ring(
+      o,
+      P(u, v, w + 0.004),
+      U,
+      Y,
+      [0, r],
+      hot(rgb, n * 1.4),
+      rgb.map(x => x * n),
+      sides,
+      half,
+    );
+    if (halo) {
+      ring(
+        o,
+        P(u, v, w + 0.001),
+        U,
+        Y,
+        [r, r * 3],
+        rgb.map(x => x * 0.45),
+        DUSK,
+        sides,
+        half,
+      );
+    }
+  };
   /** A glowing pane facing front at w, k times its colour. */
   const g = (u0: number, v0: number, u1: number, v1: number, w: number, rgb: number[], n = 1) =>
     lit(o, n, () =>
@@ -60,7 +124,7 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
     );
   /** A screen: a dark case, a lit pane and lines of text, `rgb` its light. */
   const screen = (u0: number, v0: number, u1: number, v1: number, w: number, rgb: number[]) => {
-    c([u0, v0, w - 0.06], [u1, v1, w], INK);
+    cb([u0, v0, w - 0.06], [u1, v1, w], INK, 0.025);
     g(u0 + 0.04, v0 + 0.04, u1 - 0.04, v1 - 0.04, w + 0.005, rgb, 0.45);
     for (let l = 0; v1 - v0 > 0.3 && l < 4; l++) {
       const v = v1 - 0.12 - l * ((v1 - v0 - 0.16) / 4);
@@ -75,10 +139,14 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
       );
     }
   };
+  if (kind == KIND.CONSOLE) {
+    station(o, (x0 + x1) / 2, (z0 + z1) / 2, y0, (f * Math.PI) / 2);
+    return;
+  }
   inside(o, () => {
     if (kind == KIND.BENCH) {
-      c([0, H - 0.06, 0], [L, H, D], SNOW);
-      c([0.05, 0, 0], [L - 0.05, H - 0.06, D - 0.06], GREY);
+      cb([0, H - 0.06, 0], [L, H, D], SNOW, 0.03);
+      cb([0.05, 0, 0], [L - 0.05, H - 0.06, D - 0.06], GREY, 0.04);
       for (let u = 1.1; u < L - 0.5; u += 1.1) {
         c([u - 0.01, 0.1, D - 0.06], [u + 0.01, H - 0.1, D - 0.05], INK);
       }
@@ -88,36 +156,21 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         screen(u - 0.45, H + 0.2, u + 0.45, H + 0.75, 0.28, [CYAN, GREEN, AMBER, CYAN][i]);
         c([u - 0.3, H, 0.45], [u + 0.3, H + 0.025, 0.65], IRON);
         // Sample jars by the screens.
-        c([u + 0.7, H, 0.2], [u + 0.82, H + 0.2, 0.32], [GREEN, BLUISH, AMBER, MAUVE][i]);
-      }
-    } else if (kind == KIND.SAMPLES) {
-      c([0, H - 0.05, 0], [L, H, D], IRON);
-      c([0.15, 0.18, 0.15], [L - 0.15, 0.22, D - 0.15], INK);
-      for (const u of [0.1, L - 0.2]) {
-        for (const w of [0.1, D - 0.2]) {
-          c([u, 0, w], [u + 0.1, H - 0.05, w + 0.1], INK);
-        }
-      }
-      // Four cases on lit bases, a rock in each: the glass is only its frame.
-      for (let i = 0; i < 4; i++) {
-        const u = 0.25 + i * 1.2;
-        c([u, H, 0.3], [u + 0.9, H + 0.07, 1.2], INK);
-        g(u + 0.05, H + 0.015, u + 0.85, H + 0.055, 1.205, CYAN, 1.2);
-        const t = 0.16 + 0.07 * (i % 3);
-        c([u + 0.28, H + 0.07, 0.55], [u + 0.62, H + 0.07 + t, 0.95], [0.4 + 0.05 * i, 0.38, 0.35]);
-        for (const [a, b] of [
-          [0, 0.3],
-          [0.88, 0.3],
-          [0, 1.18],
-          [0.88, 1.18],
-        ]) {
-          c([u + a, H + 0.07, b], [u + a + 0.02, H + 0.55, b + 0.02], GREY);
-        }
-        c([u, H + 0.53, 0.3], [u + 0.9, H + 0.55, 1.2], [0.5, 0.6, 0.66]);
+        const jar = solid(2, 1, [1, 1], [0, 0]);
+        segment(
+          o,
+          jar,
+          P(u + 0.76, H, 0.26),
+          P(u + 0.76, H + 0.2, 0.26),
+          [1, 0, 0],
+          1,
+          0.055,
+          [GREEN, BLUISH, AMBER, MAUVE][i],
+        );
       }
     } else if (kind == KIND.RACKS) {
       // Three cabinets of twelve units, each a dark face with a row of status lights.
-      c([0, 0, 0], [L, H, D], INK);
+      cb([0, 0, 0], [L, H, D], INK, 0.05);
       for (let n = 0; n < 3; n++) {
         const a = 0.1 + n * 1.63;
         for (let r = 0; r < 12; r++) {
@@ -126,7 +179,7 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
           for (let d = 0; d < 5; d++) {
             const led = [GREEN, AMBER, GREEN, CYAN, RED, null][(n * 7 + r * 5 + d * 3) % 6];
             if (led) {
-              g(a + 0.1 + d * 0.08, y + 0.06, a + 0.14 + d * 0.08, y + 0.1, D + 0.015, led, 1.6);
+              button(a + 0.12 + d * 0.08, y + 0.08, 0.017, D + 0.011, led, 1.9, false, 6);
             }
           }
         }
@@ -135,9 +188,9 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
     } else if (kind == KIND.SCOPE) {
       // On its pier, aimed up at the shell; a finder alongside.
       c([0.2, 0, 0.2], [1, 0.1, 1], INK);
-      c([0.45, 0.1, 0.45], [0.75, 0.85, 0.75], SNOW);
-      g(0.52, 0.55, 0.68, 0.65, 0.755, GREEN, 1.4);
-      c([0.35, 0.85, 0.35], [0.85, 1.05, 0.85], IRON);
+      cb([0.45, 0.1, 0.45], [0.75, 0.85, 0.75], SNOW, 0.04);
+      button(0.6, 0.6, 0.035, 0.75, GREEN, 1.8, false);
+      cb([0.35, 0.85, 0.35], [0.85, 1.05, 0.85], IRON, 0.04);
       const [a, b] = [P(0.6, 0.9, 0.2), P(1.4, 2.8, 2.1)];
       segment(o, solid(2, 1, [1, 1], [0, 0]), a, b, [1, 0, 0], 1, 0.2, SNOW);
       segment(
@@ -161,14 +214,16 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         IRON,
       );
     } else if (kind == KIND.ANALYSER) {
-      c([0, 0, 0], [L, 0.9, D], SNOW);
-      c([0, 0.9, 0], [L, H, 0.5], SNOW);
+      cb([0, 0, 0], [L, 0.9, D], SNOW, 0.04);
+      cb([0, 0.9, 0], [L, H, 0.5], SNOW, 0.04);
       screen(0.12, 0.92, 0.95, 1.26, 0.56, GREEN);
       // The sample chamber: a lit window, a row of buttons, the drawers' seams.
-      c([1.1, 0.9, 0.55], [1.88, 1.18, 1.1], IRON);
+      cb([1.1, 0.9, 0.55], [1.88, 1.18, 1.1], IRON, 0.03);
       g(1.16, 0.95, 1.82, 1.13, 1.105, MAUVE, 1.3);
+      // The buttons on a dark strip, so that their glow shows round them.
+      cb([0.08, 0.68, D - 0.01], [0.9, 0.86, D + 0.015], INK, 0.012);
       for (let i = 0; i < 6; i++) {
-        g(0.15 + i * 0.12, 0.74, 0.22 + i * 0.12, 0.8, D + 0.005, [AMBER, GREEN, CYAN][i % 3], 1.4);
+        button(0.185 + i * 0.125, 0.77, 0.025, D + 0.015, [AMBER, GREEN, CYAN][i % 3]);
       }
       for (const y of [0.3, 0.6]) {
         c([0.05, y, D], [L - 0.05, y + 0.015, D + 0.005], INK);
@@ -176,11 +231,11 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
     } else if (kind == KIND.PLANTS) {
       // Three shelves of troughs under grow lights, in a frame.
       for (const u of [0, L / 2 - 0.03, L - 0.06]) {
-        c([u, 0, 0], [u + 0.06, H, D], IRON);
+        cb([u, 0, 0], [u + 0.06, H, D], IRON, 0.02);
       }
-      c([0, H - 0.04, 0], [L, H, D], SNOW);
+      cb([0, H - 0.04, 0], [L, H, D], SNOW, 0.015);
       for (const y of [0.3, 0.9, 1.5]) {
-        c([0, y, 0], [L, y + 0.04, D], SNOW);
+        cb([0, y, 0], [L, y + 0.04, D], SNOW, 0.015);
         c([0.1, y + 0.04, 0.12], [L - 0.1, y + 0.18, D - 0.12], SOIL);
         for (let u = 0.25; u < L - 0.15; u += 0.4) {
           const h = 0.12 + 0.06 * ((u * 10 + y * 3) % 3);
@@ -193,7 +248,7 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         lit(o, 1.1, () => c([0.1, y + 0.53, 0.3], [L - 0.1, y + 0.56, D - 0.3], PINK));
       }
     } else if (kind == KIND.LOCKERS) {
-      c([0, 0, 0], [L, H, D], BLUISH);
+      cb([0, 0, 0], [L, H, D], BLUISH, 0.04);
       for (let i = 0; i < 6; i++) {
         const u = i * 0.8;
         if (i) {
@@ -202,8 +257,8 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         for (let v = 0; v < 3; v++) {
           c([u + 0.2, 1.7 + v * 0.08, D], [u + 0.6, 1.73 + v * 0.08, D + 0.01], INK);
         }
-        c([u + 0.64, 0.95, D], [u + 0.68, 1.2, D + 0.04], GREY);
-        g(u + 0.3, 1.5, u + 0.5, 1.56, D + 0.012, AMBER, 0.8);
+        cb([u + 0.64, 0.95, D], [u + 0.68, 1.2, D + 0.04], GREY, 0.015);
+        button(u + 0.4, 1.53, 0.025, D + 0.008, AMBER, 1.3, false, 12, 0.07);
       }
     } else if (kind == KIND.SUIT) {
       // On a stand: a pole at its back, boots, legs, the life support pack, arms and the helmet.
@@ -213,32 +268,29 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         c([u - 0.02, 0.06, 0.36], [u + 0.21, 0.22, 0.68], IRON);
         c([u, 0.22, 0.4], [u + 0.19, 0.95, 0.62], SNOW);
       }
-      c([0.22, 0.95, 0.32], [0.78, 1.58, 0.7], SNOW);
-      c([0.25, 1.0, 0.14], [0.75, 1.62, 0.32], GREY);
+      cb([0.22, 0.95, 0.32], [0.78, 1.58, 0.7], SNOW, 0.07);
+      cb([0.25, 1.0, 0.14], [0.75, 1.62, 0.32], GREY, 0.05);
       for (const u of [0.08, 0.78]) {
         c([u, 1.0, 0.4], [u + 0.14, 1.54, 0.6], SNOW);
         c([u, 0.88, 0.4], [u + 0.14, 1.0, 0.6], IRON);
       }
-      g(0.34, 1.3, 0.5, 1.42, 0.705, CYAN, 1);
-      g(0.56, 1.34, 0.64, 1.42, 0.705, RED, 1.2);
+      button(0.42, 1.36, 0.05, 0.7, CYAN, 1.3, false);
+      button(0.6, 1.38, 0.03, 0.7, RED, 1.6, false);
       place(o, solid(2, 0, [1, 1]), P(0.5, 1.8, 0.5), UP, [0, 0, 0], 0.21, SNOW);
       g(0.38, 1.74, 0.62, 1.88, 0.715, AMBER, 0.7);
     } else {
-      // A panel on a wall: a plate, a display, a grid of buttons, a strip of light.
-      c([0, 0, 0], [L, H, 0.05], IRON);
-      g(0.1, 0.35, L * 0.6, H - 0.1, 0.055, CYAN, 0.5);
+      // A panel on a wall: a plate, a display in its bezel, round buttons glowing on a dark inset,
+      // a bar of light under them.
+      cb([0, 0, 0], [L, H, 0.05], IRON, 0.03);
+      cb([0.08, 0.3, 0.03], [L * 0.6 + 0.02, H - 0.08, 0.07], INK, 0.02);
+      g(0.12, 0.34, L * 0.6 - 0.02, H - 0.12, 0.071, CYAN, 0.5);
+      cb([L * 0.64, 0.3, 0.03], [L - 0.08, H - 0.08, 0.07], INK, 0.02);
       for (let i = 0; i < 12; i++) {
-        g(
-          L * 0.66 + (i % 3) * 0.2,
-          0.4 + (i >> 2) * 0.25,
-          L * 0.66 + (i % 3) * 0.2 + 0.1,
-          0.5 + (i >> 2) * 0.25,
-          0.055,
-          [GREEN, AMBER, RED, CYAN][i % 4],
-          1.3,
-        );
+        const [u, v] = [L * 0.64 + 0.15 + (i % 3) * 0.24, 0.42 + Math.floor(i / 3) * 0.23];
+        button(u, v, 0.04, 0.07, [GREEN, AMBER, RED, CYAN][(i + Math.floor(i / 3)) % 4]);
       }
-      g(0.1, 0.1, L - 0.1, 0.18, 0.055, AMBER, 0.9);
+      cb([0.1, 0.09, 0.03], [L - 0.1, 0.21, 0.06], INK, 0.015);
+      button(L / 2, 0.15, 0.03, 0.06, AMBER, 1.4, false, 12, L / 2 - 0.2);
     }
   });
 };
@@ -289,13 +341,43 @@ export const dressing = (o: Out) => {
     const hi = [0, 2.1, 0];
     [lo[k], hi[k], lo[2 - k], hi[2 - k]] = [a0, b0, at, at + 0.12];
     inside(o, () => box(o, lo as Vec3, hi as Vec3, INK));
+    // Each a rounded dark plate, a green bar of light in it and its glow round it.
+    const [a, out]: Vec3[] = [
+      [0, 0, 0],
+      [0, 0, 0],
+    ];
+    [a[k], out[2 - k]] = [k ? -1 : 1, 1];
     for (let d = a0 + 2.5; d < b0 - 1; d += 5) {
       const [p, q] = [
-        [0, 1.3, 0],
-        [0, 1.5, 0],
+        [0, 1.22, 0],
+        [0, 1.58, 0],
       ];
-      [p[k], q[k]] = [d - 0.2, d + 0.2];
-      panel(o, 2 - k, at + 0.03, p, q, GREEN);
+      [p[k], q[k], p[2 - k], q[2 - k]] = [d - 0.3, d + 0.3, at, at + 0.03];
+      inside(o, () => bevel(o, p as Vec3, q as Vec3, INK, 0.012));
+      const c: Vec3 = [0, 1.4, 0];
+      [c[k], c[2 - k]] = [d, at + 0.03];
+      ring(
+        o,
+        c,
+        a,
+        UP_Y,
+        [0.05, 0.13],
+        GREEN.map(x => x * 0.5),
+        DUSK,
+        12,
+        0.16,
+      );
+      ring(
+        o,
+        c.map((v, i) => v + out[i] * 0.002) as Vec3,
+        a,
+        UP_Y,
+        [0, 0.05],
+        hot(GREEN, 2),
+        GREEN.map(x => x * 1.4),
+        12,
+        0.16,
+      );
     }
   });
   // Over each airlock, inside: amber and black stripes on the lintel, a red beacon above.
@@ -325,11 +407,23 @@ export const dressing = (o: Out) => {
       panel(o, k, at, p, q, INK);
     }
     const mid = (c0 + c1) / 2;
-    const [p, q] = [
-      [0, 3.2, 0],
-      [0, 3.45, 0],
+    // The beacon: round, on a dark rim.
+    const [c, a]: Vec3[] = [
+      [0, 3.32, 0],
+      [0, 0, 0],
     ];
-    [p[2 - k], q[2 - k]] = [mid - 0.15, mid + 0.15];
-    panel(o, k, at, p, q, RED);
+    [c[k], c[2 - k], a[2 - k]] = [at, mid, (k ? 1 : -1) * into];
+    ring(o, c, a, UP_Y, [0.12, 0.17], DUSK, DUSK, 14);
+    c[k] += into * 0.003;
+    ring(
+      o,
+      c,
+      a,
+      UP_Y,
+      [0, 0.12],
+      hot(RED, 2.2),
+      RED.map(x => x * 1.6),
+      14,
+    );
   }
 };

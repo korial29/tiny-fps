@@ -137,7 +137,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate, concrete, glass, steel, paint, rock, fabric, hide), then the flat bodies, then polished metal (SHINE),
+ * moss, grate, concrete, glass, steel, paint, rock, fabric, hide, hull), then the flat bodies, then polished metal (SHINE),
  * then a glossy shell (GLOSS: broader, so it shows on the armour). Lava and glows never get here: they
  * light themselves.
  */
@@ -158,6 +158,8 @@ export const SPEC = [
   // Seat cloth, matt; leather, a soft sheen (the user, 2026-11-27: Landfall's cabin).
   [0.03, 6],
   [0.3, 22],
+  // The moon base's hull panels, satin.
+  [0.45, 56],
   [0.1, 24],
   [1.4, 90],
   [1.1, 34],
@@ -517,6 +519,7 @@ vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 #ifdef MOON
 if(abs(L-(${PANE}))<.05){c=mix(c,mix(k,(.25+.75*X)*.56,smoothstep(.02,-.2,r.y))+exp(-abs(r.y-.02)*30.),.3+.5*fr)+X*(.6*pow(max(dot(r,O),0.),60.)+3.*pow(max(dot(r,O),0.),900.));}
+//GLAZE
 #endif
 #ifdef BEACH
 ${WET}
@@ -667,7 +670,8 @@ export const mirrors = (brushes: readonly Brush[] = []): boolean =>
  * colour's registers kept every shadow map's pixels from running as many at once); with none, all of it. Left in where it never runs,
  * code still costs every pixel through the shader's registers: the moon 2.4 ms of GPU a frame on
  * Highline, the ninja's 1.9 ms on three astronauts at 3 m on the moon. `rock` is the GLSL of the
- * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk). `sight` adds the
+ * map's rocks under BEACH (Decor.rock: Landfall's granite, from its chunk), `glaze` that of its indoor
+ * windows under MOON (Decor.glaze: Tranquility's traced reflections, from its chunk). `sight` adds the
  * vision's filter and its glowing prey (VISION), for a frame in a xenomorph's or the Hunter's
  * vision: its loop and palettes were 4.6 ms a frame on Highline with none ever drawn, 1.4 on
  * Tranquility and none on Landfall, through the registers they take from every pixel.
@@ -678,11 +682,14 @@ export const fragOf = (
   kind = 'LAND\n#define FLESH',
   rock = '',
   sight = false,
+  glaze = '',
 ) =>
   FRAG.replace(
     '\n',
     `\n#define ${kind}\n${moonly(def) ? '#define MOON\n' : ''}${def.scenery === 'beach' && kind.startsWith('LAND') ? '#define BEACH\n' : ''}${printed(def) && kind.startsWith('LAND') ? '#define PRINTS\n' : ''}${kind.startsWith('LAND') && mirrors(def.brushes) ? '#define MIRROR\n' : ''}${rolesOf(def).includes(ROLE.NINJA) && kind != 'LAND' ? '#define NINJA\n' : ''}${sight ? '#define VISION\n' : ''}`,
-  ).replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`);
+  )
+    .replace('//ROCK', rock && `if(abs(L-${TEX.ROCK}.)<.5)${rock}`)
+    .replace('//GLAZE', kind.startsWith('LAND') ? glaze : '');
 
 /** A map whose ground takes footprints (createPrints): Landfall's sand, the moon's regolith. */
 export const printed = (def: Pick<WorldDef, 'scenery' | 'relief'>) =>

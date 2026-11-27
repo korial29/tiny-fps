@@ -3,8 +3,8 @@ import { FIT, HALL, MOUTHS } from '../../shared/moonbase';
 import { TAU } from '../../shared/physics';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
-import { C, CONCRETE, CX, CZ, FRAME, GLASS, LAMP, R, TOP, WHITE } from './constants';
-import { block, frame, lining, panel, quad } from './kit';
+import { C, CONCRETE, CX, CZ, FRAME, GLASS, HALL_GLASS, LAMP, R, TOP, WHITE } from './constants';
+import { block, frame, glazed, lining, panel, quad } from './kit';
 
 /**
  * The hall in the dome, all drawn here (shared/moonbase.ts collides with it as ghosts): its floor,
@@ -64,7 +64,11 @@ export const hall = (o: Out) => {
       for (const y of [1.5, 4.9]) {
         if (y > mh || Math.abs(c - mc) > mw + 0.8) {
           put(c - 0.72, c + 0.72, y, y + 1.4, FRAME, 0, 0.02);
+          const from = o.length;
           put(c - 0.6, c + 0.6, y + 0.2, y + 1.2, GLASS, 0, 0.04);
+          const n = [0, 0, 0];
+          n[k] = -sign;
+          glazed(o, from, n, HALL_GLASS);
         }
       }
     }

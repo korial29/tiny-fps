@@ -28,7 +28,7 @@ export const UV = [
 export const LAMP = [1.25, 1.3, 1.4];
 export const GLASS = [0.56, 0.48, 0.28];
 export const FRAME = [0.04, 0.04, 0.05];
-export const { CONCRETE, METAL, PAINT: WHITE } = TEX;
+export const { CONCRETE, HULL, PAINT: WHITE } = TEX;
 
 /** Flat colours of the kit. */
 export const [SNOW, GREY, IRON, INK, BLUISH, SOIL] = [

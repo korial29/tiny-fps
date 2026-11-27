@@ -249,6 +249,24 @@ GEN[TEX.HIDE] = (u, v) => {
   ];
 };
 
+// The moon base's composite panels (the user, 2026-11-27: uniform and modern, no bolts): two smooth
+// satin panels of 1 m by 2 m, a fine recessed seam round each, a faint
+// tone apart from panel to panel and a slow mottle, no rivets and no rust.
+GEN[TEX.HULL] = (u, v) => {
+  const fu = (u * 2) % 1;
+  const seam = Math.min(fu, v, 1 - fu, 1 - v) - 0.008;
+  const n = 0.6 * fbm(u * 4, v * 4, 4, 3, 51) + 0.4 * noise(u * 64, v * 64, 64, 53);
+  return seam < 0
+    ? [[70, 74, 82], 0.15]
+    : [
+        scale(
+          [172, 177, 186],
+          1.01 - 0.06 * clamp(seam * 100) + 0.06 * (u > 0.5 ? 1 : 0) + 0.05 * n,
+        ),
+        0.8 + 0.04 * n,
+      ];
+};
+
 /** The layers, made once: every renderer (the game's, the character screen's) uploads the same. */
 let made: Uint8ClampedArray | undefined;
 

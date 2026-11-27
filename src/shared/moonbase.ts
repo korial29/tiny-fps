@@ -7,7 +7,7 @@ import type { Brush } from './world';
 
 export type Vec3 = [number, number, number];
 
-const { CONCRETE, METAL, STEEL, PAINT } = TEX;
+const { CONCRETE, HULL, STEEL, PAINT } = TEX;
 
 /** A box, corners (x0, y0, z0) and (x1, y1, z1), tops and sides, a tint. */
 export const box = (
@@ -250,12 +250,12 @@ export const FIT: Brush[] = [
     [C1, -D0, C0, D0],
   ])
     .filter(p => p[1] > -C0)
-    .map(p => ghost(p, 3.1, 3.5, METAL, STEEL)),
+    .map(p => ghost(p, 3.1, 3.5, HULL, STEEL)),
   ...stairs(2, DOME[1] + 5.6, DOME[1] + 12, DOME[0] - 1.5, DOME[0] + 1.5, 0, 3.5).map(b => ({
     ...b,
     ghost: true,
   })),
-  ghost([-3, 19, 3, C0], 3.5, 4.6, STEEL, METAL),
+  ghost([-3, 19, 3, C0], 3.5, 4.6, STEEL, HULL),
   ghost([-9, 12, -2.5, 12.5], 3.5, 4.6, STEEL, PAINT),
   ghost([2.5, 12, 9, 12.5], 3.5, 4.6, STEEL, PAINT),
   ghost([-9.5, -10, -7.5, -8], 0, 1.4, STEEL),
@@ -326,7 +326,7 @@ const room = (
   gaps: number[][][],
   crate: Brush,
 ): Brush[] => [
-  box(x0, ROOM, z0, x1, y, z1, METAL, CONCRETE),
+  box(x0, ROOM, z0, x1, y, z1, HULL, CONCRETE),
   ...wall(0, x0, x1, z0, z0 + T, ROOM, gaps[0]),
   ...wall(0, x0, x1, z1 - T, z1, ROOM, gaps[1]),
   ...wall(2, z0 + T, z1 - T, x0, x0 + T, ROOM, gaps[2]),
@@ -366,12 +366,12 @@ export const BASE: Brush[] = [
     box(106, 0, 200.6, 108, 1.2, 202.6, PAINT, PAINT, ORANGE),
   ),
   // The tubes to the dome: a roof to walk on 3.5 m up over two walls, the second roof across the end of the first.
-  box(TX0, H, TZ0, TX1, TY, TZ1, STEEL, METAL),
-  box(UX0, H, UZ0, UX1, TY, TZ1, STEEL, METAL),
-  box(UX0, 0, TZ1 - T, TX1, H, TZ1, METAL),
-  box(UX1 - T, 0, TZ0, TX1, H, TZ0 + T, METAL),
-  box(UX0, 0, UZ0, UX0 + T, H, TZ0, METAL),
-  box(UX1 - T, 0, UZ0, UX1, H, TZ0, METAL),
+  box(TX0, H, TZ0, TX1, TY, TZ1, STEEL, HULL),
+  box(UX0, H, UZ0, UX1, TY, TZ1, STEEL, HULL),
+  box(UX0, 0, TZ1 - T, TX1, H, TZ1, HULL),
+  box(UX1 - T, 0, TZ0, TX1, H, TZ0 + T, HULL),
+  box(UX0, 0, UZ0, UX0 + T, H, TZ0, HULL),
+  box(UX1 - T, 0, UZ0, UX1, H, TZ0, HULL),
   // The stairs up to the tube tops.
   ...stairs(2, 214, TZ0, 105, 109, 0, 3.5),
   ...stairs(0, 108, UX1, 206, 210, 0, 3.5),

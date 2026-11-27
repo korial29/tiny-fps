@@ -149,7 +149,8 @@ const LAZY = {
   targeting: 1_792,
   // Tranquility's and Landfall's scenery (render/scene.ts decor()), the rounded stones that both draw
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
-  tranquility: 19_456,
+  // 20,096 B: the base's bevelled kit and round lit buttons (moonbase/round.ts; the user, 2026-11-27).
+  tranquility: 20_096,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

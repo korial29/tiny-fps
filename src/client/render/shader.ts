@@ -137,7 +137,7 @@ o=vec4(c,1);}`;
 
 /**
  * Blinn-Phong strength and exponent: a row per TEX id in order (brick, tile, lava, stone, metal, wood,
- * moss, grate, concrete, glass, steel, paint, rock, fabric, hide), then the flat bodies, then polished metal (SHINE),
+ * moss, grate, concrete, glass, steel, paint, rock, fabric, hide, hull), then the flat bodies, then polished metal (SHINE),
  * then a glossy shell (GLOSS: broader, so it shows on the armour). Lava and glows never get here: they
  * light themselves.
  */
@@ -158,6 +158,8 @@ export const SPEC = [
   // Seat cloth, matt; leather, a soft sheen (the user, 2026-11-27: Landfall's cabin).
   [0.03, 6],
   [0.3, 22],
+  // The moon base's hull panels, satin.
+  [0.45, 56],
   [0.1, 24],
   [1.4, 90],
   [1.1, 34],

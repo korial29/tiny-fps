@@ -46,7 +46,12 @@ Ways across:
 In each half a field of debris leads from the camp to the wing: hull panels, containers, a landing
 gear, an engine nacelle one runs through (`ENGINES`). Every jump is checked with the physics.
 
-Each camp: an escape pod (`POD`) with tarpaulin shelters, the flag by the pod, the racks on crates.
+Each camp: the survivors' hearth (`HEARTH`) with tarpaulin shelters, the flag on its step before it,
+the racks under the shelters. Round the hearth, drawn only and walked through (`PROPS`,
+`src/client/hulk/camp.ts`): a ring of round stones and a fire that burns nobody, three logs to sit
+on, a pile of firewood, three dirty torn mats and a rack of fish drying, all turned askew so that
+nothing lines up with the map. An escape pod stood there until 2026-11-27: a 6 m box read as a
+building.
 
 ## Edges
 
@@ -190,7 +195,7 @@ The beach is 25 % longer, the camps further apart, and the headlands read as the
 
 - `ZED = 250`: the wreck on z = 125. Everything of the wreck's (the hull, the wings, the engines,
   the floats, the lagoon's legs, the debris and the packs on it) keeps its place from the centre
-  line, 25 m on in red's half. The camp goes 45 m on: pod (60, 219), flag on the hatch at
+  line, 25 m on in red's half. The camp goes 45 m on: hearth (60, 219), flag on the hatch at
   (60, 211), spawns at z 226 and 229, the camp's level sand z 209..229. Into the 20 m between the
   field of debris and the camp went a panel (west), a standing container and the rifle's crate.
   The line of debris's first panel and container are lower (0.65 m, 1.875 m over the sand): the

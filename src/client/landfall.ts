@@ -7,6 +7,7 @@ import { BUGGY } from './buggy';
 import { GRANITE } from './granite';
 import { canopy, hulk } from './hulk';
 import { blazes } from './burnt/fire';
+import { hearths } from './hulk/camp';
 import { FOREST_GLSL } from './foliage/layers';
 import { tiled } from './foliage/tiles';
 import { parts } from './jungle';
@@ -32,6 +33,6 @@ export default function* (def: WorldDef): Generator<undefined, Decor, undefined>
     instanced: PALM_INSTANCE,
     fade: FERN_BLADE,
     forest: FOREST_GLSL + BARK_PIXEL,
-    blazes: blazes(def),
+    blazes: [...blazes(def), ...hearths()],
   };
 }

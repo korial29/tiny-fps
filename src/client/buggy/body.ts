@@ -31,9 +31,9 @@ import { RIM, RUBBER } from './wheel';
 /** How far back from the grille the bonnet's top starts to slope down to it, and how far down (the user, 2026-11-27: a steep slope at the front). */
 const NOSE_A = 0.9;
 const NOSE_D = 0.38;
-/** The bonnet's half width, and its top at the dash and at the grille: low (the user, 2026-11-27: half as tall, then a little taller), just over the pods' top. */
+/** The bonnet's half width, and its top at the dash and at the grille: low (the user, 2026-11-27: half as tall, then taller twice), over the pods. top. */
 const BONNET = 0.62;
-const [TOP0, TOP1] = [0.16, 0.14];
+const [TOP0, TOP1] = [0.28, 0.26];
 /** The rounding of the bonnet's top edges (the user, 2026-11-27: light on the sides, strong at the front). */
 const ROUND = 0.07;
 /**

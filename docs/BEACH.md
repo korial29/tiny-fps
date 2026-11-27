@@ -402,15 +402,20 @@ sand at the end of a narrow ramp, and the first break was 3.56 m long, longer th
 - **The bank of the clearing** is the forest's sheet where it burnt down to the ground: smooth
   there, on the burnt earth's layer (`EARTH` in `foliage/layers.ts`: ash mottled by noise and a
   few embers, Landfall's shader only).
-- **Palms only**, in seven rows from 2 to 27 m behind the line, young palms between the trees
-  of the first two (the forest's middle storey). The rows nearer the wall of leaves are low
+- **Palms only**, in nine rows from 2 to 30 m behind the line, a palm every 3.5 to 4 m along
+  each, young palms between the trees of the first three (the forest's middle storey): 506 palms.
+  Eleven rows and four more of cheaper palms at the back cost some 2 ms of GPU over the seven of
+  before; nine some 0.5 ms (the user, 2026-11-27). The rows nearer the wall of leaves are low
   hills of ferns now: the sheet rises 2.5 m over the first 6 m, smooth (each point's normal and
   shade its own out to 30 m), ferns on every point of its near rows, red flowers
   (`foliage/flower.ts`) among them and along the sand's edge, two ferns a metre there. No
   broadleaf, no round bush.
-- **No texture on the plants** (the user, after a frame-rate drop): leaves and bark are plain
-  paint, as before; their layers (`LEAF`, `BARK`) only tell the shader to take one tap of the
-  sun's shadow map on them, not four, and not to compute the sky they mirror.
+- **No texture on the leaves** (the user, after a frame-rate drop): they are plain paint; their
+  layers (`LEAF`, `BARK`) tell the shader to take one tap of the sun's shadow map on them, not
+  four, and not to compute the sky they mirror. A palm's **bark** has fibres within 12 m: a 2D
+  noise stretched up the trunk in the palm's own frame and fine streaks bent by it
+  (`palms/glsl.ts` `BARK_PIXEL`, 2026-11-27). A **fern's leaflet** is still one triangle; within
+  12 m the shader keeps only a blade in it, rounded and pointed (`FERN_BLADE`).
 
 ### What it costs, and how it is drawn
 
@@ -421,14 +426,28 @@ it was the pixels of the crowns stacked row behind row, each shaded in full. Wha
 
 - **Undergrowth** (`Decor.grass`): the ferns, fronds and flowers, sorted into tiles of 16 m
   (`foliage/tiles.ts`), drawn within 20 m of the eye only (`GRASS_REACH`) and in no shadow map.
-- **Palms** (`Decor.groves`, `foliage/grove.ts`): each built twice, a near one and a far one
-  (8 fronds of 4 leaflets, 2 rings), in the tile of its foot. A tile's near palms are drawn
-  within 20 m (`GROVE_NEAR`) and cast shadows; its far ones past it, to 100 m (`GROVE_FAR`), and
-  cast none. Both versions have the same bounds and the same test (`seen()`'s `beyond`), so no
-  palm is drawn twice or missing. Fronds 25 % narrower than before.
+- **Palms by instance** (`Decor.instances`, `src/client/palms/` on the generic
+  `src/client/instances/`): four variants of each shape level (the first row's, the rows
+  behind, the forest's back), each built near (fine) and far (8 fronds of 4 leaflets, 2 rings),
+  13,188 vertices in all. A palm is 16 floats (`INST`): its foot, yaw, height, lean, crown and
+  trunk scales, how burnt, its sway's phase, and its fade code. The chunk's vertex code
+  (`PALM_INSTANCE`, `Decor.instanced`, spliced into VERT's `Sm` 4) stretches the variant's trunk
+  to its height, turns it, leans it by its top as `palm()` did, sways it in the wind and singes
+  it. Each pass sorts the copies alone (`instances/cull.ts`): out of the frustum, near within
+  20 m (`GROVE_NEAR`, with a shadow) or far to 100 m (`GROVE_FAR`), nearest first, then one
+  instanced draw a mesh, the near meshes first. `expand()` is the shader's mirror on the CPU, for
+  the tests.
+- **No sudden change**: across 6 m round `GROVE_NEAR` a palm is drawn with both meshes, each
+  keeping its share of the pixels by a fixed dither (`dz()`, interleaved gradient noise); its
+  shadow fades out with its near mesh, and the far mesh fades out before `GROVE_FAR`. The
+  undergrowth thins out the same way over its last 7 m (`Gf`). The dither's `discard` is only in
+  the program those draws use (`FADE`), not in the land's.
 - The undergrowth and the palms are drawn before the rest of the ground, nearest first.
 
 Vertices: jungle 1,191,795 built (rocks 45,006, palms near 229,692 and far 78,372, undergrowth
-834,411, sheet 72,594, snags 10,092), of which a frame draws the tiles in reach. Wreck 238,158
+834,411, sheet 72,594, snags 10,092), of which a frame draws the tiles in reach. By instance
+(2026-11-27): the palms are 13,188 vertices of variants and 506 instances in place of 308,064
+vertices, the snags 15,270 with the denser rows, the decor built some 60 ms sooner (412 ms
+against 474 in headless Chrome). Wreck 238,158
 (debris 37,710, camps 12,684 with the sand banks); smoke 22,410. The user's Mac after it: 57 fps,
 95th centile 17.7 ms (master 17.6 ms).

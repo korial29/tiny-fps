@@ -8,6 +8,7 @@ import { deepen, street } from '../street';
 import { drive } from '../tasks';
 import { vision, zones } from '../vision';
 import type { Look } from '../rover/draw';
+import type { Instances } from '../instances/types';
 
 import { FOG_CLIMB, FOG_FAR, FOG_LAYER, FOG_RISE, HAZE, MAX_TINTS } from './constants';
 
@@ -103,18 +104,10 @@ export const GRASS_TILE = 16;
 /** Metres from the eye within which a tile of Decor.grass is drawn. */
 export const GRASS_REACH = 20;
 
-/** Metres a tile of Decor.groves spans, by its palms' feet. */
-export const GROVE_TILE = 16;
-/** Metres from the eye within which a grove's palms are drawn finely (and cast shadows); cheaply past it. */
+/** Metres from the eye within which a palm is drawn finely (and casts a shadow); cheaply past it (instances/cull.ts). */
 export const GROVE_NEAR = 20;
 /** Metres past which no palm is drawn: the far end of the beach, the hills behind standing for the forest there. */
 export const GROVE_FAR = 100;
-/**
- * Palms drawn twice, near and far (foliage/grove.ts): each version's vertices tile by tile, and
- * per tile ten numbers: its near range (first, count, in vertices from the version's start), its
- * far range, its bounds (min then max).
- */
-export type Groves = { near: number[]; far: number[]; tiles: number[] };
 
 export type Decor = {
   land: number[];
@@ -132,8 +125,12 @@ export type Decor = {
    * flowers), its triangles in tiles of GRASS_TILE metres so that a run of them is a tile.
    */
   grass?: number[];
-  /** Palms drawn finely near the eye and cheaply far from it (foliage/grove.ts). */
-  groves?: Groves;
+  /** What is drawn by instance (instances/): Landfall's palms, a few variants drawn finely near the eye and cheaply far from it. */
+  instances?: Instances;
+  /** GLSL of VERT's instance mode (instances/glsl.ts //INSTANCE), which its chunk brings: Landfall's palms. */
+  instanced?: string;
+  /** GLSL of FADE's pixel (//FADE), which its chunk brings: Landfall's ferns cut to blades. */
+  fade?: string;
   /** GLSL for the forest's own layers under BEACH, spliced in by fragOf(): Landfall's burnt earth, which its chunk brings. */
   forest?: string;
   /** Fires drawn only, with the map's (smoke.ts plumes()): Landfall's among its burnt trees, which its chunk brings. */
@@ -174,8 +171,6 @@ export const scenery = (world: World, d = BARE): number[] =>
           ...vision(world.def),
           ...zones(world.def),
           ...(d.grass ?? []),
-          ...(d.groves?.near ?? []),
-          ...(d.groves?.far ?? []),
           ...(d.glass ?? []),
           ...plumes(world.def, d.blazes),
           ...lagoon(world.def),

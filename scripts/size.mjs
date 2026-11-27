@@ -117,7 +117,8 @@ const BUDGETS = [
   // 297,536 B: the dead captain in the marine's body, posed once by Landfall's chunk (the user, 2026-11-27).
   // 298,368 B: the station's command room, its red button, beacons, red beams and klaxon (the user, 2026-11-27).
   // 299,264 B: Landfall's palms near and far and its undergrowth drawn near the eye only, culled by distance (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 299_264 },
+  // 300,544 B: things drawn by instance, culled and faded one by one (src/client/instances/: Landfall's palms) (the user, 2026-11-27).
+  { file: 'dist/index.js', max: 300_544 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -168,7 +169,8 @@ const LAZY = {
   // 22,400 B: the dead captain in the marine's body, the pilots' seats rounded (the user, 2026-11-27).
   // 22,912 B: no box left on the flight deck, and room after the moon base's decor (the user, 2026-11-27).
   // 24,960 B: palms only, ferns and red flowers, the burnt trees and their fires, the sand banked round the crates (the user, 2026-11-27).
-  landfall: 24_960,
+  // 25,600 B: the palms by instance, their shader code, bark and ferns' blades (the user, 2026-11-27).
+  landfall: 25_600,
 };
 
 const imports = src => [

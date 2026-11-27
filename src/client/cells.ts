@@ -84,7 +84,7 @@ const planes = new Float32Array(24);
  * Puts in `out` the draws (first vertex, count) that cover the runs of `c` reaching into the
  * frustum of `m`, hidden runs of up to `gap` vertices between two seen ones drawn through. Returns
  * the number of draws. With `eye`, only the runs whose bounds come within `reach` metres of it
- * (Landfall's undergrowth, Decor.grass; its near palms, Decor.groves), or with `beyond` only the
+ * (Landfall's undergrowth, Decor.grass), or with `beyond` only the
  * others (its far palms), none past `limit`.
  */
 export const seen = (

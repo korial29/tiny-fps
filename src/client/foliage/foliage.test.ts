@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BEACH } from '../../shared/beach';
 import { parts } from '../jungle';
 import { STRIDE } from '../mesh';
-import { GRASS_TILE, GROVE_TILE } from '../render/scene';
+import { GRASS_TILE } from '../render/scene';
 import { flowers } from './flower';
-import { packed } from './grove';
 import { tiled } from './tiles';
 
 const made = parts(BEACH);
@@ -26,28 +25,6 @@ describe('foliage', () => {
         last = k;
       }
     }
-  });
-
-  it('packs each tile of palms near and far, their ranges one after the other and their bounds round both', () => {
-    const groves = [...made.groves.values()];
-    const { near, far, tiles } = packed(groves);
-    expect(tiles.length).toBe(groves.length * 10);
-    let [n, f] = [0, 0];
-    groves.forEach((g, i) => {
-      const t = tiles.slice(i * 10, i * 10 + 10);
-      expect(t.slice(0, 4)).toEqual([n, g.near.length / STRIDE, f, g.far.length / STRIDE]);
-      [n, f] = [n + t[1], f + t[3]];
-      for (const v of [g.near, g.far]) {
-        for (let j = 0; j < v.length; j += STRIDE) {
-          for (let k = 0; k < 3; k++) {
-            expect(v[j + k]).toBeGreaterThanOrEqual(t[4 + k]);
-            expect(v[j + k]).toBeLessThanOrEqual(t[7 + k]);
-          }
-        }
-      }
-      expect(Math.abs(g.x % GROVE_TILE)).toBe(GROVE_TILE / 2);
-    });
-    expect([near.length, far.length]).toEqual([n * STRIDE, f * STRIDE]);
   });
 
   it('makes a clump of red flowers: whole triangles over the ground, lit from above', () => {

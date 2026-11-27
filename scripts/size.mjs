@@ -175,7 +175,8 @@ const LAZY = {
   // 25,600 B: the palms by instance, their shader code, bark and ferns' blades (the user, 2026-11-27).
   // 26,624 B: the carpet burnt round the decks' holes, the pylons out of the cabin (the user, 2026-11-27).
   // 27,648 B: a volcano in the island's middle, scenery only (src/client/volcano/; the user, 2026-11-27).
-  landfall: 27_648,
+  // 28,672 B: the camps' stretch tents, their leaning masts and guy ropes (hulk/tent.ts; the user, 2026-11-27).
+  landfall: 28_672,
 };
 
 const imports = src => [

@@ -1,6 +1,5 @@
 // The paint of Landfall's hull as the scene shader draws it (render.ts): its layer and its GLSL,
 // apart from the hull's meshes (hulk.ts), which load with Landfall's chunk.
-import { AWNING } from '../shared/beach';
 
 /**
  * The hull paint's layer: lit paint (its colour in c.x, c.y, c.w) that the shader rules with panel
@@ -41,17 +40,12 @@ export const GLOSS = `c+=hk*(mix(vec3(.8,.72,.56),k,smoothstep(-.3,.05,r.y))*(.0
  * own layers end.
  */
 export const TARP = -1.098;
-/** Metres of hem drawn down each long edge of a tarpaulin: the shader frays it shorter. */
-export const HEM = 1;
 /**
  * Its pixel, in main(), before the light: a canvas weave of 4 mm threads that fades before it
  * aliases, slow blotches of sun-bleach and dirt. Torn (the user, 2026-11-26: tears less angular):
- * holes through the roof where a slow noise peaks, their edges frayed by finer ones and scorched
- * dark; the hems, hanging from AWNING, cut to tatters of their own lengths, slit up from the foot.
- * By world position, so the roof's two faces tear alike.
+ * holes through the cloth where a slow noise peaks, their edges frayed by finer ones and scorched
+ * dark. By world position across the ground, so the cloth's two faces tear alike.
  */
-export const TARP_GLSL = `{bool rf=abs(n.y)>.5;vec2 q=rf?P.xz:vec2(P.x+P.z,P.y);float f=1.-smoothstep(.002,.008,pw),w=sin(q.x*785.)*sin(q.y*785.),te;
-if(rf)te=vn(q*.45+3.)+.35*vn(q*.9+17.)-.08*vn(q*6.)-.04*vn(q*19.)-.88;
-else{float d=${AWNING.toFixed(3)}-P.y,l=.25+.5*vn(vec2(q.x*2.2,1.))+.12*vn(vec2(q.x*9.,2.))+.05*vn(vec2(q.x*31.,3.));te=max(d-l,(vn(vec2(q.x*7.,d*1.2))-.72)*smoothstep(l-.6,l,d))*2.;}
+export const TARP_GLSL = `{vec2 q=P.xz;float f=1.-smoothstep(.002,.008,pw),w=sin(q.x*785.)*sin(q.y*785.),te=vn(q*.45+3.)+.35*vn(q*.9+17.)-.08*vn(q*6.)-.04*vn(q*19.)-.96;
 if(te>0.)discard;
 h+=f*.004*w+.02*(vn(q*2.5)-.5);c*=(1.+.18*f*w)*(.78+.34*vn(q*1.3+4.))*mix(1.,.62,smoothstep(.5,.8,vn(q*.7+11.)))*mix(.45,1.,smoothstep(0.,.06,-te));}`;

@@ -25,6 +25,7 @@ import {
 } from './constants';
 import { inside, panel } from './kit';
 import { bevel, ring } from './round';
+import { station } from './console';
 
 /** What a halo fades to at its rim: about the dark face it lies on, as drawn indoors. */
 const UP_Y: Vec3 = [0, 1, 0];
@@ -138,6 +139,10 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
       );
     }
   };
+  if (kind == KIND.CONSOLE) {
+    station(o, (x0 + x1) / 2, (z0 + z1) / 2, y0, (f * Math.PI) / 2);
+    return;
+  }
   inside(o, () => {
     if (kind == KIND.BENCH) {
       cb([0, H - 0.06, 0], [L, H, D], SNOW, 0.03);
@@ -162,31 +167,6 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
           0.055,
           [GREEN, BLUISH, AMBER, MAUVE][i],
         );
-      }
-    } else if (kind == KIND.SAMPLES) {
-      cb([0, H - 0.05, 0], [L, H, D], IRON, 0.02);
-      c([0.15, 0.18, 0.15], [L - 0.15, 0.22, D - 0.15], INK);
-      for (const u of [0.1, L - 0.2]) {
-        for (const w of [0.1, D - 0.2]) {
-          c([u, 0, w], [u + 0.1, H - 0.05, w + 0.1], INK);
-        }
-      }
-      // Four cases on lit bases, a rock in each: the glass is only its frame.
-      for (let i = 0; i < 4; i++) {
-        const u = 0.25 + i * 1.2;
-        c([u, H, 0.3], [u + 0.9, H + 0.07, 1.2], INK);
-        g(u + 0.05, H + 0.015, u + 0.85, H + 0.055, 1.205, CYAN, 1.2);
-        const t = 0.16 + 0.07 * (i % 3);
-        c([u + 0.28, H + 0.07, 0.55], [u + 0.62, H + 0.07 + t, 0.95], [0.4 + 0.05 * i, 0.38, 0.35]);
-        for (const [a, b] of [
-          [0, 0.3],
-          [0.88, 0.3],
-          [0, 1.18],
-          [0.88, 1.18],
-        ]) {
-          c([u + a, H + 0.07, b], [u + a + 0.02, H + 0.55, b + 0.02], GREY);
-        }
-        c([u, H + 0.53, 0.3], [u + 0.9, H + 0.55, 1.2], [0.5, 0.6, 0.66]);
       }
     } else if (kind == KIND.RACKS) {
       // Three cabinets of twelve units, each a dark face with a row of status lights.

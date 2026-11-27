@@ -266,7 +266,7 @@ export const FIT: Brush[] = [
 /** The kinds of lab kit client/moonbase.ts draws. */
 export const KIND = {
   BENCH: 0,
-  SAMPLES: 1,
+  CONSOLE: 1,
   RACKS: 2,
   SCOPE: 3,
   ANALYSER: 4,
@@ -274,7 +274,7 @@ export const KIND = {
   LOCKERS: 6,
   SUIT: 7,
 };
-const { BENCH, SAMPLES, RACKS, SCOPE, ANALYSER, PLANTS, LOCKERS, SUIT } = KIND;
+const { BENCH, CONSOLE, RACKS, SCOPE, ANALYSER, PLANTS, LOCKERS, SUIT } = KIND;
 /**
  * The lab kit in red's half: kind, x0, z0, x1, z1, y0, y1, and the way its front looks (0 +x, 1
  * +z, 2 -x, 3 -z). Its box is a ghost, drawn by client/moonbase.ts as the hall's fittings are.
@@ -283,10 +283,10 @@ const { BENCH, SAMPLES, RACKS, SCOPE, ANALYSER, PLANTS, LOCKERS, SUIT } = KIND;
  * of a module's wall: vision.ts would band its top as a ledge.
  */
 export const KIT = [
-  // The hall: a lab bench under the west deck and a table of rock samples by it, server racks up
+  // The hall: a lab bench under the west deck and a round control station by it, server racks up
   // to the east deck, a telescope and a sample analyser on the north deck.
   [BENCH, 60.2, 230.5, 61.2, 241.5, 0, 0.95, 0],
-  [SAMPLES, 65, 233.5, 66.5, 238.5, 0, 0.9, 0],
+  [CONSOLE, 64.25, 234.5, 67.25, 237.5, 0, 1, 0],
   [RACKS, 98.8, 229.3, 99.8, 234.3, 0, 3.1, 2],
   [RACKS, 98.8, 237.7, 99.8, 242.7, 0, 3.1, 2],
   [SCOPE, 68.9, 250.8, 70.1, 252, 3.5, 4.5, 3],

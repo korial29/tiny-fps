@@ -93,6 +93,10 @@ Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from
 
 Frame time at the windows did not move (2.0 ms, headless Metal); the Tranquility chunk grew by about 1 KB gzip, the main bundle by 24 B.
 
+### A round control station (the user, 2026-11-27)
+
+"Round control desks in place of the square tables", on a picture of a ring of consoles. The table of rock samples by the bench (`KIND.SAMPLES`) is now `KIND.CONSOLE`, `station()` in `moonbase/console.ts`: a dark round plinth 3 m across with a raised middle, a stool, and seven pods 38 degrees apart, open toward the hall's middle (its front). Each pod is a bevelled pedestal under a slab leant 32 degrees toward the stool, a lit lavender screen on it with a circuit drawn dark and three round lights along its inner edge; the pod is made once and turned into place. Its kit box (it is collided with, as the rest of the kit) went from 1.5 x 5 m to 3 x 3 m round (65.75, 236), 1 m high. The furnishing went from 65,736 to 69,636 vertices for both halves.
+
 ## The base's outside (2026-11-10)
 
 `src/client/moonhull.ts` (`hull()`, called by moonscape.ts beside `moonbase()` and mirrored with it, so nothing in it is team-coloured) dresses red's half from outside, 8,976 vertices a half, drawn only. No brick bond (the user, 2026-11-10: science fiction, not masonry): few long lines, angled cuts, light as line work.

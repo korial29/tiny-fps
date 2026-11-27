@@ -152,7 +152,8 @@ const LAZY = {
   // counted in each (the user, 2026-11-25: watch the chunks' budgets too).
   // 20,096 B: the base's bevelled kit and round lit buttons (moonbase/round.ts; the user, 2026-11-27).
   // 21,120 B: the reflections traced in the base's windows (moonbase/mirror.ts; the user, 2026-11-27).
-  tranquility: 21_120,
+  // 21,504 B: the hall's round control station (moonbase/console.ts; the user, 2026-11-27).
+  tranquility: 21_504,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

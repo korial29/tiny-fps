@@ -83,9 +83,20 @@ const planes = new Float32Array(24);
 /**
  * Puts in `out` the draws (first vertex, count) that cover the runs of `c` reaching into the
  * frustum of `m`, hidden runs of up to `gap` vertices between two seen ones drawn through. Returns
- * the number of draws.
+ * the number of draws. With `eye`, only the runs whose bounds come within `reach` metres of it
+ * (Landfall's undergrowth, Decor.grass; its near palms, Decor.groves), or with `beyond` only the
+ * others (its far palms), none past `limit`.
  */
-export const seen = (c: Cells, m: Float32Array, out: Int32Array, gap = GAP): number => {
+export const seen = (
+  c: Cells,
+  m: Float32Array,
+  out: Int32Array,
+  gap = GAP,
+  eye?: ArrayLike<number>,
+  reach = 0,
+  beyond = false,
+  limit = Infinity,
+): number => {
   for (let i = 0; i < 3; i++) {
     for (let s = 0; s < 2; s++) {
       const p = (i * 2 + s) * 4;
@@ -100,6 +111,19 @@ export const seen = (c: Cells, m: Float32Array, out: Int32Array, gap = GAP): num
   let end = -1;
   for (let r = 0; r < c.n; r++) {
     const b = r * 6;
+    if (eye) {
+      // The nearest point of the run's bounds to the eye, and how far.
+      let d2 = 0;
+      for (let k = 0; k < 3; k++) {
+        const e = eye[k];
+        const t = Math.max(c.box[b + k] - e, 0, e - c.box[b + 3 + k]);
+        d2 += t * t;
+      }
+      // `beyond`: the runs the same test leaves out, and only those.
+      if (d2 > reach * reach != beyond || d2 > limit * limit) {
+        continue;
+      }
+    }
     let inside = true;
     for (let p = 0; p < 24 && inside; p += 4) {
       const x = planes[p];

@@ -6,8 +6,10 @@ import { STRIDE } from './mesh';
 import { FRAG, fragOf } from './render';
 import { SEA } from './shore';
 import { BANDS, FIRES, PLUME, SLICES, SMOKE, plumes } from './smoke';
+import { blazes } from './burnt/fire';
 
-const v = plumes(BEACH);
+const BLAZES = blazes(BEACH);
+const v = plumes(BEACH, BLAZES);
 /** Each vertex: x, y, z, the normal, c.x, c.y, the layer, c.w. */
 const verts = Array.from({ length: v.length / STRIDE }, (_, i) =>
   v.slice(i * STRIDE, (i + 1) * STRIDE),
@@ -54,12 +56,13 @@ describe('plumes', () => {
     expect(v.length % (3 * STRIDE)).toBe(0);
     expect(verts.every(p => p[8] === SMOKE)).toBe(true);
     expect(v.every(Number.isFinite)).toBe(true);
-    expect(plumes(BEACH)).toBe(v);
+    expect(plumes(BEACH, BLAZES)).toBe(v);
   });
 
-  it('cost under 15,000 vertices', () => {
+  it('cost under 23,000 vertices', () => {
     expect(PER).toBe(90);
-    expect(verts.length).toBeLessThan(15000);
+    // The wreck's eight columns, then the small fires among the burnt trees (burnt/fire.ts).
+    expect(verts.length).toBeLessThan(23000);
     expect(verts.length).toBeGreaterThan(5000);
   });
 
@@ -68,7 +71,7 @@ describe('plumes', () => {
       expect(Math.hypot(p[3], p[4], p[5])).toBeCloseTo(1, 6);
       expect(p[6]).toBeGreaterThanOrEqual(-1e-9);
       expect(p[6]).toBeLessThanOrEqual(1.3);
-      expect(FIRES[p[7]]).toBeDefined();
+      expect(FIRES[p[7]] ?? BLAZES[p[7] - FIRES.length]).toBeDefined();
     }
   });
 

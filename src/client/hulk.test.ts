@@ -15,10 +15,12 @@ import {
 import { build } from '../shared/world';
 import { TEAM_TINT } from '../shared/map';
 import { canopy, hulk, parts } from './hulk';
-import { TRIM } from './hulk/common';
+import { TRIM, drift, o, setGy, setO } from './hulk/common';
 import { MAX_TINTS, city, palette } from './render';
 import { CANOPY, DULL, HULL, TARP } from './paint';
 import { STRIDE } from './mesh';
+import { SAND } from './shore';
+import type { Piece } from '../shared/beach';
 import { TEX } from '../shared/types';
 
 const MID = ZED / 2;
@@ -60,8 +62,9 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 222,000 vertices in all', () => {
-    // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224, debris 27,246.
+  it('keeps each part within its share: under 240,000 vertices in all', () => {
+    // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224.
+    // Debris 37,710 and camps 12,684 with the sand banked round each box (2026-11-27, drift()).
     expect(count(made.hull)).toBeLessThan(35_000);
     expect(count(made.ends)).toBeLessThan(2_500);
     // An airliner's cabin, rounded (the user, 2026-11-27): inside 14,784, cabin 127,290 (seats about
@@ -69,10 +72,10 @@ describe('hulk', () => {
     expect(count(made.inside)).toBeLessThan(16_000);
     expect(count(made.cabin)).toBeLessThan(130_000);
     expect(count(made.wings)).toBeLessThan(8_000);
-    expect(count(made.debris)).toBeLessThan(28_500);
-    // The tarpaulins' hems and the crates' corner battens (2026-11-26): 6,348.
-    expect(count(made.camps)).toBeLessThan(7_000);
-    expect(count(hulk(BEACH))).toBeLessThan(222_000);
+    expect(count(made.debris)).toBeLessThan(38_500);
+    // The tarpaulins' hems and the crates' corner battens (2026-11-26), and the sand round the crates.
+    expect(count(made.camps)).toBeLessThan(13_000);
+    expect(count(hulk(BEACH))).toBeLessThan(240_000);
   });
 
   it('keeps the seats, galleys and luggage against the flanks, clear of the ways through, the doors and the tears', () => {
@@ -324,11 +327,41 @@ describe('hulk', () => {
     });
   });
 
+  it('banks the sand round a crate on the beach as a soft mound: round at the corners, no higher than the crate', () => {
+    // A crate 3 m square and 0.4 m high on level sand 1 m up.
+    const [min, max] = [
+      [0, 0.95, 0],
+      [3, 1.35, 3],
+    ];
+    setGy(() => 1);
+    setO([]);
+    drift({ kind: 'crate', min, max } as Piece);
+    const sand = verts(o);
+    setGy(() => 0);
+    expect(sand.length).toBeGreaterThan(300);
+    expect(sand.every(v => v[8] === SAND)).toBe(true);
+    const out = (v: number[]) =>
+      Math.hypot(
+        Math.max(min[0] - v[0], 0, v[0] - max[0]),
+        Math.max(min[2] - v[2], 0, v[2] - max[2]),
+      );
+    // Out 1.3 m from every side and corner alike (a square bank reaches 1.84 m at a corner), and
+    // a hair under the sand at its rim; never over the crate's top.
+    expect(Math.max(...sand.map(out))).toBeCloseTo(1.3, 6);
+    expect(sand.filter(v => out(v) > 1.29).every(v => Math.abs(v[1] - 0.95) < 1e-6)).toBe(true);
+    expect(Math.max(...sand.map(v => v[1]))).toBeLessThan(max[1]);
+    // Its normals the bank's own, smooth, up.
+    expect(sand.every(v => v[4] > 0.5 && Math.abs(Math.hypot(v[3], v[4], v[5]) - 1) < 1e-6)).toBe(
+      true,
+    );
+  });
+
   it('draws the containers in brushed steel, the tents’ poles in wood and their tarpaulins in cloth up at AWNING', () => {
     const inside = (kind: string) =>
       of(kind).map(({ min, max }) =>
-        verts(made.camps.concat(made.debris)).filter(v =>
-          [0, 1, 2].every(i => v[i] > min[i] - 0.06 && v[i] < max[i] + 0.06),
+        // Not the sand banked against it (drift()), which rises up its foot.
+        verts(made.camps.concat(made.debris)).filter(
+          v => v[8] !== SAND && [0, 1, 2].every(i => v[i] > min[i] - 0.06 && v[i] < max[i] + 0.06),
         ),
       );
     for (const c of inside('container')) {

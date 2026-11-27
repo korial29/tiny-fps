@@ -62,7 +62,7 @@ Each camp: an escape pod (`POD`) with tarpaulin shelters, the flag by the pod, t
 | Contract | `shared/beach.ts` constants, `world.ts`, `maps.ts`, stubs | The frame, the wreck's footprint, a flat playable map                                  |
 | Map      | `shared/beach.ts`, `shared/beach.test.ts`                 | Relief, the wreck and the debris as grey boxes, packs, spawns, the tests               |
 | Shore    | `client/shore.ts`, the water in `render.ts`               | The sand's mesh, the water, the horizon, the sky                                       |
-| Edge     | `client/jungle.ts`                                        | The forest with its levels of detail, the headlands                                    |
+| Edge     | `client/jungle/`, `client/foliage/`, `client/burnt/`      | The forest with its levels of detail, the headlands, the burnt trees round the nose    |
 | Wreck    | `client/hulk/`                                            | The hull, wings, engines, debris and inside, drawn on the map's boxes (after playtest) |
 | Bots     | `shared/nav.ts`, `shared/routes.ts`                       | Navigation, 24 bot matches (after playtest)                                            |
 | Mood     | `client/sfx.ts`, `demo/`                                  | Smoke, fire, surf, a song, the menu card (after playtest)                              |
@@ -127,7 +127,7 @@ bots' routes described above.
   −1.05 under `BEACH`: the sky mirrored with a fresnel, a sun glint, panel lines), soot round the
   tears. A nose after Tranquility's ship, its canopy panes of the skin itself; two canted fins,
   blue's snapped. 67,722 vertices. Worst gap to the collision where a body touches: 0.28 m.
-- **The ground under it** (`shore.ts`, `jungle.ts`): the furrow is cracked ash, plates of 0.3 to
+- **The ground under it** (`shore.ts`, `jungle/`): the furrow is cracked ash, plates of 0.3 to
   1 m with dark sunk cracks, a few glowing, out to the banks, then scorched sand; the trees ahead
   of the nose are snapped and burnt (`snags`), the undergrowth gone in a fan.
 - **Ways across**, a runner from red's spawn to blue's flag: west gap 21.3 s, hold 22.0 s, high
@@ -203,13 +203,13 @@ The beach is 25 % longer, the camps further apart, and the headlands read as the
   along the waterline open sand. The wall at z = ZED − `EDGE.cape` = 260 stands on open sand there,
   unseen, and the drawn sand and sea run on past it to a few stacks standing in the sea and a reef.
   Past the wall, drawn only: low blocks thinning out on the sand, the mass on the trees' side as
-  tors (a block or two set on a wide one, `lift` in jungle.ts), stepping up inland; the forest's
+  tors (a block or two set on a wide one, `lift` in jungle/rocks.ts), stepping up inland; the forest's
   line runs 70 m past the end on the trees' side only (from x = 80). `massed()` is finer on a low
   block (1 m strips, 1 m layers): 356 boxes for both headlands, 851 brushes in all (1,007 before).
   The palms' first row is 28 trunks a side.
 - The blocks' form is `blockOf()` in `beach.ts`, not moon.ts `rockOf()`: superellipsoids of the
   powers 4 and 8 blended (flat faces, rounded edges), turned and stretched by the seed, sheared by
-  two steep planes, dented by a low noise. jungle.ts turns each triangle's normals a quarter of the
+  two steep planes, dented by a low noise. jungle/rocks.ts turns each triangle's normals a quarter of the
   way to its face's, so the faces read.
 - Granite (`GRANITE` in `granite.ts`, compiled under `BEACH` for TEX.ROCK only), from large to small:
   a tone warmer and cooler over metres (what is seen from afar), dark weathering streaks down the
@@ -383,3 +383,52 @@ sand at the end of a narrow ramp, and the first break was 3.56 m long, longer th
   meets the middle one at 3.0 and 3.2 m instead of 3.3 and 3.6 m. The wing is 3.6 m shorter.
 - **Check**: from the sand at x 54.5 to 56.5, at full throttle or half, the buggy drives up onto
   the fairing's ledge (`beach.buggy.test.ts`). The routes on foot no longer jump on the wing.
+
+## The forest, the burnt trees and the sand round the crates (the user, 2026-11-27)
+
+- **Sand round the boxes** (`drift()` in `client/hulk/common.ts`): a soft bank all round a box
+  that stands in the dry beach, its height set by the distance to the box's footprint, so it is
+  round at the corners, and falling to the sand with a smoothstep: level against the box and at
+  its rim, which is a hair under the sand. 1.3 m out, its crest 0.1 to 0.4 m and never over the
+  box. Its normals are the bank's own. 3 rings and 3 steps a corner (4 and 4 looked the same).
+- **The burnt trees round the nose** (`client/burnt/`): charred trunks faceted on purpose
+  (`charred()`: rings jittered in and out, a flat normal and shade each triangle, so the light
+  breaks on them as on charcoal), roots flared, splinters along the trunk at each break, logs
+  broken at both ends with a branch's stub, bare branches or a palm's dead fronds on the tall
+  ones. Where they stand and how each was broken is `clearing.ts`, shared with the fires.
+- **Fires among them** (`burnt/fire.ts`, drawn by `smoke.ts` after the wreck's): three stumps in
+  five burn, a low one at its break, a tall one at its foot, each under a short column of smoke.
+  They stand past the ghost wall, so they are not `WorldDef.fires` and burn nobody.
+- **The bank of the clearing** is the forest's sheet where it burnt down to the ground: smooth
+  there, on the burnt earth's layer (`EARTH` in `foliage/layers.ts`: ash mottled by noise and a
+  few embers, Landfall's shader only).
+- **Palms only**, in seven rows from 2 to 27 m behind the line, young palms between the trees
+  of the first two (the forest's middle storey). The rows nearer the wall of leaves are low
+  hills of ferns now: the sheet rises 2.5 m over the first 6 m, smooth (each point's normal and
+  shade its own out to 30 m), ferns on every point of its near rows, red flowers
+  (`foliage/flower.ts`) among them and along the sand's edge, two ferns a metre there. No
+  broadleaf, no round bush.
+- **No texture on the plants** (the user, after a frame-rate drop): leaves and bark are plain
+  paint, as before; their layers (`LEAF`, `BARK`) only tell the shader to take one tap of the
+  sun's shadow map on them, not four, and not to compute the sky they mirror.
+
+### What it costs, and how it is drawn
+
+The forest made the frame drop on the user's Mac (1440 × 749 at a pixel ratio of 2, 1080p after
+`MAX_PIXELS`): 95th centile 33 ms, master 17.6 ms. Measured on the GPU (headed Chrome over CDP,
+timer queries, alternated runs), the cost was neither the vertices nor the draws nor the shadows:
+it was the pixels of the crowns stacked row behind row, each shaded in full. What is drawn:
+
+- **Undergrowth** (`Decor.grass`): the ferns, fronds and flowers, sorted into tiles of 16 m
+  (`foliage/tiles.ts`), drawn within 20 m of the eye only (`GRASS_REACH`) and in no shadow map.
+- **Palms** (`Decor.groves`, `foliage/grove.ts`): each built twice, a near one and a far one
+  (8 fronds of 4 leaflets, 2 rings), in the tile of its foot. A tile's near palms are drawn
+  within 20 m (`GROVE_NEAR`) and cast shadows; its far ones past it, to 100 m (`GROVE_FAR`), and
+  cast none. Both versions have the same bounds and the same test (`seen()`'s `beyond`), so no
+  palm is drawn twice or missing. Fronds 25 % narrower than before.
+- The undergrowth and the palms are drawn before the rest of the ground, nearest first.
+
+Vertices: jungle 1,191,795 built (rocks 45,006, palms near 229,692 and far 78,372, undergrowth
+834,411, sheet 72,594, snags 10,092), of which a frame draws the tiles in reach. Wreck 238,158
+(debris 37,710, camps 12,684 with the sand banks); smoke 22,410. The user's Mac after it: 57 fps,
+95th centile 17.7 ms (master 17.6 ms).

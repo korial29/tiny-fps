@@ -162,7 +162,8 @@ const LAZY = {
   // 19,456 B: an airliner's cabin, its seats, galleys, luggage, trim and dead captain (the user, 2026-11-27).
   // 21,888 B: a buggy for each camp, its body, pods and sand tyres (the user, 2026-11-27).
   // 22,400 B: the dead captain in the marine's body, the pilots' seats rounded (the user, 2026-11-27).
-  landfall: 22_400,
+  // 22,912 B: no box left on the flight deck, and room after the moon base's decor (the user, 2026-11-27).
+  landfall: 22_912,
 };
 
 const imports = src => [

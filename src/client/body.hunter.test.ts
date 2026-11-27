@@ -81,6 +81,33 @@ it('leaves the wrist computer out of the own view while the left hand is on the 
   expect(shown(true, 1.5)).toBe(false);
 });
 
+it('puts the pistol away for the blades, not the harpoon (the user, 2026-11-28)', () => {
+  // Harpoon, pistol and blades all found; `sided` is the pistol in hand, `wield` the blades.
+  const armed: PlayerState = { ...player, ammo: 3, mag: 1, side: 10, sideMag: 4, blade: true };
+  /** The pieces drawn after each state in turn, held for its seconds. */
+  const frame = (...steps: [PlayerState, number][]) => {
+    const body = createBody();
+    body.wear(0, undefined, false, false, true);
+    for (const [p, seconds] of steps) {
+      for (let t = 0; t < seconds; t += 1 / 60) {
+        body.update(p, 1 / 60);
+      }
+    }
+    const pieces: Pieces = [];
+    body.draw([], [0, 1.6, 0], 0, 0, 0, undefined, pieces);
+    return new Set(pieces.map(piece => piece.m));
+  };
+  const bare = frame([{ ...armed, wield: true }, 1.5]);
+  const harpoon = [...frame([armed, 1.5])].filter(m => !bare.has(m));
+  expect(harpoon.length).toBeGreaterThan(0);
+  // Just after the blades are chosen the hand still lowers the pistol: the harpoon never shows in
+  // it (it did while the gun went down, kindOf() reading 0 with the blades in hand).
+  for (const seconds of [0.05, 0.1, 0.15]) {
+    const lowering = frame([{ ...armed, sided: true }, 1.5], [{ ...armed, wield: true }, seconds]);
+    expect(harpoon.filter(m => lowering.has(m))).toEqual([]);
+  }
+});
+
 it('folds the shoulder cannon out into the own view when it is taken, and back out of it', () => {
   const body = createBody();
   body.wear(0, undefined, false, false, true);

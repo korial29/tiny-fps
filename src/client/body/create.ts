@@ -243,6 +243,12 @@ export const createBody = (world?: World): Body => {
    */
   let drawn = -1;
   let harpoonDraw = 0;
+  /**
+   * The kind (kindOf()) of the last gun in hand, and whether it was the Hunter's pistol: the one
+   * the hand still holds while it is put away for the blades, the katana or the fists. The state
+   * has no gun then, and its kindOf() is 0, the Hunter's harpoon.
+   */
+  let [gunKind, gunSided] = [0, false];
   /** Seconds since the harpoon's last shot: its bolt is drawn leaving the tube (HARPOON_OUT). */
   let harpoonShot = Infinity;
   /** Seconds since the own Hunter threw his disc, and since he caught it back; whether it is out (`clip`, gun.ts). */
@@ -294,6 +300,9 @@ export const createBody = (world?: World): Body => {
     first = now !== drawn ? f : first && !(me?.reload && !p.reload);
     since = now !== drawn || (me?.reload && !p.reload) ? 0 : since + dt;
     drawn = now;
+    if (now === 0 || now === 2 || now === 3) {
+      [gunKind, gunSided] = [kindOf(p), !!p.sided];
+    }
     me = { ...p };
     clock += dt;
     swimPh = p.mode == MODE.SWIM ? (swimPh + dt * strokeRate(speedOf(p))) % 1 : swimPh;
@@ -1269,14 +1278,16 @@ export const createBody = (world?: World): Body => {
         if (hold > 0.2) {
           // The gauge lights once a press is more than a tap: the strength the shot would have.
           // The Hunter's pistol keeps its battery apart from his harpoon's (`sideMag`).
-          const mag = me?.sided ? me.sideMag : me?.mag;
+          // Put away, the hand still holds the last gun in it, not the harpoon (gunKind).
+          const sided = drawn === 0 || drawn === 2 || drawn === 3 ? !!me?.sided : gunSided;
+          const mag = sided ? me?.sideMag : me?.mag;
           const level =
             me && (me.charge ?? 0) >= CHARGE_TAP ? Math.min(powerOf(me.charge!), mag ?? 0) : 0;
-          const kind = me ? kindOf(me) : 0;
+          const kind = drawn === 0 || drawn === 2 || drawn === 3 ? (me ? kindOf(me) : 0) : gunKind;
           const rail = kind == 2;
           const sp = me ? swapOf(me) : -1;
           const on = since - Math.max(pressOf(kind), 0);
-          if (hunter && kind === 0 && !me?.sided) {
+          if (hunter && kind === 0 && !sided) {
             // In close detail (lod 2): the round scope and the lit buttons (harpoonFine()).
             drawHarpoon(
               out,
@@ -1333,9 +1344,9 @@ export const createBody = (world?: World): Body => {
                 cells: me && cellsOf(me),
                 heat: (me?.heat ?? 0) / HEAT_MAX,
                 hot: me?.hot,
-                skin: hunter && !!me?.sided,
+                skin: hunter && sided,
                 // The Hunter's pistol is drawn from the store, worn (its scuffs on its own frame).
-                list: hunter && me?.sided ? pieces : undefined,
+                list: hunter && sided ? pieces : undefined,
               },
             );
           }

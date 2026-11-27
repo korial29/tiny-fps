@@ -178,7 +178,8 @@ const LAZY = {
   // 27,648 B: a volcano in the island's middle, scenery only (src/client/volcano/; the user, 2026-11-27).
   // 28,672 B: the camps' stretch tents, their leaning masts and guy ropes (hulk/tent.ts; the user, 2026-11-27).
   // 30,208 B: the survivors' camp in place of the escape pods (hulk/camp.ts; the user, 2026-11-27).
-  landfall: 30_208,
+  // 31,232 B: the lagoon's pebbles, shells and laminaria (src/client/seabed/; the user, 2026-11-28).
+  landfall: 31_232,
 };
 
 const imports = src => [

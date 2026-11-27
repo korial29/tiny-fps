@@ -32,9 +32,15 @@ const PULL: Vec3[] = [
   [0.1, -0.16, 0.52],
   [0.1, -0.11, 0.7],
 ];
-/** How flat the hand lies (0 open, 1 a fist) and how far it rolls about the forearm (radians, added to the palm down), at the same keys: joined and flat, cupped through the pull, joined again under the chin. */
+/** How flat the hand lies (0 open, 1 a fist) at the same keys: flat ahead, cupped through the pull, flat again under the chin. */
 export const CURLS = [0.05, 0.3, 0.42, 0.05, 0.05, 0.08];
-export const ROLLS = [-0.9, -0.2, 0.3, -0.9, -0.9, -0.9];
+/**
+ * How far the hand rolls about the forearm (radians, added to the palm down; over 0 the palm turns
+ * outward), at twice PULL's keys (the user, 2026-11-27): the palms joined under the chin, turned
+ * down quickly as the hands shoot out (within a twelfth of the stroke), then a little outward at
+ * the end of the reach, ready to sweep wide.
+ */
+export const ROLLS = [0.35, 0.35, 0.25, 0.3, 0.3, -0.3, -0.9, -0.15, 0, 0, 0.1, 0.25];
 /** A closed Catmull-Rom curve through `keys` at phase `u`: it never stops at a key. */
 export const loop = (keys: number[], u: number): number => {
   const n = keys.length;

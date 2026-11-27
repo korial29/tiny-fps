@@ -49,7 +49,7 @@ const GRIP = dress(capsule(1, [1, 1], 8, [0, 0]), [0.04, 0.04, 0.045]);
 const RING = steel(dress(capsule(0, [1], 10, [3, 3]), [0.6, 0.62, 0.66]));
 
 /** The height at rest of the sash's middle, where the blades are tucked in. */
-export const SASH_Y = 1.018;
+export const SASH_Y = 1.058;
 /** The pelvis' height at rest. */
 const PELVIS_Y = solve(rest()).pos[J.PELVIS][1];
 
@@ -84,17 +84,17 @@ export const blades = (out: Out, at: Vec3, q: Quat, b: number) => {
  * a shin at their two ends.
  */
 export const HIPS = {
-  y: 0.012,
+  y: 0.052,
   waist: [
-    [0.182, 0.126, 0.122],
-    [0.186, 0.122, 0.12],
+    [0.182, 0.126, 0.096],
+    [0.186, 0.119, 0.091],
   ],
   hips: [
     [0.197, 0.128, 0.156],
     [0.21, 0.128, 0.16],
   ],
-  drop: 0.07,
-  end: 0.2,
+  drop: 0.11,
+  end: 0.24,
   thigh: [0.125, 0.082],
   shin: [0.07, 0.052],
 };
@@ -125,9 +125,9 @@ export const TABARD = {
  */
 export const SKIRT = {
   panels: [
-    [-88, -20],
-    [20, 88],
-    [94, 266],
+    [-92, -50],
+    [50, 92],
+    [96, 264],
   ],
   len: 0.3,
   flare: 0.05,

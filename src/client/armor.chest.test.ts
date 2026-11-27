@@ -8,7 +8,8 @@ import {
   FLANK,
   NOTCH,
   REGIONS,
-  SASH,
+  BROWN,
+  GOLD,
   SHIELD,
   SIGN,
   VEST,
@@ -139,30 +140,29 @@ describe('the armour', () => {
       }
     });
 
-    it("writes 忍 dark on the left pec of the ninja's chest piece, not on the right (the user, 2026-11-13)", () => {
+    it("writes 忍 in dark gold on the left pec of the ninja's chest piece, not on the right (the user, 2026-11-13)", () => {
       for (const build of [0, 1]) {
         const out: number[] = [];
         const s = body(1, build);
-        const { x: sx, y: sy, size } = SIGN[build];
+        const { x: sx, y: sy, size, wide } = SIGN[build];
         skin(out, s, solve(rest([0, 0, 0], 0, build)), palette([0.9, 0.2, 0.1]));
         const n = out.length;
         armor(out, 0, s, true, [0.9, 0.2, 0.1], true);
         const ink = [0, 0];
         for (let i = n; i < out.length; i += STRIDE) {
           const [x, y, z] = [out[i], out[i + 1], out[i + 2]];
-          const dark = Math.max(out[i + 6], out[i + 7], out[i + 9]) < 0.15;
-          // 2 mm in from the sign's foot: his right pec's first vent ends there, and on the
-          // flatter piece (2026-11-18) its tip came 0.5 mm into the sign's height.
-          if (dark && z < 0 && Math.abs(y - sy) < size - 0.002) {
+          // In dark gold (the user, 2026-11-28; it was dark as the seams).
+          const gilt = out[i + 6] == GOLD[0][0] && out[i + 9] == GOLD[0][2];
+          // Round the sign and its mirror.
+          if (gilt && z < 0 && Math.abs(y - sy) < size * 0.75) {
             for (const k of [0, 1]) {
-              ink[k] += +(Math.abs(x - (k ? -sx : sx)) < size);
+              ink[k] += +(Math.abs(x - (k ? -sx : sx)) < wide * size * 0.75);
             }
           }
         }
-        // Every stroke laid: 12 segments, each two triangles at least. On her the right has its
-        // vents, the left none (the sign is in their place).
+        // Every stroke laid: 12 segments, each two triangles at least; none on the right.
         expect(ink[0]).toBeGreaterThanOrEqual(12 * 6);
-        expect(ink[1]).toBeLessThan(build ? ink[0] : 1);
+        expect(ink[1]).toBe(0);
       }
     });
 
@@ -226,9 +226,9 @@ describe('the armour', () => {
         expect(out.length).toBeGreaterThan(n);
         const pts: number[][] = [];
         for (let i = n; i < out.length; i += STRIDE) {
-          // All of it the sash: in its grey, not the team's colour, round the waist; plain cloth here, the
+          // All of it the sash: in its dark brown, not the team's colour, round the waist; plain cloth here, the
           // weave and the folds being the shader's.
-          expect([out[i + 6], out[i + 7], out[i + 9]]).toEqual(SASH);
+          expect([out[i + 6], out[i + 7], out[i + 9]]).toEqual(BROWN);
           expect(out[i + 8]).toBe(-1);
           pts.push([out[i], out[i + 1], out[i + 2]]);
         }

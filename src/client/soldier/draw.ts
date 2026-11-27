@@ -2,7 +2,7 @@ import { HEAT_MAX } from '../../shared/constants';
 import { ROLE } from '../../shared/kit';
 import { floored } from '../../shared/physics';
 import { LIMB } from '../../shared/types';
-import { SASH, armor } from '../armor';
+import { PAD, SASH, armor } from '../armor';
 import { RAKE, hands, inv, stowed } from '../body';
 import { cigar } from '../cigar';
 import { dashing, strain } from '../expression';
@@ -549,7 +549,7 @@ export const soldier = (
   if (plated) {
     const from = out.length;
     const n0 = gpu?.length ?? 0;
-    pads(out, s, build, ninja ? SASH : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
+    pads(out, s, build, ninja ? PAD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
     // And so are the bells and the pads.
     gpu?.forEach((d, i) => i >= n0 && (d.w = true));
     if (k > 0) {

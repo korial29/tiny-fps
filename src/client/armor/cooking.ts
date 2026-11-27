@@ -2,7 +2,7 @@ import { GLOSS, WEAVE } from '../mesh';
 import type { Skin } from '../skin';
 import { TURN } from './types';
 import type { Corner, Recipe, Moulded } from './types';
-import { PART, GUSSET, beltOff, SASH, CLOTH, REGIONS, OFF, WHITE, WALL, partOf } from './regions';
+import { PART, GUSSET, beltOff, BROWN, CLOTH, REGIONS, OFF, WHITE, WALL, partOf } from './regions';
 import type { Region } from './regions';
 import { angle, split, landed, clip, REACH, BITS, LIMITS, SPANS } from './clip';
 import { shaped, moulding, casting } from './shell';
@@ -177,14 +177,14 @@ export function* cooking(s: Skin, fine: boolean): Generator<undefined, Recipe, u
           continue;
         }
         if (region.belt) {
-          // The sash: woven cloth in the pads' grey, no wall.
+          // The sash: woven cloth in dark brown, no wall.
           const off = (c: Corner) => beltOff(angle({ ...region, face: 0 }, c[0], c[2]), c[1]);
           for (let i = 1; i + 1 < poly.length; i++) {
             add(
               [poly[0], poly[i], poly[i + 1]],
               [off(poly[0]), off(poly[i]), off(poly[i + 1])],
               undefined,
-              SASH,
+              BROWN,
               WEAVE,
               0,
               k,

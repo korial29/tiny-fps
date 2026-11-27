@@ -25,7 +25,7 @@ The lagoon is waded, not swum. The seabed is relief like the sand; the water is 
 the bed is deeper than a runner can stand in (`floor`, `DEPTH` = −1.4 m of feet: the eye is 1.6 m
 over them and stays over the drawn surface), the runner is put back at a spawn, as a fall from
 Highline's roofs: at about x = 16. A drowned carrier's flag drops on his last ground. No slowdown,
-no swimming, no new wire data.
+no swimming, no new wire data. (Swimming came later: see the last section.)
 
 ## The wreck
 
@@ -481,3 +481,22 @@ no collision, no rule.
   scrub, then ash, the green climbing higher on the ribs than in the gullies.
 - Cost, camp toward it, headless Chrome (Metal), three alternated runs: match-frame JavaScript
   median 0.5 to 0.8 ms against 0.5 to 0.6 ms without, first draw unchanged (about 1.65 s).
+
+## The seabed and the swimmer's arms (the user, 2026-11-27)
+
+- **The seabed** (`src/client/seabed/`): pebbles, shells and laminaria in the lagoon, built once
+  with the land (`landfall.ts`) and mirrored about the centre line. Pebbles lie in tight groups
+  over the shallows and the wet sand (grey granite, sandy brown, pale quartz, the volcano's dark
+  basalt); shells, scallops with ribs and pointed whelks, mostly near the waterline where the swash
+  leaves them; laminaria in clumps of 6 to 11 blades wherever the bed is at least 1.2 m deep, each
+  a ribbon from a finger-thin stipe to a broad rippled blade, olive brown with paler tips, its tip
+  25 cm under the surface at most. Nothing goes under the hull's tail. Static: no sway yet.
+- **Cost**: 51,366 vertices (a kelp blade 36), drawn
+  in the land's draws and its shadow maps. Headless Chrome (Metal), a view over the lagoon, three
+  alternated runs against master: GPU median 7.7 to 8.1 ms → 8.0 to 8.2 ms (in the noise), match-frame
+  JavaScript 0.3 to 0.7 ms either way, decor build unchanged (about 450 ms).
+- **The arms at the surface**: a swimmer's own hands take the view's heading but not its pitch
+  (`stroke()` in `body/create.ts`), so looking at the sky leaves them swimming in the water, out
+  of view. Diving, they come back to the view's pitch over the first `SURFACED` (0.6 m) under the
+  swimming level. The palms (`ROLLS` in `body/motion.ts`) turn down quickly once the hands join
+  under the chin and shoot out, then a little outward at the end of the reach, before the pull.

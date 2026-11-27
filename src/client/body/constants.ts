@@ -21,6 +21,8 @@ export const made =
 
 /** Metres the camera may be from the eye of the body and still show it: the bob is centimetres, a crouch's ease under a metre. */
 export const AWAY = 1;
+/** Metres under the swimming level over which a diver's arms go from level (the stroke kept in the water) to the view's pitch. */
+export const SURFACED = 0.6;
 /** On a ledge the camera sits this far behind the head and below it, so that the arms reach the ledge. */
 export const [BEHIND, DROP] = [0.12, 0.03];
 export const [X, Y, Z]: Vec3[] = [

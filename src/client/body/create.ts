@@ -9,6 +9,7 @@ import {
   HEAT_MAX,
   PUNCHES,
   HUNTER_CELLS,
+  SWIM_DEPTH,
 } from '../../shared/constants';
 import { powerOf, sabering } from '../../shared/gun';
 import { TAU, eyeHeight, speedOf, sprinting } from '../../shared/physics';
@@ -110,6 +111,7 @@ import { createTrail } from '../trail';
 import { ID, expand, mesh } from '../store';
 import {
   AWAY,
+  SURFACED,
   BEHIND,
   DROP,
   FEET,
@@ -617,6 +619,20 @@ export const createBody = (world?: World): Body => {
     let [slapW, slapTap] = [0, 0];
     /** The wrist computer's fire key in the world and how far up it is read, once the left arm is posed. */
     let [key, keyW]: [Vec3, number] = [eye, 0];
+    // At the surface the stroke stays in the water (the user, 2026-11-27): the arms take the
+    // view's heading but not its pitch, so looking at the sky leaves them swimming below. Diving,
+    // they go back to the view's pitch over the first SURFACED metres under the surface.
+    const sink = me && world ? (world.def.water ?? 0) - SWIM_DEPTH - me.y : 0;
+    const level = w.swim * clamp(1 - sink / SURFACED);
+    const [sr, su, sf] = basis(yaw, pitch * (1 - level), roll);
+    const stroke = (v: Vec3): Vec3 =>
+      level < 0.002
+        ? turn(v)
+        : mix(
+            turn(v),
+            [0, 1, 2].map(i => sr[i] * v[0] + su[i] * v[1] + sf[i] * v[2]) as Vec3,
+            level,
+          );
     for (const sd of [-1, 1]) {
       const k = Math.cos(TAU * gait.phase) * sd;
       // The numbers are for the right hand, mirrored below. The arms hang along the body, out of
@@ -742,7 +758,7 @@ export const createBody = (world?: World): Body => {
           taken +
         (GUARD_CURL + 0.5 * tucked - curl) * guard +
         (0.55 - curl) * reading;
-      let to = add(eye, turn([h[0] * sd, h[1], h[2]]));
+      let to = add(eye, stroke([h[0] * sd, h[1], h[2]]));
       // The right hand over the wrist computer, its fingers on the fire key: pressed in the first
       // 4 ticks of the cannon's 15 between shots (`cool`), let go over the next 6, else hovering
       // 3 cm off it.
@@ -765,7 +781,7 @@ export const createBody = (world?: World): Body => {
       }
       const arm = sd < 0 ? J.ARM_L : J.ARM_R;
       const pole = mix(POLE, COMPUTER_POLE, reading);
-      let bend = turn([pole[0] * sd, pole[1], pole[2]]);
+      let bend = stroke([pole[0] * sd, pole[1], pole[2]]);
       if (typing > 0.002) {
         // The elbow where the forearm runs along POKE into the wrist: the arm bends toward it.
         const fore = dist(s.pos[J.FOREARM_R], s.pos[J.HAND_R]);

@@ -9,14 +9,14 @@ import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
 import { hash, noise } from './relief';
-import { HILLS, HILL_H, HOLLOW, LIP, floor, pylons, voids } from './moon/rift';
+import { HOLLOW, LIP, WING_RECTS, floor, pylons, ramped, voids } from './moon/rift';
 import { station } from './station';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
 /** The crater is 280 m long: a point at z has its twin at ZED - z. */
 export const ZED = 280;
-export { CRACKS, CROSSINGS, HILLS, HOLLOW, LIP, PYLONS, SINKS, hops } from './moon/rift';
+export { CRACKS, CROSSINGS, HOLLOW, LIP, PYLONS, SINKS, WINGS, hops } from './moon/rift';
 const [RED, BLUE] = TEAM_TINT;
 const { STONE, CONCRETE, METAL, STEEL, PAINT } = TEX;
 
@@ -105,7 +105,7 @@ export const FLATS = [
   [0.5, 67, 26.5, 93],
   [56, 74, 104, 133],
   [96, 56, 125, 90],
-  [90, 64, 94, 68],
+  [88, 66, 92, 70],
   // Where the field's rover stood: still level, by the rock beside it.
   [98, 36, 102, 40],
   [55, 77, 59, 81],
@@ -293,15 +293,15 @@ const at = (x: number, z: number): number => {
     // The field: swells and mounds over the slabs, never under them, flat by the lips, the edge and the FLATS.
     // It starts 16 to 26 m from the centre line, not along a ruled line.
     let m = sm((z - 16 - 10 * noise(x / 19, 0.5, 37)) / 8) * sm(-out / 10);
-    for (const [x0, z0, x1, z1] of [
-      ...FLATS,
-      // Under the rovers' hills: they stand on level ground.
-      ...HILLS.map(([hx, hz]) => [hx - 8, hz - 9.2, hx + 8, hz + 9.2]),
-    ]) {
+    for (const [x0, z0, x1, z1] of FLATS) {
       // (A point is level for 1.8 m round it as it is walked on: every node within 7.5 m.)
       m *= sm(
         (far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) - (x0 < x1 ? 6 : 7.5)) / 6,
       );
+    }
+    // Under the rovers' ramps: level, the field back 6 m past them.
+    for (const [x0, z0, x1, z1] of WING_RECTS) {
+      m *= sm(far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) / 6);
     }
     h =
       m *
@@ -316,13 +316,8 @@ const at = (x: number, z: number): number => {
     for (const cx of MOUNDS) {
       h += MOUND * c1((8 + RISE - z) / RISE) * across(cx, x);
     }
-    // The rovers' hills over the front crack, one each side (moon/rift.ts).
-    for (const [hx, hz] of HILLS) {
-      const x0 = 4 * Math.floor(x / 4);
-      const w = (u: number) => c1((6 - Math.abs(u - hx)) / 2);
-      h +=
-        HILL_H * c1((9.2 - Math.abs(z - hz)) / 7) * (w(x0) + ((w(x0 + 4) - w(x0)) * (x - x0)) / 4);
-    }
+    // The rovers' ramps over the cracks (moon/rift.ts).
+    h += ramped(x, z);
     // No relief in the rille: its nodes are the lips'.
     h = z < 8 ? 0 : h;
   }
@@ -657,12 +652,6 @@ export const LAYOUT = {
     (z ? [1, -1] : [1]).map(m => [x + 16 * ax, ZED / 2 + m * (z + 16 * az), ax, m * az + 0]),
   ),
   wreck: WRECK,
-  /** The orange lamps each side of the rovers' ramps over the front crack, both sides, x and z: on each slope's flank near its top. */
-  hillLamps: HILLS.flatMap(([hx, hz]) =>
-    [1, -1].flatMap(side =>
-      [-4.2, 4.2].flatMap(d => [-4.5, 4.5].map(c => [hx + c, ZED / 2 + side * (hz + d)])),
-    ),
-  ),
   /** The craters of the relief, both sides: x, z, radius, depth as a share of it. */
   bowls: BOWLS.flatMap(([x, z, r, k = 0.17]) =>
     (z ? [1, -1] : [1]).map(m => [x, ZED / 2 + m * z, r, k]),
@@ -725,8 +714,6 @@ const half: Brush[] = [
   ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
-  // The lamps of the rovers' ramps over the front crack.
-  ...LAYOUT.hillLamps.filter(([, z]) => z > ZED / 2).map(([x, z]) => lump(x, z, 0.2, 2.2)),
   // The few boulders: each some forty boxes that follow its outline, drawn as one rock by the scenery.
   ...ghosts(CRAGS),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
@@ -844,13 +831,14 @@ export const MOON: WorldDef = {
   ],
   gravity: 0.5,
   // Three rovers a base, parked in sight before it, their noses toward the other base: in front of
-  // the dome by the middle jump over the front crack, and one facing each rovers' ramp (moon/rift.ts).
+  // the dome by the middle jump over the front crack, and one facing each two-way ramp over the
+  // front crack (moon/rift.ts).
   rovers: [
-    [92, 0, 206, 0],
+    [90, 0, 208, 0],
     // Its nose toward the west ramp, off the way from it to the dome's door.
     [57, 0, 219, -0.33],
     [154, 0, 218, 0],
-    [92, 0, ZED - 206, Math.PI],
+    [90, 0, ZED - 208, Math.PI],
     [57, 0, ZED - 219, Math.PI + 0.33],
     [154, 0, ZED - 218, Math.PI],
   ],

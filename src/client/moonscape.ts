@@ -891,9 +891,6 @@ const sites = (o: number[], def: WorldDef) => {
     mast(o, x, z, at(x, z), 6, [1, 0.25, 0.15]);
     place(o, DISH, [x, at(x, z) + 5.2, z], frame, [0, 0, -0.9], 1);
   }
-  for (const [x, z] of LAYOUT.hillLamps) {
-    mast(o, x, z, at(x, z), 2.2, [1, 0.45, 0.1]);
-  }
   for (const [x, z, ax, az] of LAYOUT.ramps) {
     for (const c of [-8, 8]) {
       mast(o, x + c * az, z - c * ax, at(x + c * az, z - c * ax), 2.2, [1, 0.45, 0.1]);

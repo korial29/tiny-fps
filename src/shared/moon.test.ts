@@ -27,7 +27,7 @@ import {
   FLATS,
   CRACKS,
   HOLLOW,
-  HILLS,
+  WINGS,
   LAYOUT,
   LIP,
   PYLONS,
@@ -830,7 +830,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(2225166139);
+    expect(checksum(relief)).toBe(1736630653);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -1362,44 +1362,59 @@ describe('MOON, the field, the mounds and the carved rille', () => {
     expect(failed).toEqual([]);
   }, 60_000);
 
-  it("flies a rover over the front crack on its hills, from the base to the mound's run-up and back", () => {
-    for (const [x, z] of HILLS) {
+  it('flies a rover over a crack off each wing ramp, both sides: from 25 m back, flat out, it lands past it', () => {
+    const failed: string[] = [];
+    for (const [rx, rz, ux, uz] of WINGS) {
       for (const side of [1, -1]) {
-        for (const [from, to, yaw] of [
-          [z + 22, z - 14, side > 0 ? NORTH : SOUTH],
-          [z - 18, z + 14, side > 0 ? SOUTH : NORTH],
-        ]) {
-          const car = rover(world, x, 140 + side * from, yaw);
-          let fell = false;
-          for (
-            let k = 0;
-            k < 600 && !fell && side * (car.z - 140 - side * to) * Math.sign(to - from) < 0;
-            k++
-          ) {
-            fell = run(car, world, 1, KEY.FORWARD, yaw);
-          }
-          expect(fell, `${x}, ${from} to ${to}, side ${side}`).toBe(false);
-          expect(Math.sign(to - from) * (side * (car.z - 140) - to)).toBeGreaterThan(-1);
-          expect(car.y).toBeGreaterThan(-0.5);
+        // Red's frame to the world: z mirrored on blue's side. Back up to 25 m, on unbroken ground.
+        // (From the rover parked facing it, if one is.)
+        const parked = MOON.rovers!.find(
+          ([x, , z]) =>
+            Math.abs(x - rx) < 3 &&
+            -(x - rx) * ux - (side * (z - 140) - rz) * uz > 5 &&
+            -(x - rx) * ux - (side * (z - 140) - rz) * uz < 20,
+        );
+        let back = parked ? -(parked[0] - rx) * ux - (side * (parked[2] - 140) - rz) * uz : 10;
+        while (
+          !parked &&
+          back < 25 &&
+          Number.isFinite(ground(world, rx - (back + 1) * ux, 140 + side * (rz - (back + 1) * uz)))
+        ) {
+          back++;
+        }
+        const [x0, z0] = [rx - back * ux, 140 + side * (rz - back * uz)];
+        const [dx, dz] = [ux, side * uz];
+        const yaw = toward(0, 0, dx, dz);
+        const car = rover(world, x0, z0, yaw);
+        const along = () => (car.x - rx) * dx + (car.z - 140 - side * rz) * dz;
+        let fell = false;
+        for (let k = 0; k < 400 && !fell && along() < 10; k++) {
+          fell = run(car, world, 1, KEY.FORWARD, yaw);
+        }
+        if (fell || along() < 9.5 || car.y < -0.5) {
+          failed.push(`${rx}, ${rz} way ${ux}, ${uz}, side ${side}, ${back} m back`);
         }
       }
     }
-  });
+    expect(failed).toEqual([]);
+  }, 60_000);
 
-  it('parks a rover in sight before each base facing each ramp: flat out from where it stands, it flies the front crack', () => {
-    for (const [hx, hz] of HILLS) {
+  it('parks a rover in sight before each base facing each two-way ramp over the front crack', () => {
+    for (const [rx, rz, ux] of WINGS.filter(
+      w => w[3] < 0 && WINGS.some(v => v[0] === w[0] && v[3] > 0),
+    )) {
+      expect(ux).toBe(0);
       for (const side of [1, -1]) {
-        const at = MOON.rovers!.find(([x, , z]) => Math.abs(x - hx) < 6 && side * (z - 140) > hz);
-        expect(at, `ramp at ${hx}, side ${side}`).toBeDefined();
+        const at = MOON.rovers!.find(([x, , z]) => Math.abs(x - rx) < 6 && side * (z - 140) > rz);
+        expect(at, `ramp at ${rx}, side ${side}`).toBeDefined();
         const [x, , z, yaw] = at!;
         const car = rover(world, x, z, yaw);
         let fell = false;
-        for (let k = 0; k < 400 && !fell && side * (car.z - 140) > hz - 12; k++) {
+        for (let k = 0; k < 400 && !fell && side * (car.z - 140) > rz - 12; k++) {
           fell = run(car, world, 1, KEY.FORWARD, yaw);
         }
-        expect(fell, `ramp at ${hx}, side ${side}`).toBe(false);
-        expect(side * (car.z - 140)).toBeLessThan(hz - 12 + 0.5);
-        expect(car.y).toBeGreaterThan(-0.5);
+        expect(fell, `ramp at ${rx}, side ${side}`).toBe(false);
+        expect(side * (car.z - 140)).toBeLessThan(rz - 12 + 0.5);
       }
     }
   });
@@ -2312,8 +2327,8 @@ describe('MOON, a few rocks, pebbles', () => {
             Math.hypot((b.min[0] + b.max[0]) / 2 - x, (b.min[2] + b.max[2]) / 2 - z) < 1.4 * r,
         ),
     );
-    // The rest are masts' feet: six dishes 0.8 m wide, the lamps of the jump ramps and of the rovers' ramps 0.4 m wide.
-    expect(loose.length).toBeLessThanOrEqual(38);
+    // The rest are masts' feet: six dishes 0.8 m wide, the lamps of the jump ramps 0.4 m wide.
+    expect(loose.length).toBeLessThanOrEqual(22);
     expect(
       Math.max(...loose.map(b => Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2]))),
     ).toBeLessThan(0.81);

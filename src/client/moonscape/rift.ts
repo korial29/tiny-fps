@@ -6,7 +6,7 @@
 // corner, cut along the diagonal (the chamfer that keeps an edge from reading as steps); with four,
 // not at all. A cell collides when it has two open corners or fewer (gap()... with three it is
 // open): the ground drawn covers every brush, and is past one at most by a chamfer's triangle.
-import { HILLS, NX, NZ, S, corner, gap, mask } from '../../shared/moon/rift';
+import { NX, NZ, S, WINGS, corner, gap, mask } from '../../shared/moon/rift';
 import { raise } from '../../shared/relief';
 import type { Relief } from '../../shared/relief';
 import { TEX } from '../../shared/types';
@@ -338,39 +338,42 @@ export const rift = (o: number[], def: WorldDef) => {
       }
     }
   }
-  // The rovers' ramps: a deck of plates over each slope of each hill, 5 m wide, a hand's breadth
-  // over the ground, in bands of yellow and black chevrons from its foot up to the crack's edge.
+  // The rovers' ramps: a piece of a wing on each (moon/rift.ts WINGS), white, a hand's breadth
+  // over the slope, from its root 9 m back to a torn end at the crack's edge; each its own length,
+  // widths, slant and tears, from its seed. A grey spar along it.
   for (const side of [1, -1]) {
-    for (const [hx, hz] of HILLS) {
-      for (const d of [1, -1]) {
-        const y = (x: number, zc: number) => Math.max(lattice(r, x, 140 + side * zc), 0) + 0.06;
-        for (let k = 0; k < 2 * 9.2; k++) {
-          const [z0, z1] = [hz + d * (9.2 - k * S), hz + d * (9.2 - (k + 1) * S)];
-          // Up to the last row of ground under the whole deck.
-          const clear = [-2.5, -1.25, 0, 1.25, 2.5].every(
-            u => !gap(Math.floor((hx + u) / S), Math.floor(Math.min(z0, z1) / S)),
-          );
-          if (!clear) {
-            break;
-          }
-          const rgb = k % 4 < 2 ? [1, 0.62, 0.05] : [0.09, 0.09, 0.1];
-          // One plate across: the hill is level across its middle 8 m (moon.ts at()).
-          for (const [a, b] of [[-2.5, 2.5]]) {
-            const [u, v] = [hx + a, hx + b];
-            face(
-              o,
-              [
-                [u, y(u, z0), 140 + side * z0],
-                [v, y(v, z0), 140 + side * z0],
-                [v, y(v, z1), 140 + side * z1],
-                [u, y(u, z1), 140 + side * z1],
-              ],
-              rgb,
-              [hx, -50, 140 + side * hz],
-            );
-          }
-        }
-      }
+    for (const [rx, rz, ux, uz, seed] of WINGS) {
+      const h = (k: number) => hash(seed, k, 97);
+      // From the wing's own a (along the jump) and b (across it) to the world.
+      const p = (a: number, b: number): Vec3 => {
+        const [x, zc] = [rx + a * ux - b * uz, rz + a * uz + b * ux];
+        return [x, Math.max(lattice(r, x, 140 + side * zc), 0) + 0.08, 140 + side * zc];
+      };
+      const [a0, a1] = [-9.5 - h(1), -2.4 + 1.2 * h(2)];
+      const [wl, wr, t, sk] = [2 + 0.7 * h(3), 2 + 0.7 * h(4), 0.55 + 0.3 * h(5), h(6) - 0.5];
+      const tears = [0.75, 0.5, 0.25].map((f, k) => [
+        a1 - 0.3 - 0.9 * h(7 + k),
+        sk + (wr * t + wl * t) * f - wl * t,
+      ]);
+      const rim = [[a0, -wl], [a0, wr], [a1, sk + wr * t], ...tears, [a1, sk - wl * t]].map(
+        ([a, b]) => p(a, b),
+      );
+      const mid = p((a0 + a1) / 2, (wr - wl) / 4 + sk / 2);
+      const under: Vec3 = [mid[0], -50, mid[2]];
+      rim.forEach((q, k) => face(o, [mid, q, rim[(k + 1) % rim.length]], [0.86, 0.87, 0.9], under));
+      // The spar: a grey strip a third of the way across.
+      const bs = (wr - wl) / 3;
+      face(
+        o,
+        [
+          p(a0 + 0.3, bs - 0.12),
+          p(a0 + 0.3, bs + 0.12),
+          p(a1 - 0.4, bs + sk + 0.1),
+          p(a1 - 0.4, bs + sk - 0.1),
+        ].map(q => [q[0], q[1] + 0.01, q[2]] as Vec3),
+        [0.55, 0.56, 0.6],
+        under,
+      );
     }
   }
   // The bottom of the cracks past the rille's own, black, 30 m down.

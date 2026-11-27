@@ -218,6 +218,37 @@ GEN[TEX.ROCK] = (u, v) => {
   return [c, clamp(0.35 + 0.5 * f - 0.3 * pit - 0.25 * crack)];
 };
 
+// Woven cloth, near white so the brush tint is its colour: a twill of diagonal ribs every 2
+// texels, a fleck a thread, and a small diamond printed every 16 texels in a paler thread.
+GEN[TEX.FABRIC] = (u, v) => {
+  const [x, y] = [Math.floor(u * SIZE), Math.floor(v * SIZE)];
+  const rib = (x + y) % 4 < 2 ? 1 : 0;
+  const fleck = hash(x, y, 51);
+  const [cx, cy] = [(x % 16) - 7.5, (y % 16) - 7.5];
+  const motif = Math.abs(Math.abs(cx) + Math.abs(cy) - 4) < 1.2 ? 1 : 0;
+  const k = 0.78 + 0.1 * rib + 0.08 * fleck + 0.2 * motif;
+  return [scale([232, 232, 236], k), clamp(0.3 + 0.45 * rib + 0.2 * fleck)];
+};
+
+// Leather, near white so the brush tint is its colour: a grain of small pebbles (cells of 4
+// texels, each its own tone), soft creases, and a stitched seam round 64 texel panels.
+GEN[TEX.HIDE] = (u, v) => {
+  const [x, y] = [Math.floor(u * SIZE), Math.floor(v * SIZE)];
+  const pebble = hash(x >> 2, y >> 2, 53);
+  const edge = (x & 3) == 0 || (y & 3) == 0 ? 1 : 0;
+  const crease = fbm(u * 4, v * 4, 4, 3, 55);
+  const [sx, sy] = [x % 64, y % 64];
+  const seam = sx < 2 || sy < 2;
+  const stitch = (sx == 4 && (y & 3) < 2) || (sy == 4 && (x & 3) < 2);
+  const k = seam
+    ? 0.55
+    : (0.82 + 0.1 * pebble - 0.08 * edge) * (0.9 + 0.2 * crease) * (stitch ? 1.15 : 1);
+  return [
+    scale([228, 226, 224], k),
+    seam ? 0.1 : clamp(0.35 + 0.35 * pebble - 0.2 * edge + 0.2 * crease),
+  ];
+};
+
 /** The layers, made once: every renderer (the game's, the character screen's) uploads the same. */
 let made: Uint8ClampedArray | undefined;
 

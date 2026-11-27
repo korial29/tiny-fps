@@ -349,6 +349,10 @@ export const TEX = {
   PAINT: 11,
   /** Dark basalt: mottled, speckled with pits and light flecks, a few fine cracks. The moon's boulders. */
   ROCK: 12,
+  /** Woven seat cloth, near white so a tint is its colour: a twill and a small printed motif. Airliners' seats and carpets. */
+  FABRIC: 13,
+  /** Grained leather, near white so a tint is its colour, stitched in panels. Seats and luggage. */
+  HIDE: 14,
 } as const;
 
 /** One player in a snapshot: the state (its ev and fall read 0) and the ack. */

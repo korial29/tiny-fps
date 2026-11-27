@@ -1,232 +1,44 @@
-import { DECKS, HULL as SHAPE } from '../../shared/beach';
+import { DECKS, HULL as SHAPE, SHIP } from '../../shared/beach';
 import { hash } from '../../shared/relief';
-import { TEX } from '../../shared/types';
-import type { V, Mat } from './types';
+import type { V } from './types';
 import {
-  tex,
   ink,
   MID,
   SOOT,
   PANE,
   DOWN,
   sub,
-  cross,
   unit,
   mid,
   off,
   QUAD,
   o,
   face,
-  loft,
   teeth,
+  setO,
 } from './common';
-import { ROWS, ROUND, SILL, form, wide, spot, ring, SHATTER, lines, inner, skin } from './hull';
-import { flat } from './inside';
-import { setO } from './common';
+import { ROWS, ROUND, SILL, form, wide, spot, ring, SHATTER, skin } from './hull';
+import { flat, reach } from './inside';
+import { rod, cube, turn } from './shapes';
+import { trim } from './trim';
+import { seats, galley, lavatory } from './seats';
+import { LUGGAGE, luggage } from './hold';
+import { captain, cap } from './pilot';
 
 // ---------------------------------------------------------------------------------------------
-// The cabin: it carried troops. Seats along the flanks, the flight deck in the nose.
+// The cabin of an airliner (the user, 2026-11-27): the passengers' seats, the galleys and a
+// lavatory, the luggage in the holds, the trim, and the flight deck in the nose with its captain.
 
-/** Olive drab canvas, its webbing darker, the seats' tubes dark grey. */
-export const CANVAS = ink([0.3, 0.31, 0.16]);
-export const WEB = ink([0.15, 0.16, 0.085]);
+/** The harnesses' webbing and the seats' tubes, dark grey. */
+export const WEB = ink([0.1, 0.1, 0.11]);
 export const TUBE = ink([0.17, 0.17, 0.18]);
-/** The flight deck: its consoles and seats, their cushions, and the instruments' faces, dim (a glow) or dead. */
-export const CONSOLE = ink([0.13, 0.135, 0.145]);
-export const CUSHION = ink([0.2, 0.21, 0.12]);
+/** The flight deck: its grey consoles and seats, their sheepskin cushions, the carpet, and the instruments' faces, dim (a glow) or dead. */
+export const CONSOLE = ink([0.17, 0.18, 0.2]);
+export const CUSHION = ink([0.26, 0.24, 0.21]);
+const DECK_CARPET = ink([0.07, 0.07, 0.08]);
 export const DIAL = ink([0.06, 0.22, 0.12], 1, -2);
 export const AMBER = ink([0.3, 0.15, 0.02], 1, -2);
 export const DEAD = ink([0.02, 0.025, 0.03]);
-
-/** A tube from a to b, w across: three sides and no ends, enough at arm's length. */
-export const rod = (a: V, b: V, w: number, m: Mat) => {
-  const d = unit(sub(b, a));
-  const s = unit(cross(d, Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]));
-  const u = cross(s, d);
-  const r = 0.58 * w;
-  const tri = [0, 1, 2, 0].map(i =>
-    off(off([0, 0, 0], s, r * Math.cos(2.0944 * i)), u, r * Math.sin(2.0944 * i)),
-  );
-  loft(
-    tri.map(t => off(a, t)),
-    tri.map(t => off(b, t)),
-    () => m,
-    mid(a, b),
-  );
-};
-
-/** A box in the frame of `o` and its axes `ax`, from `lo` to `hi` along them: its six faces, the top (+ax[1]) in `top`. */
-export const cube = (o: V, ax: V[], lo: V, hi: V, m: Mat, top = m) => {
-  const at = (t: V) => off(off(off(o, ax[0], t[0]), ax[1], t[1]), ax[2], t[2]);
-  const c = at(mid(lo, hi));
-  for (let i = 0; i < 6; i++) {
-    const [e, p, q] = [i >> 1, ((i >> 1) + 1) % 3, ((i >> 1) + 2) % 3];
-    face(
-      QUAD.map(k => {
-        const t = [0, 0, 0];
-        [t[e], t[p], t[q]] = [(i & 1 ? hi : lo)[e], (k & 1 ? hi : lo)[p], (k & 2 ? hi : lo)[q]];
-        return at(t);
-      }),
-      i == 3 ? top : m,
-      c,
-    );
-  }
-};
-
-/** The axes `ax` turned by `t` round the unit axis `a` (Rodrigues). */
-export const turn = (ax: V[], a: V, t: number) =>
-  ax.map(v => {
-    const [c, s] = [Math.cos(t), Math.sin(t)];
-    const k = (1 - c) * (a[0] * v[0] + a[1] * v[1] + a[2] * v[2]);
-    const x = cross(a, v);
-    return [0, 1, 2].map(i => v[i] * c + x[i] * s + a[i] * k);
-  });
-
-/**
- * A row of fold-down troop seats along a flank, facing in: a canvas pan and a webbed back on each,
- * slung from three tubes that run the row, legs every other seat. From xa to xb on the floor at y,
- * the lining at `w` from the line on the side sg. A seat is down, folded up, hanging broken or
- * gone, a strap of its belt dangling now and then.
- */
-export const troops = (xa: number, xb: number, y: number, w: number, sg: number) => {
-  /** A point `d` in from the lining. */
-  const at = (x: number, h: number, d: number) => [x, y + h, MID + sg * (w - d)];
-  const wall = [0, y, MID + sg * (w + 9)];
-  const [d0, d1, pitch] = [0.22, 0.64, 0.55];
-  const n = Math.floor((xb - xa) / pitch);
-  const x0 = (xa + xb - n * pitch) / 2;
-  const x1 = x0 + n * pitch;
-  rod(at(x0, 1.2, d0 - 0.03), at(x1, 1.2, d0 - 0.03), 0.045, TUBE);
-  rod(at(x0, 0.46, d0), at(x1, 0.46, d0), 0.04, TUBE);
-  rod(at(x0, 0.45, d1), at(x1, 0.45, d1), 0.04, TUBE);
-  for (let i = 0; i <= n; i += 2) {
-    const x = x0 + i * pitch;
-    rod(at(x, 0, d1 - 0.1), at(x, 0.45, d1), 0.035, TUBE);
-    rod(at(x, 0.46, d0), at(x, 1.2, d0 - 0.03), 0.03, TUBE);
-  }
-  for (let i = 0; i < n; i++) {
-    const [a, b] = [x0 + i * pitch + 0.035, x0 + (i + 1) * pitch - 0.035];
-    const seed = Math.round(a * 20) + (sg > 0 ? 7919 : 0);
-    const r = hash(seed, Math.round(y * 4), 61);
-    const k = 0.85 + 0.3 * hash(seed, 3, 62);
-    // The back: a sheet of webbing, two straps up and two across it, on the side facing in.
-    if (r < 0.95) {
-      face(
-        [at(a, 0.5, d0 + 0.015), at(b, 0.5, d0 + 0.015), at(b, 1.17, d0), at(a, 1.17, d0)],
-        WEB,
-        wall,
-        k,
-      );
-      for (const u of [0.3, 0.7]) {
-        const x = a + u * (b - a);
-        face(
-          [
-            at(x - 0.03, 0.5, d0 + 0.03),
-            at(x + 0.03, 0.5, d0 + 0.03),
-            at(x + 0.03, 1.17, d0 + 0.02),
-            at(x - 0.03, 1.17, d0 + 0.02),
-          ],
-          CANVAS,
-          wall,
-          k,
-        );
-      }
-      for (const h of [0.7, 0.98]) {
-        face(
-          [
-            at(a, h, d0 + 0.035),
-            at(b, h, d0 + 0.035),
-            at(b, h + 0.1, d0 + 0.035),
-            at(a, h + 0.1, d0 + 0.035),
-          ],
-          CANVAS,
-          wall,
-          k,
-        );
-      }
-    }
-    if (r < 0.58) {
-      // Down: the canvas sags between the rails.
-      const sag = [
-        at(a, 0.46, d0),
-        at(b, 0.46, d0),
-        at(b, 0.42, (d0 + d1) / 2),
-        at(a, 0.42, (d0 + d1) / 2),
-      ];
-      face(sag, CANVAS, DOWN, k);
-      face([sag[3], sag[2], at(b, 0.45, d1), at(a, 0.45, d1)], CANVAS, DOWN, k);
-    } else if (r < 0.84) {
-      // Folded up against the back.
-      face(
-        [
-          at(a, 0.5, d0 + 0.07),
-          at(b, 0.5, d0 + 0.07),
-          at(b, 0.92, d0 + 0.09),
-          at(a, 0.92, d0 + 0.09),
-        ],
-        CANVAS,
-        wall,
-        0.8 * k,
-      );
-    } else if (r < 0.93) {
-      // Torn off its front rail, hanging from the back one.
-      face(
-        [
-          at(a, 0.46, d0),
-          at(b, 0.46, d0),
-          at(b - 0.04, 0.08, d0 + 0.18),
-          at(a + 0.06, 0.1, d0 + 0.2),
-        ],
-        CANVAS,
-        wall,
-        0.75 * k,
-      );
-    }
-    if (hash(seed, 5, 63) < 0.3) {
-      // A belt's strap hanging from the front rail, its buckle at the end.
-      const x = a + (b - a) * (0.25 + 0.5 * hash(seed, 6, 64));
-      const l = 0.15 + 0.2 * hash(seed, 7, 65);
-      const s = 0.06 * (hash(seed, 8, 66) - 0.5);
-      face(
-        [
-          at(x - 0.025, 0.44, d1 + 0.02),
-          at(x + 0.025, 0.44, d1 + 0.02),
-          at(x + 0.025 + s, l, d1 + 0.05),
-          at(x - 0.025 + s, l, d1 + 0.05),
-        ],
-        WEB,
-        wall,
-        k,
-      );
-      face(
-        [
-          at(x - 0.04 + s, l, d1 + 0.055),
-          at(x + 0.04 + s, l, d1 + 0.055),
-          at(x + 0.04 + s, l - 0.06, d1 + 0.055),
-          at(x - 0.04 + s, l - 0.06, d1 + 0.055),
-        ],
-        TUBE,
-        wall,
-      );
-    }
-  }
-};
-
-/**
- * Where the troops sat: rows along both flanks of the middle section's hold and deck and of the
- * nose's, each section, its floor (-1 the lowest, else the index in DECKS) and x0, x1. The rows leave the doors, the tears,
- * the holes across a deck and the broken ends free, and stop short of the wall in the trees.
- */
-export const ROWS_OF_SEATS = [
-  [1, -1, 44.6, 57.1],
-  [1, -1, 60.9, 73.4],
-  [1, 0, 44.6, 47.3],
-  [1, 0, 55.3, 66.8],
-  [1, 0, 70.7, 73.4],
-  [2, -1, 82.6, 88.9],
-  [2, -1, 91.1, 94.5],
-  [2, 0, 91.2, 94.5],
-];
 
 /** The flight deck behind the canopy: two pilots' seats, the instrument panel under the windscreen, the pedestal with its throttles, the overhead panel, and what the crash threw about. */
 export const cockpit = () => {
@@ -248,19 +60,20 @@ export const cockpit = () => {
         [x, y, MID + q],
         [fx[i], y, MID + p],
       ],
-      tex(TEX.METAL, 0.3),
+      DECK_CARPET,
       DOWN,
     );
   });
   const F = [1, 0, 0];
   const U = [0, 1, 0];
   const S = [0, 0, 1];
-  // The pilots' seats, the co-pilot's torn from its rails and tipped against the pedestal.
+  // The pilots' seats: the captain's on the left (-z, yaw zero faces -z and the nose is +x),
+  // the first officer's torn from its rails and tipped against the pedestal.
   for (const sg of [-1, 1]) {
     const o = [98.35, y, MID + sg * 0.85];
     let ax = [F, U, S];
-    if (sg < 0) {
-      ax = turn(turn(ax, F, -0.32), U, 0.35);
+    if (sg > 0) {
+      ax = turn(turn(ax, F, -0.32), U, -0.35);
       o[1] += 0.06;
     }
     cube(o, ax, [-0.2, 0, -0.17], [0.2, 0.32, 0.17], CONSOLE);
@@ -346,6 +159,8 @@ export const cockpit = () => {
       i & 1 ? SOOT : TUBE,
     );
   }
+  captain(98.36, y + 0.44, MID - 0.85);
+  cap(97.6, y, MID - 1.55, 0.7);
   // Debris on the floor: a fallen panel, a seat's cushion, plates against the flanks.
   cube(
     [97.5, y, MID + 0.35],
@@ -411,13 +226,22 @@ export const canopy = (): number[] => {
   return o;
 };
 
-/** Inside the hull: the troops' seats in rows on its flanks and the flight deck. */
+/** Inside the hull: the seats, galleys and lavatory, the luggage, the trim on the linings, and the flight deck. */
 export const cabin = () => {
-  for (const [n, deck, xa, xb] of ROWS_OF_SEATS) {
-    const i = deck < 0 ? 0 : lines(n).indexOf(DECKS[deck]);
-    for (const sg of [-1, 1]) {
-      troops(xa, xb, SHAPE.axis[n] + lines(n)[i], inner(n, (xa + xb) / 2, i), sg);
-    }
+  SHIP.forEach((_, n) => {
+    seats(n);
+    trim(n);
+  });
+  for (const [n, xa, xb] of LUGGAGE) {
+    luggage(n, xa, xb);
   }
+  // The aft galley at the tail's bulkhead, the forward one and a lavatory before the nose's.
+  const [stern] = reach(0);
+  for (const sg of [-1, 1]) {
+    galley(0, stern, DECKS[0], sg, 1);
+  }
+  const [, bow] = reach(2);
+  galley(2, bow, DECKS[0], -1, -1);
+  lavatory(2, bow, DECKS[0], 1, -1);
   cockpit();
 };

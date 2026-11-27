@@ -143,7 +143,7 @@ bots' routes described above.
 
 The ship carried troops. Its inside now says so, and the canopy is glass.
 
-- **Troop seats** (`troops()`, `ROWS_OF_SEATS` in `hulk/cabin.ts`): fold-down rows along both flanks,
+- **Troop seats** (replaced by an airliner's cabin on 2026-11-27, below): fold-down rows along both flanks,
   facing in, a seat every 0.55 m: a canvas pan and a webbed back slung from three tubes, legs every
   other seat; down, folded up, hanging broken or gone, a belt's strap dangling now and then. In the
   middle section's hold (x 44.6..57.1 and 60.9..73.4) and deck (44.6..47.3, 55.3..66.8,
@@ -295,3 +295,45 @@ the gaps crossed on foot and the hold walked into described above.
   after alternated three times): at the spawn looking at the wreck 8.32 → 8.41 ms, in the hold
   facing its door 8.73 → 8.69 ms, within the noise. Highline and Tranquility draw none of it; the
   shader's changes are under `BEACH` but for one comparison.
+
+## An airliner's cabin (the user, 2026-11-27)
+
+The wreck was an airliner: its inside now says so, every room in its place. Drawn only, as the
+troops' seats were: nothing within 2.9 m of the centre line under head height, none in a tear, on
+a hole or at a broken end, so a runner pressed to the wall passes into the furniture.
+
+- **Linings** (`inside.ts`, `trim.ts`): walls and ceilings one light grey in painted 1 m panels
+  (`TEX.PAINT`; a ceiling, lit only from below, at a texture's strongest light, 1.99). The ribs are
+  gone. On the main deck the overhead bins (`BIN`) round the wall into the ceiling, a door seam
+  every 1.5 m, about one door in seven burst open, oxygen masks hanging; elsewhere a quarter-round
+  cove (0.45 m in the hold, 0.35 m upstairs) and a 12 cm cove at the floor. A lighting strip glows
+  along each ceiling's edge, dead here and there. Rounded windows on the passengers' decks, some
+  with the shade down. A bulkhead closes the nose's main deck and hold at x 95 (`EDGE.east`).
+- **Floors**: the passengers' decks in carpet, the holds keep the grating.
+- **Seats** (`seats.ts`): economy three abreast on the main decks (0.8 m pitch), business pairs
+  in white shells upstairs and on the nose's main deck (1.25 m), facing the nose. The backs' tops,
+  the cushions' front edges, the armrests and the shells' wings are rounded (`slab()` and `plate()`
+  in `shapes.ts`: a rounded rectangle swept along an axis); a back stands, lies broken forward or
+  is gone.
+- **Galleys and a lavatory**: aft galleys at the tail's bulkhead, a forward one and a lavatory
+  (its sign green, vacant) at the nose's: carts, ovens and lockers, one cart rolled out on its side.
+- **Holds** (`hold.ts`): suitcases piled along both flanks behind cargo nets, a diamond mesh of
+  olive webbing between yellow straps; the doors and the tail's flooded hold left clear.
+- **The flight deck**: the captain dead in the left seat (`pilot.ts`), slumped toward the window,
+  his cap on the floor; the first officer's seat is the one torn from its rails.
+- **The holes' edges**: the tears' frames, the broken ends' rings and the backs of the torn panels
+  round the holes in a deck are flat grey (`TRIM`): brushed steel's fine lines shimmered on them.
+- **Textures on the props**: two layers, `FABRIC` (a twill with a small printed diamond) and `HIDE`
+  (grained leather, stitched panels), near white so a tint is their colour; galleys in brushed
+  steel. A world may list tints of its own (`WorldDef.tints`): Landfall's `CABIN` (navy cloth,
+  brown leather, carpet, red, green and tan cases). `tints()` (`shared/world.ts`) puts them first
+  after white, so the brushes the renderer adds (`city()`) never move their slots; the props
+  encode their slot as the textures' brushes do (2 a slot over the light). Landfall's palette is
+  now full, 16 of `MAX_TINTS` 16.
+- **Vertices**: the wreck 109,146 → 204,504 (inside 18,708 → 14,784, cabin 13,632 → 112,914: seats
+  about 80,000, luggage 18,600, trim 15,000). Building it at load 55 → 98 ms (Node, median of 14).
+- **Frame** (headless Chrome on Metal, 1280 × 720, GPU timer, medians of 120 frames, before and
+  after alternated four times): on the main deck 12.0 → 12.7 ms, in the hold 12.1 → 12.75 ms
+  (medians of the four runs), outside looking at the wreck 8.8 → 9.4 ms (two runs each). Without the cabin's props
+  the main deck draws in 10.9 ms. Highline (5.3 ms) and Tranquility draw none of it and measured
+  the same.

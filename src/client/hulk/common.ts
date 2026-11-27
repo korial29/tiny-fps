@@ -1,4 +1,5 @@
-import { ZED } from '../../shared/beach';
+import { BEACH, CABIN, ZED } from '../../shared/beach';
+import { tints } from '../../shared/world';
 import type { Piece } from '../../shared/beach';
 import { hash, noise } from '../../shared/relief';
 import { TEX } from '../../shared/types';
@@ -9,6 +10,13 @@ import { SAND } from '../shore';
 import type { V, Mat } from './types';
 
 export const tex = (l: number, k = 1, s = 1, r?: boolean): Mat => ({ l, c: [k], s, r });
+/** The palette's slots of Landfall's tints: first after white, whatever brushes the renderer adds. */
+const SLOTS = tints(BEACH).map(String);
+/** A texture tinted `tint`, one of the world's (CABIN): its light k, s tiles a metre. */
+export const tinted = (l: number, tint: V, k = 1, s = 1): Mat => ({
+  ...tex(l, k, s),
+  t: Math.max(0, SLOTS.indexOf(`${tint}`)),
+});
 export const ink = (c: V, k = 1, l = -1): Mat => ({ l, c: c.map(v => v * k), s: 1 });
 
 export const MID = ZED / 2;
@@ -27,6 +35,19 @@ export const PANE = ink([0, 0, 0], 1, CANOPY);
 export const DUNE = ink([0.64, 0.59, 0.48], 1, SAND);
 /** An emergency lamp's glow. */
 export const LAMP = ink([1, 0.62, 0.25], 1, -2);
+/**
+ * An airliner's cabin (the user, 2026-11-27): the walls and ceilings one light grey, in painted
+ * 1 m panels, a dark blue-grey carpet, and the edges of the panels and floors a mid grey. The thin
+ * edges round the holes and the small parts in flat paint (FLAT): a texture's fine lines
+ * shimmered on them.
+ */
+export const WALL = tex(TEX.PAINT, 1.37);
+export const CEIL = WALL;
+export const FLAT = ink([1.3, 1.33, 1.38]);
+/** A ceiling, facing down: lit only by the light bounced from below, dim and blue, so as strong as a texture's light goes. */
+export const UNDER = tex(TEX.PAINT, 1.99);
+export const TRIM = ink([0.42, 0.43, 0.45]);
+export const CARPET = tinted(TEX.FABRIC, CABIN.carpet, 1, 2);
 export const DOWN = [0, -99, 0];
 
 export const sm = (t: number) => {
@@ -62,7 +83,18 @@ export const put = (p: V, n: V, m: Mat, k: number) => {
     const [u, v] =
       Math.abs(n[1]) > 0.7 ? [p[0], p[2]] : Math.abs(n[0]) > 0.7 ? [p[2], p[1]] : [p[0], p[1]];
     const [a, b] = m.r ? [v, u] : [u, v];
-    o.push(p[0], p[1], p[2], n[0], n[1], n[2], a * m.s, b * m.s, m.l, Math.min(m.c[0] * k, 1.99));
+    o.push(
+      p[0],
+      p[1],
+      p[2],
+      n[0],
+      n[1],
+      n[2],
+      a * m.s,
+      b * m.s,
+      m.l,
+      Math.min(m.c[0] * k, 1.99) + 2 * (m.t ?? 0),
+    );
   }
 };
 
@@ -158,7 +190,7 @@ export const RAW = tex(TEX.STEEL, 0.6);
  * leans and twisted a little about its length. Its face is `m` lit `k`, darker toward the tip;
  * its back, a centimetre behind, is bare metal (glass has none).
  */
-export const teeth = (a: V, b: V, d: V, n: number, m: Mat, k = 1, c = DOWN) => {
+export const teeth = (a: V, b: V, d: V, n: number, m: Mat, k = 1, c = DOWN, back = RAW) => {
   // Red's and blue's twins tear alike: the seed is the same either side of the line.
   const seed = a[0] * 7 + Math.abs(a[2] - MID) * 3 + a[1];
   const h = (i: number, j: number) => hash(i, seed + j * 1.37, 11 + j);
@@ -218,7 +250,7 @@ export const teeth = (a: V, b: V, d: V, n: number, m: Mat, k = 1, c = DOWN) => {
       if (m.l != CANOPY) {
         face(
           tri.map(p => off(p, nrm, -0.012)),
-          RAW,
+          back,
           off(pts[0], nrm, 9),
           kk.map(v => Math.min(1, 0.5 + v)),
         );

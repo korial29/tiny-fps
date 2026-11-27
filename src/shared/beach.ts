@@ -934,6 +934,20 @@ const team = (red: boolean) => {
 /** In the gallery, inside red's tear. */
 const GALLERY: Vec3 = [70.5, HULL.axis[1] + DECKS[1], MID + 3];
 
+/**
+ * The tints of the wreck's cabin on its textures (the user, 2026-11-27: textured props): the
+ * economy seats' navy cloth, business's brown leather, the carpet, and the suitcases' red, green
+ * and tan. A texture's light then sets how dark.
+ */
+export const CABIN = {
+  navy: [0.09, 0.12, 0.25],
+  leather: [0.26, 0.21, 0.18],
+  carpet: [0.2, 0.22, 0.33],
+  red: [0.4, 0.07, 0.06],
+  green: [0.08, 0.2, 0.1],
+  tan: [0.45, 0.31, 0.16],
+} satisfies Record<string, Vec3>;
+
 export const BEACH: WorldDef = {
   // Highline's runners (docs/BEACH.md): armour in the team's colour, no helmet.
   armor: true,
@@ -941,6 +955,7 @@ export const BEACH: WorldDef = {
   tag: 'Beach · wreck',
   lore: 'A ship came down across a Caribbean beach, its tail in the lagoon and its nose in the trees. The survivors camp at either end of the sand and fight over the wreck between them.',
   brushes: [...half, ...half.map(flip), ...centre],
+  tints: Object.values(CABIN),
   teams: [team(true), team(false)],
   // Health: the camp, the strand's west, the hold's door, the first float, the trees; one in each gap.
   packs: both(

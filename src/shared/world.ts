@@ -54,6 +54,8 @@ export interface WorldDef {
   tag?: string;
   lore?: string;
   brushes: Brush[];
+  /** Tints its drawn-only props use on textures, first in the shader's palette after white (tints()). */
+  tints?: Vec3[];
   /** The red team, then the blue one (TEAM). */
   teams: [red: TeamDef, blue: TeamDef];
   /** Feet below this height have fallen off the roofs: the player is put back at a spawn of the team. */
@@ -133,6 +135,15 @@ export const atPoint = (w: World, x: number, z: number): readonly number[] =>
   w.grid.get(key(at(x, w.cell), at(z, w.cell))) ?? EMPTY;
 
 /** Builds the grid: each brush is listed in every cell its footprint covers. */
+/** The tints of a world's textures, white first and each once: its props' (at slots that the brushes added round it never move), then its brushes'. The shader's palette (MAX_TINTS at most). */
+export const tints = (def: Pick<WorldDef, 'brushes' | 'tints'>): Vec3[] => [
+  ...new Map<string, Vec3>([
+    ['1,1,1', [1, 1, 1]],
+    ...(def.tints ?? []).map((t): [string, Vec3] => [`${t}`, t]),
+    ...def.brushes.flatMap(({ tint }): [string, Vec3][] => (tint ? [[`${tint}`, tint]] : [])),
+  ]).values(),
+];
+
 export const build = (def: WorldDef, cell = CELL): World => {
   const grid = new Map<number, number[]>();
   def.brushes.forEach(({ min, max }, i) => {

@@ -1,5 +1,4 @@
 import { ENGINES, HULL as SHAPE } from '../../shared/beach';
-import { TEAM_TINT } from '../../shared/map';
 import { hash, noise } from '../../shared/relief';
 import { TEX } from '../../shared/types';
 import { dress, smooth } from '../mesh';
@@ -16,7 +15,6 @@ import {
   SOOT,
   IRON,
   STRIPE,
-  GLASS,
   DOWN,
   sm,
   sub,
@@ -34,6 +32,7 @@ import {
 } from './common';
 import { coat, BELL, SET_BACK } from './hull';
 import { tent } from './tent';
+import { CAMPSITE } from './camp';
 
 // ---------------------------------------------------------------------------------------------
 // The debris and the camps.
@@ -294,47 +293,6 @@ export const KIND: Record<
       }
     }
   },
-  // The escape pod: its corners cut, its foot scorched, a band in the team's colour, the hatch open toward the flag, its parachute on the sand behind.
-  pod: ({ min: a, max: b }, _t, s) => {
-    const team = TEAM_TINT[s > 0 ? 0 : 1];
-    const g = a[1] + 0.5;
-    const c = mid(a, b);
-    const [x, z] = [c[0], (s > 0 ? a[2] : b[2]) - s * 0.04];
-    prism(a, b, 0.42, SKIN, ink(WHITE.c, 0.8, HULL), 0, [0.5, 1]);
-    prism(a, [b[0], g + 0.8, b[2]], 0.42, SOOT, undefined, 0.04);
-    prism([a[0], g + 2, a[2]], [b[0], g + 2.4, b[2]], 0.42, ink(team, 0.8), undefined, 0.03);
-    face(
-      QUAD.map(i => [x + (i & 1 ? 0.65 : -0.65), g + (i & 2 ? 1.95 : 0), z]),
-      SOOT,
-      c,
-    );
-    for (const u of [-0.7, 0.7]) {
-      bar([x + u, g, z], [x + u, g + 2, z], 0.1, IRON);
-      face(
-        QUAD.map(i => [
-          x + 3.03 * Math.sign(u),
-          g + (i & 2 ? 1.7 : 1.2),
-          c[2] + (i & 1 ? 0.3 : -0.3),
-        ]),
-        GLASS,
-        c,
-      );
-    }
-    bar([x - 0.7, g + 2, z], [x + 0.7, g + 2, z], 0.1, IRON);
-    box([x + 1, g - 0.1, z - s * 2.6 - 0.95], [x + 2.3, g + 0.1, z - s * 2.6 + 0.95], SKIN);
-    const hub = [x, g + 0.28, c[2] + s * 7];
-    const rim = (i: number) => {
-      const r = 3 + 1.3 * hash(i % 14, s, 71);
-      return [
-        x + r * Math.cos((i * Math.PI) / 7),
-        g + 0.03 + 0.2 * hash(i % 14, s, 72),
-        hub[2] + r * Math.sin((i * Math.PI) / 7),
-      ];
-    };
-    for (let i = 0; i < 14; i++) {
-      face([hub, rim(i), rim(i + 1)], ink(i & 1 ? STRIPE : [0.8, 0.8, 0.76], 0.9), DOWN);
-    }
-  },
   // A heap of wreckage across a gap, broken end to broken end: plates of skin leaning on a dark
   // core on both faces, their tops torn, a deck plate on top; a broken end's lowest floor crushed
   // shut (`jam`, d = 0): the same plates across it, on the face toward the gap.
@@ -391,10 +349,20 @@ export const KIND: Record<
   },
 };
 KIND.float = KIND.raft = KIND.panel;
+Object.assign(KIND, CAMPSITE);
 // A jam faces the gap: +x at a section's east end.
 KIND.jam = (p, t, s) => KIND.heap(p, t, s, SHAPE.sections.some(e => e[1] == p.max[0]) ? 1 : -1);
 
 /** The kinds of the camps: the rest is debris. */
-export const CAMP = ['pod', 'dais', 'crate', 'shelter'];
+export const CAMP = ['dais', 'crate', 'shelter', ...Object.keys(CAMPSITE)];
 /** The kinds no sand lies against: afloat, or cloth, or the flag's step, or drawn off their boxes. */
-export const BARE = ['shelter', 'float', 'raft', 'engine', 'dais', 'fallen', 'rail'];
+export const BARE = [
+  'shelter',
+  'float',
+  'raft',
+  'engine',
+  'dais',
+  'fallen',
+  'rail',
+  ...Object.keys(CAMPSITE),
+];

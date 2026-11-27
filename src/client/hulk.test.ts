@@ -11,6 +11,7 @@ import {
   LINES,
   CABIN,
   thick,
+  PROPS,
 } from '../shared/beach';
 import { build } from '../shared/world';
 import { TEAM_TINT } from '../shared/map';
@@ -79,7 +80,8 @@ describe('hulk', () => {
     expect(count(made.debris)).toBeLessThan(38_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26), and the sand round the crates.
     // Stretch tents (2026-11-27): camps 9,228 to 10,476, 1,248 a tent; in all 254,778.
-    expect(count(made.camps)).toBeLessThan(13_000);
+    // The pod gone for the survivors' camp (the user, 2026-11-27): camps CAMPS.
+    expect(count(made.camps)).toBeLessThan(16_000);
     expect(count(hulk(BEACH))).toBeLessThan(255_000);
   });
 
@@ -115,8 +117,8 @@ describe('hulk', () => {
     expect(verts(hulk(BEACH)).some(v => v[8] === CANOPY)).toBe(false);
   });
 
-  it('draws on boxes the level leaves out: every piece of the map is a ghost', () => {
-    for (const p of LAYOUT.pieces) {
+  it('draws on boxes the level leaves out: every piece of the map is a ghost, but the camps’ props', () => {
+    for (const p of LAYOUT.pieces.filter(q => !PROPS.includes(q.kind))) {
       const b = BEACH.brushes.find(e =>
         e.min.every((v, i) => v === p.min[i] && e.max[i] === p.max[i]),
       );
@@ -288,20 +290,28 @@ describe('hulk', () => {
       'engine',
       'float',
       'rail',
-      'pod',
       'dais',
       'crate',
       'panel',
       'container',
       'gear',
       'shelter',
+      'hearth',
+      'log',
+      'wood',
+      'mat',
+      'drying',
     ];
     for (const kind of kinds) {
-      const n = of(kind).map(
-        ({ min, max }) =>
-          all.filter(v => [0, 1, 2].every(i => v[i] > min[i] - 0.06 && v[i] < max[i] + 0.06))
-            .length,
-      );
+      // The camps' props are turned askew about their box's middle (camp.ts askew()): out to its half-diagonal.
+      const n = of(kind).map(({ min, max }) => {
+        const pad = PROPS.includes(kind) ? Math.hypot(max[0] - min[0], max[2] - min[2]) / 2 : 0.06;
+        return all.filter(v =>
+          [0, 1, 2].every(
+            i => v[i] > min[i] - (i == 1 ? 0.06 : pad) && v[i] < max[i] + (i == 1 ? 0.06 : pad),
+          ),
+        ).length;
+      });
       expect(Math.min(...n), kind).toBeGreaterThanOrEqual(24);
     }
     // The fallen engine lies on its strips, one in each half.
@@ -322,7 +332,7 @@ describe('hulk', () => {
     }
   });
 
-  it('paints each camp in its team’s colour: the flag’s step, the tarpaulins, the pod’s band', () => {
+  it('paints each camp in its team’s colour: the flag’s step, the tarpaulins', () => {
     TEAM_TINT.forEach((tint, k) => {
       const mine = verts(made.camps).filter(
         v => (v[8] === -1 || v[8] === TARP) && v[2] > MID === !k,
@@ -330,8 +340,8 @@ describe('hulk', () => {
       const hue = (v: number[]) => [v[6], v[7], v[9]].map(c => c / Math.max(v[6], v[7], v[9]));
       const want = tint.map(c => c / Math.max(...tint));
       const team = mine.filter(v => hue(v).every((c, i) => Math.abs(c - want[i]) < 1e-6));
-      // Two tents' cloth of 576 vertices (8 × 6 quads, both faces), the step's top twice, the band of eight faces.
-      expect(team.length).toBeGreaterThanOrEqual(2 * 576 + 12 + 48);
+      // Two tents' cloth of 576 vertices (8 × 6 quads, both faces), the step's top twice.
+      expect(team.length).toBeGreaterThanOrEqual(2 * 576 + 12);
     });
   });
 

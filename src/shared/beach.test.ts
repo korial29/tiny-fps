@@ -20,8 +20,9 @@ import {
   HOLD,
   HULL,
   LAYOUT,
+  PROPS,
   LINES,
-  POD,
+  HEARTH,
   RINGS,
   RISE,
   ROCKS,
@@ -214,7 +215,7 @@ describe('LANDFALL, symmetry', () => {
       expect(b[k]).toEqual(flipped(r[k]!));
     }
     expect(b.spawns).toEqual(r.spawns.map(([x, y, z]) => [x, y, ZED - z, Math.PI]));
-    expect(r.spawns.every(s => s[3] === 0 && s[2] > POD[1])).toBe(true);
+    expect(r.spawns.every(s => s[3] === 0 && s[2] > HEARTH[1])).toBe(true);
     for (const l of [BEACH.packs!, BEACH.ammo!, BEACH.cells!, BEACH.vests!]) {
       for (const p of l) {
         expect(l).toContainEqual(flipped(p));
@@ -222,7 +223,7 @@ describe('LANDFALL, symmetry', () => {
     }
   });
 
-  it('lists what the scenery draws on the boxes: every piece a brush, both halves, each kind there', () => {
+  it('lists what the scenery draws on the boxes: every piece a brush but the props, both halves, each kind there', () => {
     for (const kind of [
       'skin',
       'deck',
@@ -235,7 +236,6 @@ describe('LANDFALL, symmetry', () => {
       'raft',
       'engine',
       'float',
-      'pod',
       'dais',
       'crate',
       'shelter',
@@ -245,7 +245,7 @@ describe('LANDFALL, symmetry', () => {
     ]) {
       expect(pieces(kind, false).length, kind).toBeGreaterThan(0);
     }
-    for (const p of LAYOUT.pieces) {
+    for (const p of LAYOUT.pieces.filter(q => !PROPS.includes(q.kind))) {
       expect(
         solid.some(b => same(b, { ...b, min: p.min, max: p.max })),
         `${p.kind} at ${p.min}`,
@@ -259,7 +259,7 @@ describe('LANDFALL, symmetry', () => {
     }
     // Every box of the wreck is a piece, and a ghost: hulk.ts draws the ship on them.
     expect(solid.every(b => b.ghost)).toBe(true);
-    expect(LAYOUT.pieces).toHaveLength(solid.length);
+    expect(LAYOUT.pieces.filter(q => !PROPS.includes(q.kind))).toHaveLength(solid.length);
     expect(LAYOUT.hull).toEqual(HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]));
     expect(LAYOUT.crags).toHaveLength(2 * ROCKS.length);
   });
@@ -461,7 +461,47 @@ describe('LANDFALL, camps, racks and packs', () => {
     }
   });
 
-  it("stands each flag on a step in its team's colour by the pod, the ring and the pole clear", () => {
+  it("lays each camp's hearth, logs, firewood, mats and one fish rack round it, drawn only: nothing to collide with", () => {
+    for (const red of [true, false]) {
+      const [x, z] = [HEARTH[0], red ? HEARTH[1] : ZED - HEARTH[1]];
+      const mine = LAYOUT.pieces.filter(p => PROPS.includes(p.kind) && p.min[2] > MID === red);
+      expect(mine.map(p => p.kind).sort()).toEqual([
+        'drying',
+        'hearth',
+        'log',
+        'log',
+        'log',
+        'mat',
+        'mat',
+        'mat',
+        'wood',
+      ]);
+      for (const p of mine) {
+        // Within 8 m of the hearth, on the camp's level sand, and no brush where it lies.
+        expect(
+          Math.hypot((p.min[0] + p.max[0]) / 2 - x, (p.min[2] + p.max[2]) / 2 - z),
+        ).toBeLessThan(8);
+        expect(p.min[1]).toBe(CAMP);
+        expect(brushes.some(b => same(b, { ...b, min: p.min, max: p.max }))).toBe(false);
+      }
+    }
+    // The escape pod that stood there is gone: nothing solid over the camp's sand round the hearth.
+    expect(
+      brushes.filter(
+        b =>
+          b.max[1] > CAMP + 0.2 &&
+          [HEARTH[1], ZED - HEARTH[1]].some(
+            z =>
+              b.max[0] > HEARTH[0] - 3 &&
+              b.min[0] < HEARTH[0] + 3 &&
+              b.max[2] > z - 3 &&
+              b.min[2] < z + 3,
+          ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("stands each flag on a step in its team's colour by the hearth, the ring and the pole clear", () => {
     for (const [team, { base, spawns }] of teams.entries()) {
       const [x, y, z] = base;
       const dais = brushes.filter(
@@ -482,8 +522,8 @@ describe('LANDFALL, camps, racks and packs', () => {
           true,
         );
       }
-      const side = team ? ZED - POD[1] : POD[1];
-      expect(Math.hypot(x - POD[0], z - side)).toBeLessThan(POD[2] + 5);
+      const side = team ? ZED - HEARTH[1] : HEARTH[1];
+      expect(Math.hypot(x - HEARTH[0], z - side)).toBeLessThan(HEARTH[2] + 5);
       for (const [u, , v] of spawns) {
         expect(Math.hypot(u - x, v - z)).toBeLessThan(25);
         expect(Math.hypot(u - x, v - z)).toBeGreaterThan(8);
@@ -528,7 +568,7 @@ describe('LANDFALL, camps, racks and packs', () => {
     expect(Math.abs(rifle![2] - rail![2])).toBeGreaterThan(15);
     for (const r of [rifle!, rail!]) {
       expect(r[2] - MID).toBeGreaterThan(25);
-      expect(POD[1] - r[2]).toBeGreaterThan(20);
+      expect(HEARTH[1] - r[2]).toBeGreaterThan(20);
     }
   });
 });
@@ -1579,7 +1619,7 @@ describe('LANDFALL, capture the flag, end to end through a room', () => {
   };
   const snap = (c: { bins: ArrayBuffer[] }): Snapshot => decodeSnapshot(c.bins.at(-1)!)!;
 
-  it("has red take the high road, take blue's flag by its pod and carry it home through the gallery to score", () => {
+  it("has red take the high road, take blue's flag by its hearth and carry it home through the gallery to score", () => {
     const room = new Room({ map: 'landfall' });
     const c = peer();
     room.connect(c);

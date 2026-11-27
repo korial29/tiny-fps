@@ -226,8 +226,11 @@ export const ENGINES = [
   [4.5, 137, 2.5, 9],
 ];
 
-/** Red's camp: the escape pod its flag stands by (x, z, radius). */
-export const POD = [60, 219, 4];
+/**
+ * Red's camp: the survivors' hearth its flag stands by (x, z, the radius of what lies round it).
+ * An escape pod stood there, a box 6 m wide that read as a building (the user, 2026-11-27).
+ */
+export const HEARTH = [60, 219, 4];
 /** The camp's ground, level. */
 export const CAMP = 1.25;
 
@@ -704,18 +707,34 @@ const FLOATS = [
   note(mine, 'float', box(23, -1.6, 132.6, 26, 0.2, 135, METAL)),
 ];
 
-/** The camp: the pod, the flag's step by it, a tarpaulin over the camp's racks. */
-const POD_BOX = note(
-  mine,
-  'pod',
-  box(POD[0] - 3, CAMP - 0.5, POD[1] - 3, POD[0] + 3, CAMP + 3, POD[1] + 3, METAL),
-);
+/** The camp: the flag's step before the hearth, a tarpaulin over the camp's racks. */
+const [HX, HZ] = HEARTH;
 const DAIS = note(
   mine,
   'dais',
   // A hatch cover lying on the sand: a raised step read as a floor floating over it (the user, 2026-11-25).
-  box(POD[0] - 2, CAMP - 0.5, POD[1] - 10, POD[0] + 2, CAMP + 0.05, POD[1] - 6, PAINT, RED),
+  box(HX - 2, CAMP - 0.5, HZ - 10, HX + 2, CAMP + 0.05, HZ - 6, PAINT, RED),
 );
+/**
+ * What the survivors keep round their hearth, on the camp's level sand (FLATS), drawn only and
+ * walked through: no brush, so nothing new stands in the way (the user, 2026-11-27). Each box is
+ * where its piece is drawn, its long side along the piece: the hearth's ring of stones, the logs
+ * sat on round it, a pile of firewood, woven mats, and a rack of fish drying beside the flag. Its flames burn nobody: they are drawn only (client hulk/camp.ts, Decor.blazes).
+ */
+/** The kinds drawn only: no brush under them. */
+export const PROPS = ['hearth', 'log', 'wood', 'mat', 'drying'];
+const prop = (kind: string, x0: number, z0: number, x1: number, z1: number, h: number) =>
+  mine.push({ kind, min: [HX + x0, CAMP, HZ + z0], max: [HX + x1, CAMP + h, HZ + z1] });
+prop('hearth', -0.9, -0.9, 0.9, 0.9, 0.6);
+// Off any line: each log, mat and the rack is turned askew as it is drawn too.
+prop('log', -2.8, -1.2, -2.4, 0.6, 0.42);
+prop('log', 2, -0.5, 2.4, 1.3, 0.42);
+prop('log', -1.6, 2, 0.6, 2.4, 0.42);
+prop('wood', 2.7, 2.2, 3.9, 3.2, 0.5);
+prop('mat', -5.6, 2.3, -3.4, 5.1, 0.03);
+prop('mat', 3.3, 3.5, 5.2, 6.1, 0.03);
+prop('mat', -1.1, 3.5, 1, 5.4, 0.03);
+prop('drying', -7.6, -4.7, -4.4, -3.9, 1.9);
 /**
  * A crate on the sand with a pack on it: its top 0.1 m over the highest sand under it, so a player
  * runs over it without a jump from its low side too (under STEP_H; the user, 2026-11-27).
@@ -872,7 +891,6 @@ const half: Brush[] = [
   ...FALLEN,
   ENGINE,
   ...FLOATS,
-  POD_BOX,
   DAIS,
   ...shelter(49, 221),
   ...shelter(71, 221),
@@ -897,8 +915,8 @@ const half: Brush[] = [
 /**
  * What the scenery draws on the map's boxes, both halves, blue's mirrored: the hull's sections
  * (x0, x1, the axis' height), every piece of the wreck and of the camps by kind (skin, deck,
- * fairing, wingpiece, rail, fallen, heap, frame, raft, engine, float, pod, dais, crate, shelter,
- * panel, container, gear), and the headlands' rocks where they stand.
+ * fairing, wingpiece, rail, fallen, heap, frame, raft, engine, float, dais, crate, shelter,
+ * panel, container, gear; the hearth, log, wood, mat and drying drawn only), and the headlands' rocks where they stand.
  */
 export const LAYOUT = {
   hull: HULL.sections.map(([x0, x1], n) => [x0, x1, HULL.axis[n]]),
@@ -924,7 +942,7 @@ export const LAYOUT = {
 // ---------------------------------------------------------------------------------------------
 // Spawns, racks, packs.
 
-/** Eight, behind the pod, facing the other camp. */
+/** Eight, behind the hearth, facing the other camp. */
 const SPAWNS: Spawn[] = [46, 54, 62, 70].flatMap((x): Spawn[] => [
   [x, CAMP, 226, 0],
   [x + 4, CAMP, 229, 0],

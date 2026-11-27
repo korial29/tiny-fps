@@ -4,7 +4,7 @@ import { TEAM_TINT } from '../shared/map';
 import { BASE, HALL, HEAD, KIT, MODULES, MOUTHS, TUBES } from '../shared/moonbase';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
-import { STRIDE } from './mesh';
+import { PANE, STRIDE } from './mesh';
 import { GAPS, INDOORS, LINTELS, furnishing, moonbase } from './moonbase';
 import { PORTHOLES, TIP, hull } from './moonhull';
 import { moonscape } from './moonscape';
@@ -32,7 +32,7 @@ describe('moonbase', () => {
       expect(Math.max(...near.map(p => p[1]))).toBeLessThan(18);
       const at = (r: number) =>
         verts.filter(p => Math.abs(Math.hypot(p[0] - 80, p[2] - z) - r) < 0.01);
-      expect(at(22.46).some(p => p[8] === -2 && p[1] > 1 && p[1] < 4)).toBe(true);
+      expect(at(22.46).some(p => p[8] === PANE && p[1] > 1 && p[1] < 4)).toBe(true);
       expect(at(22.4).some(p => p[8] === -1 && p[1] < 0.01)).toBe(true);
     }
   });
@@ -83,10 +83,17 @@ describe('moonbase', () => {
       [44, -1],
     ]) {
       const panes = verts.filter(
-        p => p[8] === -2 && Math.abs(Math.hypot(p[0] - 80, p[2] - z) - 22.47) < 0.02,
+        p => p[8] === PANE && Math.abs(Math.hypot(p[0] - 80, p[2] - z) - 22.47) < 0.02,
       );
       // 2 at the door and 3 at the tubes are gone.
       expect(panes).toHaveLength(65 * 6);
+      // Mirrors: each normal faces out of the drum, leaning a little toward its pane's edge.
+      for (const p of panes) {
+        const out = [p[0] - 80, 0, p[2] - z].map(v => v / Math.hypot(p[0] - 80, p[2] - z));
+        const d = out[0] * p[3] + out[2] * p[5];
+        expect(d).toBeGreaterThan(0.9);
+        expect(d).toBeLessThan(0.999);
+      }
       expect(panes.some(p => Math.abs(p[0] - 80) < w + 0.2 && s * (p[2] - z) < mz)).toBe(false);
     }
   });
@@ -217,10 +224,15 @@ describe('moonhull, the outside of the base', () => {
     expect(PORTHOLES.filter(p => p[6])).toHaveLength(7);
     for (const [x, y, z, nx, nz, rad, deep] of PORTHOLES) {
       const c = [x + 0.015 * nx, y, z + 0.015 * nz];
-      const glass = pts.filter(p => p[8] === -2 && dist(p, c) < rad + 0.05);
-      // A fan of 12 sides, every corner on the circle.
-      expect(glass).toHaveLength(30);
-      expect(glass.every(p => Math.abs(dist(p, c) - rad) < 1e-9)).toBe(true);
+      const glass = pts.filter(p => p[8] === PANE && dist(p, c) < rad + 0.05);
+      // A fan of 12 about its middle, every corner on the circle.
+      expect(glass).toHaveLength(36);
+      expect(glass.every(p => dist(p, c) < 1e-9 || Math.abs(dist(p, c) - rad) < 1e-9)).toBe(true);
+      // A mirror domed out: square on in the middle, leaning out toward the rim.
+      for (const p of glass) {
+        const lean = (p[0] - c[0]) * p[3] + (p[1] - c[1]) * p[4] + (p[2] - c[2]) * p[5];
+        expect(lean).toBeCloseTo(dist(p, c) < 1e-9 ? 0 : (0.8 * rad) / Math.hypot(1, 0.8), 6);
+      }
       expect(
         new Set(
           glass.map(p =>
@@ -230,7 +242,7 @@ describe('moonhull, the outside of the base', () => {
               .join(),
           ),
         ).size,
-      ).toBe(12);
+      ).toBe(13);
       expect(glass.every(p => p[6] > 0.5 && p[6] > 1.5 * p[9])).toBe(true);
       const frame = pts.filter(
         p => p[8] === -1 && Math.abs(dist(p, [x, y, z]) - rad - 0.1) < 1e-9 && p[6] < 0.2,
@@ -238,8 +250,8 @@ describe('moonhull, the outside of the base', () => {
       expect(frame).toHaveLength(30);
       // In blue's half too.
       expect(
-        verts.filter(p => p[8] === -2 && dist(p, [c[0], y, ZED - c[2]]) < rad + 0.05),
-      ).toHaveLength(30);
+        verts.filter(p => p[8] === PANE && dist(p, [c[0], y, ZED - c[2]]) < rad + 0.05),
+      ).toHaveLength(36);
       const m = rad + 0.1;
       if (deep) {
         // Over a head, off every doorway of the modules and off the tubes; a pane inside as well.

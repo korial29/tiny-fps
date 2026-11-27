@@ -58,7 +58,7 @@ Every rock is a block cut by a flat bed, a top and three rings of hashed planes 
 
 ## The base's inside (2026-11-10)
 
-`src/shared/moonbase.ts` is red's half of the base: the dome's hall (a stepped plan under the upper ghost bands, door toward the flag, mezzanine at 3.5 m), the hollow modules with an airlock each and the tubes as corridors. What stands in the hall is ghost brushes drawn by `src/client/moonbase.ts` with one normal turned from the sun (`INDOORS`): the sun's shadow map only covers 64 m round the eye, so real brushes across the hall would be drawn sunlit. Indoors is lit by glowing strips and panes, no real lights.
+`src/shared/moonbase.ts` is red's half of the base: the dome's hall (a stepped plan under the upper ghost bands, door toward the flag, mezzanine at 3.5 m), the hollow modules with an airlock each and the tubes as corridors. What stands in the hall is ghost brushes drawn by `src/client/moonbase/` (`props.ts`) with one normal turned from the sun (`INDOORS`): the sun's shadow map only covers 64 m round the eye, so real brushes across the hall would be drawn sunlit. Indoors is lit by glowing strips and panes, no real lights.
 
 ## The rovers (2026-11-10)
 
@@ -76,7 +76,7 @@ Known limits: a player on a moving rover is not carried, it drives out from unde
 
 ## The flags inside, and the lab (2026-11-10)
 
-Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from the dome's centre toward the door (red at (80, 1, 234), blue the mirror at z 46), clear of the crates (moved toward the walls) and of the stairs. The old outdoor pad is gone: the lit portal marks the door and the dais shows through it. The step and dais are ghosts with the team tint; `furnishing()` in `src/client/moonbase.ts`, drawn by `render.ts` beside the scenery, draws them indoors in their tint (moonscape mirrors red's half colour for colour, so they cannot go through `moonbase()`). The racks stay where they were, 28 m behind the flag.
+Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from the dome's centre toward the door (red at (80, 1, 234), blue the mirror at z 46), clear of the crates (moved toward the walls) and of the stairs. The old outdoor pad is gone: the lit portal marks the door and the dais shows through it. The step and dais are ghosts with the team tint; `furnishing()` in `src/client/moonbase/index.ts`, drawn by `render.ts` beside the scenery, draws them indoors in their tint (moonscape mirrors red's half colour for colour, so they cannot go through `moonbase()`). The racks stay where they were, 28 m behind the flag.
 
 `KIT` in `src/shared/moonbase.ts` is the lab kit, each piece a ghost box that `furnishing()` dresses: in the hall a lab bench with screens and a table of rock samples under the west deck, server racks with status lights up to the east deck, a telescope and a sample analyser on the north deck; in the first module two greenhouse racks; in the second lockers and a spacesuit on its stand. Drawn only, no collision: panels on the hall's short walls, a sign over the door, cables under the east deck, cable trays and status lights in the tubes, hazard stripes and a beacon over each airlock. Everything stays off the door's way to the dais, the stairs, the tubes' mouth, the doorways and the packs (tested), and away from the middle of a module's wall, where vision.ts would band a ledge.
 
@@ -89,6 +89,12 @@ Each flag stands in its own dome's hall, on a team-tinted step and dais 2 m from
 - Modules: a coping with a trace of light on the long walls, a plinth, a cut that steps up at 45 degrees from each corner toward the door, two portholes on each end wall (a pane inside too) and a vent, a lamp and a sensor cluster over each airlock, a dish on the first roof's corner, three whip aerials along the second's end.
 
 `PORTHOLES` lists them; none is over a doorway, an airlock or a tube (tested), and nothing stands in the door's way, the airlocks, the tube tops or the middle of a module's roof. No collision: the aerial's mast, the dish and the whips are walked through.
+
+## Reflections on the glass (the user, 2026-11-27)
+
+The portholes, the drum's 70 windows and the modules' windows mirror what is round them over their glow: `glaze()` (`src/client/glass/glaze.ts`) puts their lit glass on the `PANE` layer (-2.2) and leans each normal out from the pane's middle toward its edge, so the glass reads domed and the reflection moves across it as the eye does: 0.8 at a porthole's rim, 0.25 on the flatter windows. The shader keeps the glow, mixes in what `K1()` gives along the reflected ray (black sky, a bright line at the horizon, the grey ground under it), 30 % head on to 80 % at a grazing angle, and adds the sun's highlight, broad and sharp. A porthole is a fan of 12 about its middle (36 vertices, 6 more than before: about 460 more on the map). The boxes are not ray traced (`MIRROR`): the base is ghosts, which the mirrors leave out, and round it there is little but ground and sky.
+
+`src/client/moonbase.ts` is a thin entry over `src/client/moonbase/`: `constants.ts`, `kit.ts` (indoor quads, panels, blocks, doorway frames, linings), `props.ts` (the kit and the hall's dressing), `hall.ts`, `shell.ts` (the dome, the tubes, the modules) and `index.ts` (`moonbase()`, `furnishing()`).
 
 ## The dome's wall, in slices (2026-11-26)
 

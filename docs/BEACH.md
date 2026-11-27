@@ -458,8 +458,8 @@ Scenery only, in the island's middle behind the forest (`src/client/volcano/`, i
 no collision, no rule.
 
 - Its crater's axis is (700, 125), on the centre line; the rim stands about 400 m over the sea
-  (750 and 480 were too high, 340 too low). Rings of 160 points from the crater's floor to the foot, lit
-  paint (layer −1): 26,880 vertices, one level of detail.
+  (750 and 480 were too high, 340 too low). Rings of 96 points from the crater's floor to the foot, lit
+  paint (layer −1): 16,128 vertices, one level of detail (160 points a ring, 26,880 vertices, kept the fine gullies but cost more for little).
 - Not a cone (the user: too symmetric): the foot runs out 560 to 800 m and the flank's concavity
   changes round it (`swell()`), the rim is higher on one side and breached on the beach's side
   toward +z (`BREACH`), the breach running on down the flank as a valley, and an older, lower

@@ -18,7 +18,7 @@ const RADII = [
   434, 476, 520, 566, 614, 664, 716, 770,
 ];
 /** Points round each ring. */
-const AROUND = 160;
+const AROUND = 96;
 
 const sm = (t: number) => {
   t = Math.min(Math.max(t, 0), 1);

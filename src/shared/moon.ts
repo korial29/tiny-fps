@@ -108,7 +108,8 @@ export const FLATS = [
   [90, 64, 94, 68],
   // Where the field's rover stood: still level, by the rock beside it.
   [98, 36, 102, 40],
-  [28, 113, 32, 117],
+  [55, 77, 59, 81],
+  [152, 76, 156, 80],
   [30, 45, 30, 45],
   [131, 48, 131, 48],
   [50, 106, 50, 106],
@@ -656,6 +657,12 @@ export const LAYOUT = {
     (z ? [1, -1] : [1]).map(m => [x + 16 * ax, ZED / 2 + m * (z + 16 * az), ax, m * az + 0]),
   ),
   wreck: WRECK,
+  /** The orange lamps each side of the rovers' ramps over the front crack, both sides, x and z: on each slope's flank near its top. */
+  hillLamps: HILLS.flatMap(([hx, hz]) =>
+    [1, -1].flatMap(side =>
+      [-4.2, 4.2].flatMap(d => [-4.5, 4.5].map(c => [hx + c, ZED / 2 + side * (hz + d)])),
+    ),
+  ),
   /** The craters of the relief, both sides: x, z, radius, depth as a share of it. */
   bowls: BOWLS.flatMap(([x, z, r, k = 0.17]) =>
     (z ? [1, -1] : [1]).map(m => [x, ZED / 2 + m * z, r, k]),
@@ -718,6 +725,8 @@ const half: Brush[] = [
   ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
   // The west long jump: a spur of the lip into the rille, orange.
   box(12, -30, 148 - (16 - WEST_GAP) / 2, 24, 0, 148, PAINT, STONE, [1, 0.42, 0.08]),
+  // The lamps of the rovers' ramps over the front crack.
+  ...LAYOUT.hillLamps.filter(([, z]) => z > ZED / 2).map(([x, z]) => lump(x, z, 0.2, 2.2)),
   // The few boulders: each some forty boxes that follow its outline, drawn as one rock by the scenery.
   ...ghosts(CRAGS),
   ...DISHES.map(([x, z]) => lump(x, z, 0.4, 6)),
@@ -834,12 +843,16 @@ export const MOON: WorldDef = {
     [0.02, 0.02, 0.035],
   ],
   gravity: 0.5,
-  // Two rovers a base, in front of the dome by the middle jump over the front crack and behind the landing pad, their noses toward the other base.
+  // Three rovers a base, parked in sight before it, their noses toward the other base: in front of
+  // the dome by the middle jump over the front crack, and one facing each rovers' ramp (moon/rift.ts).
   rovers: [
     [92, 0, 206, 0],
-    [30, 0, 255, 0],
+    // Its nose toward the west ramp, off the way from it to the dome's door.
+    [57, 0, 219, -0.33],
+    [154, 0, 218, 0],
     [92, 0, ZED - 206, Math.PI],
-    [30, 0, ZED - 255, Math.PI],
+    [57, 0, ZED - 219, Math.PI + 0.33],
+    [154, 0, ZED - 218, Math.PI],
   ],
   // A combat ship on each landing pad, its nose toward the other base: red's, then blue's (homeOf()).
   ships: [

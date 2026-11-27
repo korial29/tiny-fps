@@ -238,9 +238,12 @@ wreck on the Bowl's floor).
   links them both ways (`nav.ts`), each flown with the physics in `moon.test.ts`.
 - **Pylons** (`PYLONS`): nine a side in the sinkholes and the cracks' wide parts, tops from -0.4
   to 1.2 m, each within 3.5 m of another or an edge.
-- **Rovers.** A hill each side of the front crack at x 62 and x 154 (`HILLS`, 1.5 m up over 7 m):
-  a rover takes off one and lands on the other, both ways. The field's rover is parked in front
-  of the dome (92, 206); a bot boards it on its way out.
+- **Rovers.** A ramp each side of the front crack at x 62 and x 154 (`HILLS`, 1.5 m up over 7 m,
+  the relief's), drawn as a deck of yellow and black chevrons with an orange lamp at each corner
+  of its top, so that a player sees it is to be jumped: a rover takes off one and lands on the
+  other, both ways. Three rovers a team (the user: one more, parked in sight by the base): one
+  facing each ramp, (57, 219) turned toward the west one, off the bots' way to the door, and
+  (154, 218); one in front of the dome (92, 206), which a bot boards on its way out.
 - **Moved for room:** the ammo packs to (103, 164.5) and (131, 188), three rocks a few metres
   (36, 156.5), (100, 167), and two pebble sites.
 - **Drawn** (`src/client/moonscape/rift.ts`): every lattice square with an open corner is the

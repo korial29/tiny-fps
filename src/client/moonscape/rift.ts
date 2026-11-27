@@ -6,7 +6,7 @@
 // corner, cut along the diagonal (the chamfer that keeps an edge from reading as steps); with four,
 // not at all. A cell collides when it has two open corners or fewer (gap()... with three it is
 // open): the ground drawn covers every brush, and is past one at most by a chamfer's triangle.
-import { NX, NZ, S, corner, gap, mask } from '../../shared/moon/rift';
+import { HILLS, NX, NZ, S, corner, gap, mask } from '../../shared/moon/rift';
 import { raise } from '../../shared/relief';
 import type { Relief } from '../../shared/relief';
 import { TEX } from '../../shared/types';
@@ -334,6 +334,41 @@ export const rift = (o: number[], def: WorldDef) => {
             [i, j + 1],
           ].map(([a, b]) => [a * S, b * S]);
           wall(q[(c + 1) % 4], q[(c + 3) % 4], k++);
+        }
+      }
+    }
+  }
+  // The rovers' ramps: a deck of plates over each slope of each hill, 5 m wide, a hand's breadth
+  // over the ground, in bands of yellow and black chevrons from its foot up to the crack's edge.
+  for (const side of [1, -1]) {
+    for (const [hx, hz] of HILLS) {
+      for (const d of [1, -1]) {
+        const y = (x: number, zc: number) => Math.max(lattice(r, x, 140 + side * zc), 0) + 0.06;
+        for (let k = 0; k < 2 * 9.2; k++) {
+          const [z0, z1] = [hz + d * (9.2 - k * S), hz + d * (9.2 - (k + 1) * S)];
+          // Up to the last row of ground under the whole deck.
+          const clear = [-2.5, -1.25, 0, 1.25, 2.5].every(
+            u => !gap(Math.floor((hx + u) / S), Math.floor(Math.min(z0, z1) / S)),
+          );
+          if (!clear) {
+            break;
+          }
+          const rgb = k % 4 < 2 ? [1, 0.62, 0.05] : [0.09, 0.09, 0.1];
+          // One plate across: the hill is level across its middle 8 m (moon.ts at()).
+          for (const [a, b] of [[-2.5, 2.5]]) {
+            const [u, v] = [hx + a, hx + b];
+            face(
+              o,
+              [
+                [u, y(u, z0), 140 + side * z0],
+                [v, y(v, z0), 140 + side * z0],
+                [v, y(v, z1), 140 + side * z1],
+                [u, y(u, z1), 140 + side * z1],
+              ],
+              rgb,
+              [hx, -50, 140 + side * hz],
+            );
+          }
         }
       }
     }

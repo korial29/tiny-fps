@@ -851,7 +851,7 @@ describe('moonscape and the rovers', () => {
   const things = verts.filter(p => p[8] !== TEX.STONE && inArena(p));
 
   it('draws no rover: where the map parks them the ground is bare, the renderer draws them there', () => {
-    expect(MOON.rovers).toHaveLength(4);
+    expect(MOON.rovers).toHaveLength(6);
     for (const [x, , z] of MOON.rovers!) {
       expect(things.filter(p => Math.hypot(p[0] - x, p[2] - z) < 2.5 && p[1] < 3)).toHaveLength(0);
     }
@@ -860,8 +860,8 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 467,151 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
-    expect(verts.length).toBe(467151);
+  it('is 469,491 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
+    expect(verts.length).toBe(469491);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

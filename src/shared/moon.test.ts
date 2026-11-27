@@ -830,7 +830,7 @@ describe('MOON, the relief round the arena', () => {
         src.match(/\*\*|Math\.(?!imul|sqrt|abs|min|max|floor|ceil|round|PI)\w+/g) ?? [],
       ).toEqual([]);
     }
-    expect(checksum(relief)).toBe(3971584143);
+    expect(checksum(relief)).toBe(2225166139);
   });
 
   it('keeps every spawn, flag base, rack and pack on flat ground: the relief is exactly 0 under each', () => {
@@ -1382,6 +1382,24 @@ describe('MOON, the field, the mounds and the carved rille', () => {
           expect(Math.sign(to - from) * (side * (car.z - 140) - to)).toBeGreaterThan(-1);
           expect(car.y).toBeGreaterThan(-0.5);
         }
+      }
+    }
+  });
+
+  it('parks a rover in sight before each base facing each ramp: flat out from where it stands, it flies the front crack', () => {
+    for (const [hx, hz] of HILLS) {
+      for (const side of [1, -1]) {
+        const at = MOON.rovers!.find(([x, , z]) => Math.abs(x - hx) < 6 && side * (z - 140) > hz);
+        expect(at, `ramp at ${hx}, side ${side}`).toBeDefined();
+        const [x, , z, yaw] = at!;
+        const car = rover(world, x, z, yaw);
+        let fell = false;
+        for (let k = 0; k < 400 && !fell && side * (car.z - 140) > hz - 12; k++) {
+          fell = run(car, world, 1, KEY.FORWARD, yaw);
+        }
+        expect(fell, `ramp at ${hx}, side ${side}`).toBe(false);
+        expect(side * (car.z - 140)).toBeLessThan(hz - 12 + 0.5);
+        expect(car.y).toBeGreaterThan(-0.5);
       }
     }
   });
@@ -2294,8 +2312,8 @@ describe('MOON, a few rocks, pebbles', () => {
             Math.hypot((b.min[0] + b.max[0]) / 2 - x, (b.min[2] + b.max[2]) / 2 - z) < 1.4 * r,
         ),
     );
-    // The rest are masts' feet: six dishes 0.8 m wide, the lamps of the jump ramps 0.4 m wide.
-    expect(loose.length).toBeLessThanOrEqual(22);
+    // The rest are masts' feet: six dishes 0.8 m wide, the lamps of the jump ramps and of the rovers' ramps 0.4 m wide.
+    expect(loose.length).toBeLessThanOrEqual(38);
     expect(
       Math.max(...loose.map(b => Math.max(b.max[0] - b.min[0], b.max[2] - b.min[2]))),
     ).toBeLessThan(0.81);

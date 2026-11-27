@@ -33,7 +33,10 @@ export interface Region {
   cast?: boolean;
   /** Moulded: a smooth shell round the trunk rather than the skin's facets (moulding()). */
   mould?: boolean;
-  /** The ninja's own armour (the user, 2026-11-13), worn by him alone; he wears no other plate. */
+  /**
+   * The ninja's own armour (the user, 2026-11-13), worn by him alone; he wears no other plate. In his
+   * shoulder pads' near black (PAD), not his team's colour (the user, 2026-11-28).
+   */
   alone?: boolean;
   /** How far it stands off the skin, when not OFF. */
   off?: number;
@@ -229,7 +232,7 @@ export const GUSSET = { under: 0.025, off: 0.003, tuck: 0.006 };
  * bottom. Cut as the gusset is, so drawn on every map, armour or none (armor()'s `bare`).
  */
 export const BELT = {
-  y: 0.962,
+  y: 1.002,
   rise: 0.012,
   back: 0.004,
   h: 0.112,
@@ -254,6 +257,10 @@ const gusset = (a: number, c: Corner) => {
 };
 /** The dark grey of the ninja's sash, and of his face guard and shoulder pads (mask.ts, pads.ts). */
 export const SASH = [0.24, 0.235, 0.25];
+/** The ninja's sash itself: dark brown (the user, 2026-11-28; it was SASH's grey). */
+export const BROWN = [0.2, 0.12, 0.065];
+/** The ninja's shoulder pads: near black (the user, 2026-11-28; they were SASH's grey). */
+export const PAD = [0.14, 0.14, 0.15];
 /** The cloth: plain black, as the suit's legs (the user, 2026-11-14: it was ribbed in two shades). */
 export const CLOTH = [0.07, 0.07, 0.08];
 

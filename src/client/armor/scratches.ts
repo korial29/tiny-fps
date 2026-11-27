@@ -17,6 +17,8 @@ import {
   MARINE,
   OWN,
   DARK,
+  GOLD,
+  RIM,
   PIECE,
 } from './details';
 
@@ -162,7 +164,8 @@ export const scratchesOn = (
       k,
       pick(0, 2, 3),
     );
-    if (raise) {
+    // Under a millimetre, a layer laid over another (忍's gold over its rim, RIM): no walls.
+    if (raise > 0.001) {
       // A box: walls from the plate up to its top, wound outward as the plates' (cooking()).
       const lift = (i: number, d: number) => {
         const c = cs[i];
@@ -259,14 +262,17 @@ export const scratchesOn = (
     const [L, W] = [0.008 + rand() * 0.022, 0.0005 + rand() * 0.0006];
     made += +stroke(k, at, a, L, W, WORN[Math.floor(rand() * WORN.length)]);
   }
-  for (const [part, cx, ang, y, tilt, L, W, only, own, astro, lit, marine, raise, look] of [
+  for (const [part, cx, ang, y, tilt, L, W, only, own, astro, lit, marine, raise, look, gold] of [
     ...DETAILS,
-    ...[...NINJA_DETAILS, ...VENTS[s.b ? 1 : 0], ...SIGNS[s.b ? 1 : 0]].map(d => [...d, 1]),
+    ...[...NINJA_DETAILS, ...VENTS[s.b ? 1 : 0]].map(d => [...d, 1]),
+    // 忍 in gold over a black rim.
+    ...SIGNS[s.b ? 1 : 0].map(d => [...d.slice(0, 5), d[5] + RIM.w, d[6] + RIM.w, d[7], 1]),
+    ...SIGNS[s.b ? 1 : 0].map(d => [...d, 1, 0, 0, 0, RIM.raise, 0, 1]),
     ...ASTRO_DETAILS.map(d => [...d.slice(0, 8), 0, 1, d[8]]),
     ...MARINE_DETAILS.map(d => [...d.slice(0, 8), 0, 0, 0, 1, d[8], d[9]]),
   ]) {
-    const [col, layer] = marine ? KIT[look] : [lit ? ACCENT : DARK, -1];
-    const kind = astro ? ASTRO : marine ? MARINE | OWN : 0;
+    const [col, layer] = marine ? KIT[look] : gold ? GOLD : [lit ? ACCENT : DARK, -1];
+    const kind = astro ? ASTRO : marine ? MARINE | OWN : gold ? OWN : 0;
     for (const side of only ? [only] : [1, -1]) {
       const r = (ang * Math.PI) / 180;
       const hit = hitOf(part, [cx * side, y, 0], [Math.sin(r) * side, 0, -Math.cos(r)]);

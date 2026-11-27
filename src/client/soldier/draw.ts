@@ -2,7 +2,7 @@ import { HEAT_MAX } from '../../shared/constants';
 import { ROLE } from '../../shared/kit';
 import { floored } from '../../shared/physics';
 import { LIMB } from '../../shared/types';
-import { SASH, armor } from '../armor';
+import { PAD, SASH, armor } from '../armor';
 import { RAKE, hands, inv, stowed } from '../body';
 import { cigar } from '../cigar';
 import { dashing, strain } from '../expression';
@@ -200,8 +200,9 @@ export const soldier = (
     [colors[PANTS], colors[UPPER], colors[GLOVE]] = [CLOTH, CLOTH, BOOT];
     // His boots: black cloth a shade over the suit's (the user, 2026-11-17), the sole darker.
     [colors[UPPER], colors[REGION.SOLE]] = [BOOT, BOOT.map(c => c * 0.25)];
-    // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black.
-    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [color, color, CLOTH];
+    // His belt is cut in a V by armor() (BELT in armor.ts), the skin's under it black; the suit's
+    // stripes black as it (the user, 2026-11-28: they were his team's colour, his mask is now).
+    [colors[STRIPE], colors[STRIPE_LOW], colors[BELT]] = [CLOTH, CLOTH, CLOTH];
   }
   if (build && styleOf(p.id, picked) == STYLE.UNDERCUT) {
     // A shaved side: the scalp's hair is stubble, the skin showing through it.
@@ -300,7 +301,7 @@ export const soldier = (
       rigid(`blades ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
         blades(o, a, q, build),
       );
-      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), color, lod);
+      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), PAD, lod);
     }
     if (!r.cut.eaten) {
       piece(
@@ -432,7 +433,7 @@ export const soldier = (
       rigid(`blades ${build}`, s.pos[J.PELVIS], s.rot[J.PELVIS], (o, a, q) =>
         blades(o, a, q, build),
       );
-      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), color, lod);
+      drape(out, s, build, r.t, Math.hypot(p.vx, p.vz), PAD, lod);
     }
     if (xeno && lod) {
       // Its hands in its chitin (the user, 2026-11-17: the skin's texture on them): each a rigid
@@ -549,7 +550,7 @@ export const soldier = (
   if (plated) {
     const from = out.length;
     const n0 = gpu?.length ?? 0;
-    pads(out, s, build, ninja ? SASH : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
+    pads(out, s, build, ninja ? PAD : (plate ?? [0.85, 0.86, 0.88]), !ninja, color, !lod, gpu);
     // And so are the bells and the pads.
     gpu?.forEach((d, i) => i >= n0 && (d.w = true));
     if (k > 0) {
@@ -564,11 +565,11 @@ export const soldier = (
         `mask ${color} ${!lod}`,
         s.pos[J.HEAD],
         s.rot[J.HEAD],
-        (o, a, q) => mask(o, a, q, 0, color, !lod, SASH),
+        (o, a, q) => mask(o, a, q, 0, color, !lod, PAD),
         build ? HEAD_SCALE : 1,
       );
     } else {
-      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod, SASH);
+      mask(out, s.pos[J.HEAD], s.rot[J.HEAD], build, color, !lod, PAD);
     }
     if (k > 0) {
       dissolve(out, from, k);

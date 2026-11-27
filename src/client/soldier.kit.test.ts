@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ROLE } from '../shared/kit';
 import { mask } from './mask';
+import { PAD } from './armor';
 import { DOWN_TICKS, TICK_HZ } from '../shared/constants';
 import { STILL } from '../shared/physics';
 import { LIMB, MODE, NOBODY, SIDE } from '../shared/types';
@@ -194,7 +195,8 @@ describe('the ninja', () => {
     expect(ninja.length).toBeGreaterThan(bare.length + guard.length);
     expect(marine.length).toBeGreaterThan(ninja.length);
     // Heights from his feet.
-    const plated = (v: number[], lo: number, hi: number) => {
+    // In `c`: the team's colour, his in near black (PAD; the user, 2026-11-28).
+    const plated = (v: number[], lo: number, hi: number, c = v == ninja ? PAD : team) => {
       let [n, feet] = [0, Infinity];
       for (let i = 0; i < v.length; i += STRIDE) {
         feet = Math.min(feet, v[i + 1]);
@@ -202,10 +204,12 @@ describe('the ninja', () => {
       for (let i = 0; i < v.length; i += STRIDE) {
         const y = v[i + 1] - feet;
         // Glossy: a plate, not the suit's stripes.
-        n += +(y > lo && y < hi && v[i + 8] == GLOSS && v[i + 6] == team[0]);
+        n += +(y > lo && y < hi && v[i + 8] == GLOSS && v[i + 6] == c[0]);
       }
       return n;
     };
+    // None of his armour in the team's colour (the user, 2026-11-28).
+    expect(plated(ninja, 0, 2, team)).toBe(0);
     // Under the knee pads.
     expect(plated(ninja, 0.2, 0.3)).toBeGreaterThan(0);
     expect(plated(marine, 0.2, 0.3)).toBe(0);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BELT, SASH, armor } from './armor';
+import { BELT, BROWN, armor } from './armor';
 import { SHINE, STRIDE } from './mesh';
 import { JOINT as J, axis, mul, rest, solve } from './rig';
 import { HIPS, SASH_Y, SKIRT, TABARD, blades, drape } from './sash';
@@ -22,7 +22,7 @@ describe("what hangs from the ninja's sash (the user, 2026-11-24: a wide pleated
       return rows(v);
     };
 
-    it(`wears a wide sash in the pads' grey, from the hips up over the vest's bottom, ${who}`, () => {
+    it(`wears a wide sash in dark brown, from the hips up over the vest's bottom, ${who}`, () => {
       const plated: number[] = [];
       const sk = body(1, build);
       skin(plated, sk, s, palette(RED));
@@ -31,7 +31,7 @@ describe("what hangs from the ninja's sash (the user, 2026-11-24: a wide pleated
       // With no armour (`bare`) the sash alone is drawn.
       const sash = rows(plated.slice(n));
       expect(sash.length).toBeGreaterThan(100);
-      expect(sash.every(p => p[6] == SASH[0] && p[7] == SASH[1] && p[9] == SASH[2])).toBe(true);
+      expect(sash.every(p => p[6] == BROWN[0] && p[7] == BROWN[1] && p[9] == BROWN[2])).toBe(true);
       const ys = sash.map(p => p[1]);
       expect(Math.max(...ys) - Math.min(...ys)).toBeGreaterThan(BELT.h);
       expect(Math.min(...ys)).toBeLessThan(BELT.y + 0.01);
@@ -82,6 +82,9 @@ describe("what hangs from the ninja's sash (the user, 2026-11-24: a wide pleated
       expect(cloth.some(p => p[0] > 0.18) && cloth.some(p => p[0] < -0.18)).toBe(true);
       const low = Math.min(...cloth.map(p => p[1]));
       expect(s.pos[J.PELVIS][1] + HIPS.y - low).toBeGreaterThan(SKIRT.len * 0.85);
+      // Open in front (the user, 2026-11-28): nothing of it across the front of the thighs, beside
+      // the tabard; its panels start over the hips.
+      expect(cloth.some(p => p[2] < -0.1 && Math.abs(p[0]) < 0.12)).toBe(false);
     });
 
     it(`keeps the skirt narrow at the sides, inside the hands that hang there, ${who}`, () => {

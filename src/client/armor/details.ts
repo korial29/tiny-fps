@@ -16,28 +16,29 @@ export const DETAILS = [
  * 忍 on the left pec of the ninja's chest piece (the user, 2026-11-13: the hood's ideogram on the
  * chest too), dark, over the vents and read from the front, on him and on her: its middle across
  * (m, - the left) and up, its size, and the trunk's half width and depth there that turn a place
- * across into an angle round it. Hers in the middle of her left breast, in place of its vents
+ * across into an angle round it; how much wider than tall it is drawn (the user, 2026-11-28: bigger
+ * and wider; it was 5 cm square on him, 3.4 on her). Hers in the middle of her left breast, in place of its vents
  * (VENTS): her piece is moulded over the dome and set where the skin's normal meets it, so a stroke
  * over the top of the breast landed past the piece's top and was dropped.
  */
 export const SIGN = [
-  { x: -0.088, y: 1.428, size: 0.05, w: 0.2, d: 0.13 },
-  { x: -0.064, y: 1.357, size: 0.034, w: 0.18, d: 0.13 },
+  { x: -0.094, y: 1.436, size: 0.064, w: 0.2, d: 0.13, wide: 1.35 },
+  { x: -0.066, y: 1.357, size: 0.043, w: 0.18, d: 0.13, wide: 1.35 },
 ];
-/** Each segment of KANJI's strokes as a detail on the left side, for build b (a stroke of the hood is 2.4 mm wide on 3 cm). */
-export const SIGNS = SIGN.map(({ x: cx, y: cy, size, w, d }) =>
+/** Each segment of KANJI's strokes as a detail on the left side, for build b (thicker than the hood's, 2.4 mm wide on 3 cm: the user, 2026-11-28). */
+export const SIGNS = SIGN.map(({ x: cx, y: cy, size, w, d, wide }) =>
   KANJI.flatMap(k =>
     k.slice(2).flatMap((_, i) => {
       if (i % 2) {
         return [];
       }
       const [u0, v0, u1, v1] = k.slice(i, i + 4);
-      const [du, dv] = [u1 - u0, v1 - v0];
+      const [du, dv] = [(u1 - u0) * wide, v1 - v0];
       // Read from the front: the left is the reader's right, so across goes toward -x.
-      const x = cx - ((u0 + u1) / 2 - 0.5) * size;
+      const x = cx - ((u0 + u1) / 2 - 0.5) * wide * size;
       const y = cy + ((v0 + v1) / 2 - 0.5) * size;
       const a = Math.atan2(-x, d * Math.sqrt(1 - (x / w) ** 2));
-      const W = 0.038 * size;
+      const W = 0.06 * size;
       const L = Math.hypot(du, dv) * size + W;
       return [
         [PART.TRUNK, 0, (a * 180) / Math.PI, y, (Math.atan2(du, dv) * 180) / Math.PI, L, W, -1],
@@ -159,6 +160,10 @@ export const MARINE = 32;
 /** A triangle's kind bit: in its own colour on any plate (the marine's details). */
 export const OWN = 64;
 export const DARK = [0.07, 0.07, 0.08];
+/** 忍's on the ninja's chest: dark gold, polished (the user, 2026-11-28: DARK, it was lost in the plate's seams and wear). */
+export const GOLD: [number[], number] = [[0.46, 0.32, 0.07], -1];
+/** 忍's black rim (the user, 2026-11-28): each stroke laid black this much wider and longer under its gold, the gold raised off it. */
+export const RIM = { w: 0.0018, raise: 0.0004 };
 /** The longest piece a detail is laid in (m). */
 export const PIECE = 0.012;
 

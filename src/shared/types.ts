@@ -331,7 +331,7 @@ export const TEX = {
   TILE: 1,
   LAVA: 2,
   STONE: 3,
-  /** Riveted metal plates. */
+  /** Smooth steel plates of 1 m, fine seams between them. */
   METAL: 4,
   /** Planks, the grain running along u. */
   WOOD: 5,

@@ -25,7 +25,8 @@ describe('the satellite round the station', () => {
     const [cx, y0, cz, y1] = def.hull;
     const wall = points.filter(([, y]) => y >= y0 && y <= y1);
     expect(Math.max(...wall.map(([x, , z]) => Math.hypot(x - cx, z - cz)))).toBeGreaterThan(43.9);
-    const lens = points.filter(p => p[8] === -2);
+    // The lens by its red; the hull's lit windows glow too.
+    const lens = points.filter(p => p[8] === -2 && p[6] > 2 * p[7]);
     expect(lens.length).toBeGreaterThan(0);
     for (const [x, y, z] of lens) {
       expect(Math.hypot(x - def.gun[0], z - def.gun[2])).toBeLessThan(28);

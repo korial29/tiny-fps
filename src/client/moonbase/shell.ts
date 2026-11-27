@@ -149,12 +149,10 @@ export const tubes = (o: Out) =>
       segment(o, RIB, at(a0 + d), at(a0 + d + 0.3), [0, 1, 0], 0.3, [1.75, w]);
     }
     // The wall of the first runs on across the end of the second.
-    lining(o, 2 - k, min[2 - k] + WALL + 0.02, a0, b0, HEAD, 1.4);
-    lining(o, 2 - k, max[2 - k] - WALL - 0.02, n ? a0 : TUBES[1].min[0], b0, HEAD, 1.4);
+    lining(o, 2 - k, min[2 - k] + WALL + 0.02, a0, b0, HEAD, 1.4, 1);
+    lining(o, 2 - k, max[2 - k] - WALL - 0.02, n ? a0 : TUBES[1].min[0], b0, HEAD, 1.4, -1);
+    // The ceiling; its lamps are corridor.ts's slats.
     panel(o, 1, HEAD - 0.01, min, max, WHITE, 0.9);
-    const [lo, hi] = [[...min], [...max]];
-    [lo[2 - k], hi[2 - k]] = [mid - 0.15, mid + 0.15];
-    panel(o, 1, HEAD - 0.02, lo, hi, LAMP);
   });
 
 /** The strips of windows on the long faces of the two modules, outside and inside, but over a doorway; three lamps under each roof. */
@@ -203,6 +201,7 @@ export const modules = (o: Out) => {
           max[2 - k] - WALL,
           ROOM,
           1.5,
+          e > 0 ? 1 : -1,
           LINTELS.filter(l => Math.abs(l.min[k] - at) < 0.01).map(l => [
             l.min[2 - k],
             l.max[2 - k],

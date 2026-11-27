@@ -238,6 +238,20 @@ const stairs = (
   });
 };
 
+/** The console at the back of the mezzanine, drawn as a desk (client/moonbase/statue.ts). */
+export const CONSOLE_BOX = ghost([-3, 19, 3, C0], 3.5, 4.6, STEEL, HULL);
+/** The mezzanine's two parapets either side of the stairs' top, drawn as metal railings. */
+export const PARAPETS = [
+  ghost([-9, 12, -2.5, 12.5], 3.5, 4.6, STEEL, PAINT),
+  ghost([2.5, 12, 9, 12.5], 3.5, 4.6, STEEL, PAINT),
+];
+/** The hall's three blocks on the floor: the two by the door drawn as eagles on plinths, the third as a machine. */
+export const CRATES = [
+  ghost([-9.5, -10, -7.5, -8], 0, 1.4, STEEL),
+  ghost([7.5, -10, 9.5, -8], 0, 1.4, STEEL),
+  ghost([7.5, 3, 10, 5.5], 0, 2.4, STEEL),
+];
+
 /**
  * What stands in the hall, about the dome's centre: ghosts, since client/moonbase.ts draws them
  * with the hall (the sun's shadow map is 64 m wide, a brush across the hall would be drawn sunlit).
@@ -255,12 +269,9 @@ export const FIT: Brush[] = [
     ...b,
     ghost: true,
   })),
-  ghost([-3, 19, 3, C0], 3.5, 4.6, STEEL, HULL),
-  ghost([-9, 12, -2.5, 12.5], 3.5, 4.6, STEEL, PAINT),
-  ghost([2.5, 12, 9, 12.5], 3.5, 4.6, STEEL, PAINT),
-  ghost([-9.5, -10, -7.5, -8], 0, 1.4, STEEL),
-  ghost([7.5, -10, 9.5, -8], 0, 1.4, STEEL),
-  ghost([7.5, 3, 10, 5.5], 0, 2.4, STEEL),
+  CONSOLE_BOX,
+  ...PARAPETS,
+  ...CRATES,
 ];
 
 /** The kinds of lab kit client/moonbase.ts draws. */

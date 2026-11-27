@@ -260,6 +260,13 @@ GEN[TEX.HULL] = (u, v) => {
       ];
 };
 
+// The moon base's walls inside (the user, 2026-11-27: uniform, slightly shiny, dark grey trim on
+// them): one off-white satin coat, no seam, the faintest slow mottle so a big wall is not dead flat.
+GEN[TEX.WALL] = (u, v) => {
+  const n = fbm(u * 2, v * 2, 2, 3, 57);
+  return [scale([214, 217, 222], 0.99 + 0.025 * n), clamp(0.5 + 1.4 * (n - 0.5))];
+};
+
 /** The layers, made once: every renderer (the game's, the character screen's) uploads the same. */
 let made: Uint8ClampedArray | undefined;
 

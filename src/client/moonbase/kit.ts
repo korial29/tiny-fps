@@ -4,7 +4,7 @@ import { room } from '../verts';
 import type { Brush } from '../../shared/world';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
-import { INDOORS, LAMP, UV, WHITE } from './constants';
+import { INDOORS, LAMP, TRIM, UV, WALL_COAT } from './constants';
 
 /** A quad indoors: textured, `l` its light (under 2), or glowing in an rgb. */
 export const quad = (o: Out, p: Vec3[], c: number | number[], l = 1, [u, v] = UV[1]) => {
@@ -93,7 +93,9 @@ export const frame = (o: Out, k: number, at: number, c0: number, c1: number, h: 
 
 /**
  * A white wall indoors in the plane of the axis k at `at`, along the other one from s to t and up
- * to y, `l` its light, open at each door (from, to, height).
+ * to y, `l` its light, open at each door (from, to, height): a uniform satin coat (TEX.WALL), and on
+ * its face toward `inward` (+1 or -1 along k) a dark grey skirting board and a rail at a metre,
+ * broken at the doors (no skirting without `skirt`).
  */
 export const lining = (
   o: Out,
@@ -103,18 +105,26 @@ export const lining = (
   t: number,
   y: number,
   l: number,
+  inward: number,
   doors: number[][] = [],
+  skirt = true,
 ) => {
   [...doors, [t, t, 0]].forEach(([d0, d1, h], i) => {
     const [lo, hi] = [
       [0, 0, 0],
       [0, y, 0],
     ];
-    [lo[2 - k], hi[2 - k]] = [i ? doors[i - 1][1] : s, d0];
-    panel(o, k, at, lo, hi, WHITE, l);
+    const a = i ? doors[i - 1][1] : s;
+    [lo[2 - k], hi[2 - k]] = [a, d0];
+    panel(o, k, at, lo, hi, WALL_COAT, l);
+    for (const [y0, y1] of [...(skirt ? [[0, 0.08]] : []), [1, 1.06]]) {
+      if (d0 > a) {
+        panel(o, k, at + inward * 0.012, [lo[0], y0, lo[2]], [hi[0], y1, hi[2]], TRIM);
+      }
+    }
     if (d1 > d0) {
       [lo[1], lo[2 - k], hi[2 - k]] = [h, d0, d1];
-      panel(o, k, at, lo, hi, WHITE, l);
+      panel(o, k, at, lo, hi, WALL_COAT, l);
     }
   });
 };

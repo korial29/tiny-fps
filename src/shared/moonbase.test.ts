@@ -342,9 +342,11 @@ describe('MOON, the base flown with the real physics', () => {
     const [x, y, z] = MOON.teams[0].base;
     const s = Sim.at(world).put(x, y, z, NORTH);
     walk(s, [
-      // Off the dais, out through the door, back in and across the hall to the foot of the stairs.
+      // Off the dais, out through the door, back in, round the dais to the foot of the stairs.
       [80, 212, 0],
       [80, 218, 0],
+      [86, 230, 0],
+      [86, 241, 0],
       [80, 241, 0],
       // Up them to the mezzanine, along it to over the tubes' mouth.
       [80, 250, 3.5],
@@ -421,8 +423,8 @@ describe('MOON, the base flown with the real physics', () => {
   });
 
   it('stops a shot at the dome wall and lets it through the door and the tubes', () => {
-    // From ahead of the door to the middle of the hall: through the door, not beside it, not over it.
-    expect(hidden(world, [80, 1.5, 205], [80, 1.5, 236])).toBe(false);
+    // From ahead of the door to the flag on its dais: through the door, not beside it, not over it.
+    expect(hidden(world, [80, 1.5, 205], [80, 3.5, 236])).toBe(false);
     expect(hidden(world, [70, 1.5, 205], [70, 1.5, 236])).toBe(true);
     // On the drawn drum, within SNUG.
     const drum = CZ - Math.sqrt(22.4 ** 2 - 10 ** 2) - 205;
@@ -438,7 +440,9 @@ describe('MOON, the base flown with the real physics', () => {
   });
 
   it('is closed all round and above: from the middle of the hall a ray leaves only by the two mouths', () => {
-    const from: [number, number, number] = [CX, 1.5, CZ];
+    // 6 m toward the door from the dome's centre, where the flag's dais stands.
+    const oz = -6;
+    const from: [number, number, number] = [CX, 1.5, CZ + oz];
     let [door, tubes, far] = [0, 0, 0];
     for (let deg = 0; deg < 360; deg += 0.5) {
       const [c, s] = [Math.cos((deg * Math.PI) / 180), Math.sin((deg * Math.PI) / 180)];
@@ -446,7 +450,7 @@ describe('MOON, the base flown with the real physics', () => {
       for (let up = 0; up < 90; up += 10) {
         const e = (up * Math.PI) / 180;
         const d = ray(world, from, [c * Math.cos(e), Math.sin(e), s * Math.cos(e)], 100);
-        const [x, z] = [c * Math.cos(e) * d, s * Math.cos(e) * d];
+        const [x, z] = [c * Math.cos(e) * d, oz + s * Math.cos(e) * d];
         if (inHall(x, z, -1e-6)) {
           // It stopped in the hall: on a wall, on what stands there, or under the roof.
           expect(1.5 + Math.sin(e) * d).toBeLessThanOrEqual(10.5 + 1e-6);
@@ -456,13 +460,14 @@ describe('MOON, the base flown with the real physics', () => {
         expect(up, `${deg}°`).toBe(0);
         const [, mz, w] = MOUTHS[0];
         const [mx, nz, v] = MOUTHS[1];
-        const byDoor = s < 0 && Math.abs((c / s) * mz) < w;
-        const byTubes = c > 0 && Math.abs((s / c) * mx - nz) < v;
+        const byDoor = s < 0 && Math.abs((c / s) * (mz - oz)) < w;
+        const byTubes = c > 0 && Math.abs(oz + (s / c) * mx - nz) < v;
         expect(byDoor || byTubes, `${deg}°`).toBe(true);
         door += +byDoor;
         tubes += +byTubes;
-        // In the tubes it ends on a wall; through the door, on its side or out on the crater.
-        expect(byDoor || d < 30, `${deg}°`).toBe(true);
+        // In the tubes it ends on a wall, or a module's past their end (38 m); through the door, on
+        // its side or out on the crater.
+        expect(byDoor || d < 40, `${deg}°`).toBe(true);
         far += +(d > 31);
       }
     }

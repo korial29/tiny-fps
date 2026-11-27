@@ -336,24 +336,50 @@ export const rift = (o: number[], def: WorldDef) => {
     }
   }
   // The rovers' ramps (moon/rift.ts KICKERS): an orange band painted along the crack's edge at the
-  // top of each, 4 m across, as on the west long jump's spur: a jump is taken here.
+  // top of each, 4 m across, as on the west long jump's spur: a jump is taken here. The band is
+  // laid in pieces of half a metre, each against the edge on its own line across the ramp, so it
+  // hugs a slanted or broken edge instead of floating back from it at one end and over the void at
+  // the other.
   for (const side of [1, -1]) {
     for (const [rx, rz, ux, uz] of KICKERS) {
       const p = (a: number, b: number): Vec3 => {
         const [x, zc] = [rx + a * ux - b * uz, rz + a * uz + b * ux];
         return [x, Math.max(lattice(r, x, 140 + side * zc), 0) + 0.05, 140 + side * zc];
       };
-      // The edge: the first open cell on the ramp's middle line.
-      let e = -6;
-      while (e < 0 && !gap(Math.floor((rx + e * ux) / S), Math.floor((rz + e * uz) / S))) {
-        e += 0.1;
+      // The edge on the line b across the ramp's middle: the first open cell from 6 m short of it.
+      const edge = (b: number) => {
+        for (let a = -6; a < 1.5; a += 0.05) {
+          if (gap(Math.floor((rx + a * ux - b * uz) / S), Math.floor((rz + a * uz + b * ux) / S))) {
+            return a - 0.15;
+          }
+        }
+        return NaN;
+      };
+      // A straight line fitted to the edge across the band (least squares), then moved back until
+      // no part of it lies past the edge: the band is turned with the edge and touches it.
+      const bs = [-2, -1.5, -1, -0.5, 0, 0.5, 1, 1.5, 2].filter(b => !Number.isNaN(edge(b)));
+      const es = bs.map(edge);
+      const n = bs.length;
+      if (n < 2) {
+        continue;
       }
-      face(
-        o,
-        [p(e - 0.7, -2), p(e - 0.7, 2), p(e - 0.1, 2), p(e - 0.1, -2)],
-        [1, 0.42, 0.08],
-        [rx, -50, 140 + side * rz],
-      );
+      const mb = bs.reduce((s, b) => s + b, 0) / n;
+      const me = es.reduce((s, e) => s + e, 0) / n;
+      const slope =
+        bs.reduce((s, b, i) => s + (b - mb) * (es[i] - me), 0) /
+        bs.reduce((s, b) => s + (b - mb) ** 2, 0);
+      const at = (b: number) => me + slope * (b - mb);
+      const back = Math.max(...bs.map((b, i) => at(b) - es[i]));
+      const STEP = 0.5;
+      for (let b = -2; b < 2; b += STEP) {
+        const [e0, e1] = [at(b) - back, at(b + STEP) - back];
+        face(
+          o,
+          [p(e0 - 0.6, b), p(e1 - 0.6, b + STEP), p(e1, b + STEP), p(e0, b)],
+          [1, 0.42, 0.08],
+          [rx, -50, 140 + side * rz],
+        );
+      }
     }
   }
   // The bottom of the cracks past the rille's own, black, 30 m down.

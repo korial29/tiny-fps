@@ -6,9 +6,12 @@ import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { PANE, STRIDE } from './mesh';
 import { GAPS, INDOORS, LINTELS, furnishing, moonbase } from './moonbase';
+import { eagles } from './moonbase/eagle';
+import { rams } from './moonbase/ram';
+import { eagleBanners, ramBanners } from './moonbase/banner';
 import { PORTHOLES, TIP, hull } from './moonhull';
 import { moonscape } from './moonscape';
-import { decor, palette, scenery } from './render';
+import { decor, scenery } from './render';
 import { uses } from './vision';
 
 const v = moonscape(MOON);
@@ -46,7 +49,7 @@ describe('moonbase', () => {
       expect(Math.max(...floor.map(p => Math.abs(p[0] - 80)))).toBeCloseTo(HALL[0][0], 9);
       expect(Math.max(...floor.map(p => Math.abs(p[2] - z)))).toBeCloseTo(HALL[0][0], 9);
       // The walls, from the floor to 8 m, on the hall's sides.
-      const walls = mine.filter(p => p[8] === TEX.PAINT && r(p) > 17);
+      const walls = mine.filter(p => p[8] === TEX.WALL && r(p) > 17);
       expect(Math.min(...walls.map(p => p[1]))).toBe(0);
       expect(Math.max(...walls.map(p => p[1]))).toBe(8);
       expect(walls.some(p => Math.abs(Math.abs(p[0] - 80) - HALL[0][0]) < 1e-9 && p[1] === 8)).toBe(
@@ -389,32 +392,62 @@ describe('moonhull, the outside of the base', () => {
 });
 
 describe('furnishing', () => {
-  const world = build(MOON);
-  const keys = palette(world).map(String);
-  const f = furnishing(MOON, keys);
+  const f = furnishing(MOON);
   const pts = Array.from({ length: f.length / STRIDE }, (_, i) =>
     f.slice(i * STRIDE, (i + 1) * STRIDE),
   );
 
-  it('is all indoors, mirrored: the indoor normal on every vertex, as many in each half', () => {
+  it('is all indoors but the banners, mirrored: as many in each half but the statues and banners', () => {
     expect(f.length % (3 * STRIDE)).toBe(0);
     expect(f.every(Number.isFinite)).toBe(true);
-    expect(pts.every(indoors)).toBe(true);
+    // Red's rams and banners and blue's eagles and banners differ; all else is red's half mirrored.
+    const [ram, eagle]: number[][] = [[], []];
+    rams(ram);
+    ramBanners(ram);
+    eagles(eagle);
+    eagleBanners(eagle);
+    const flags: number[][] = [[], []];
+    ramBanners(flags[0]);
+    eagleBanners(flags[1]);
+    // The banners hang outdoors, with their true normals: everything else takes the indoor one.
+    const outdoors = (flags[0].length + flags[1].length) / STRIDE;
+    expect(pts.filter(indoors).length).toBe(pts.length - outdoors);
     const red = pts.filter(p => p[2] > ZED / 2).length;
-    expect(red).toBe(pts.length / 2);
+    expect(red - ram.length / STRIDE).toBe(pts.length - red - eagle.length / STRIDE);
     expect(red).toBeGreaterThan(3000);
   });
 
-  it("draws each flag's dais in its team's tint, textured as the hall's fittings", () => {
-    for (const [team, { base }] of MOON.teams.entries()) {
-      const tint = 2 * keys.indexOf(`${TEAM_TINT[team]}`);
-      expect(tint).toBeGreaterThan(0);
-      const top = pts.filter(
-        p => p[1] === base[1] && Math.hypot(p[0] - base[0], p[2] - base[2]) < 6.1 && p[8] >= 0,
+  it('hangs a banner of each team either side of its main door, outside the dome, the team in its cloth', () => {
+    for (const [team, flag] of [ramBanners, eagleBanners].entries()) {
+      const o: number[] = [];
+      flag(o);
+      const vs = Array.from({ length: o.length / STRIDE }, (_, i) =>
+        o.slice(i * STRIDE, (i + 1) * STRIDE),
       );
-      // The dais's top and the upper edges of its four sides, 4.25 m out each way.
-      expect(top).toHaveLength(18);
-      expect(top.every(p => Math.floor(p[9] / 2) * 2 === tint)).toBe(true);
+      // Red's frame: before red's door, in front of the drum, 1 to 4.7 m up, both sides of the door.
+      expect(vs.every(p => p[2] < 236 - 21 && p[1] > 0.9 && p[1] < 4.8)).toBe(true);
+      expect(vs.some(p => p[0] < 76) && vs.some(p => p[0] > 84)).toBe(true);
+      // The cloth: red's red, blue's blue.
+      const [r, , b] = TEAM_TINT[team];
+      expect(
+        vs.some(p => p[8] < 0 && (r > b ? p[6] > 0.5 && p[9] < 0.1 : p[9] > 0.4 && p[6] < 0.1)),
+      ).toBe(true);
+    }
+  });
+
+  it("draws each flag's dais white round the flag, its lights in its team's colour", () => {
+    for (const [team, { base }] of MOON.teams.entries()) {
+      const near = (p: number[], r: number) => Math.hypot(p[0] - base[0], p[2] - base[2]) < r;
+      // Its top at the flag's foot, textured (white composite), under the flag.
+      const top = pts.filter(p => Math.abs(p[1] - base[1]) < 1e-6 && near(p, 2.1) && p[8] >= 0);
+      expect(top.length).toBeGreaterThan(20);
+      // The lit ring round the flag and the lines under the lips: flat colour, the team's hue.
+      const [r, , b] = TEAM_TINT[team];
+      const lights = pts.filter(
+        p =>
+          p[8] === -2 && near(p, 4.4) && p[1] > 0.3 && (r > b ? p[6] > p[9] * 2 : p[9] > p[6] * 2),
+      );
+      expect(lights.length).toBeGreaterThan(100);
     }
   });
 

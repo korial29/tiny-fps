@@ -1,5 +1,5 @@
 // Landfall's scenery (docs/BEACH.md), loaded with its own chunk when a match starts on the beach:
-// the forest, the headlands' rocks and their granite, the volcano behind and the crashed ship. Nothing else imports
+// the forest, the headlands' rocks and their granite, the volcano behind, the crashed ship and the lagoon's seabed. Nothing else imports
 // these meshes. Its buggies' look comes with it too.
 import type { WorldDef } from '../shared/world';
 import type { Decor } from './render';
@@ -11,6 +11,7 @@ import { hearths } from './hulk/camp';
 import { FOREST_GLSL } from './foliage/layers';
 import { tiled } from './foliage/tiles';
 import { parts } from './jungle';
+import { seabed } from './seabed';
 import { BARK_PIXEL, FERN_BLADE, PALM_INSTANCE } from './palms/glsl';
 import { volcano } from './volcano';
 
@@ -23,7 +24,7 @@ export default function* (def: WorldDef): Generator<undefined, Decor, undefined>
   yield;
   // concat(), not push(...): a spread of a million numbers overflows the stack.
   return {
-    land: land.concat(hulk(def), volcano()),
+    land: land.concat(hulk(def), volcano(), seabed(def)),
     sky: [],
     glass: canopy(),
     rock: GRANITE,

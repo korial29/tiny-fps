@@ -267,7 +267,9 @@ export const KIND: Record<
   },
   // A rail through a break of a wing: a beam deeper than the wing it carries, its flanges proud.
   rail: ({ min: a, max: b }) => {
-    box([a[0] + 0.14, a[1], a[2]], [b[0] - 0.14, b[1], b[2]], GIRDER);
+    // The web between the flanges only, open at the top and the bottom: no face of it lies in a
+    // flange's plane, where the two would fight for the depth (the stripes the user saw, 2026-11-27).
+    box([a[0] + 0.14, a[1] + 0.07, a[2]], [b[0] - 0.14, b[1] - 0.07, b[2]], GIRDER, GIRDER, 12);
     for (const y of [a[1], b[1] - 0.07]) {
       box([a[0], y, a[2]], [b[0], y + 0.07, b[2]], GIRDER, GIRDER, 0);
     }
@@ -395,7 +397,9 @@ export const KIND: Record<
   },
   // A frame fallen at a broken end, two girders of it on the sand and a rib still standing against the hull.
   frame: ({ min: a, max: b }, _t, s) => {
-    box([a[0] + 0.2, a[1], a[2]], [b[0] - 0.2, b[1], b[2]], IRON);
+    // The rib in two lengths between the girders, none of its faces in theirs (as rail's web).
+    box([a[0] + 0.2, a[1], a[2]], [b[0] - 0.2, b[1] - 0.8, b[2]], IRON, IRON, 12);
+    box([a[0] + 0.2, b[1] - 0.64, a[2]], [b[0] - 0.2, b[1] - 0.16, b[2]], IRON, IRON, 12);
     box([a[0], b[1] - 0.16, a[2]], b, GIRDER, GIRDER, 0);
     box([a[0], b[1] - 0.8, a[2]], [b[0], b[1] - 0.64, b[2]], GIRDER, GIRDER, 0);
     const z = (a[2] + b[2]) / 2;

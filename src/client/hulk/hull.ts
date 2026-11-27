@@ -23,6 +23,7 @@ import {
   loft,
   teeth,
   stand,
+  RAW,
 } from './common';
 import { setO } from './common';
 
@@ -236,6 +237,8 @@ export const ends = (n: number) => [
   ...(n ? [[SHAPE.sections[n][0], -1]] : []),
   ...(n < 2 ? [[SHAPE.sections[n][1], 1]] : []),
 ];
+/** The light left on burnt skin: dark, yet its panels' lines still read (at 0.1 it was a flat black void). */
+const BURNT = 0.22;
 /**
  * How much of its paint a point of section n's skin has left: burnt black at a broken end and
  * round a tear or a hole, stained along the belly, clean elsewhere.
@@ -259,7 +262,7 @@ export const paint = (n: number) => {
       }
     }
     return (
-      (0.1 + 0.9 * sm((d - f) / 1.1)) *
+      (BURNT + (1 - BURNT) * sm((d - f) / 1.1)) *
       (0.5 + 0.5 * sm((h + 6.3 + 0.5 * f) / 2.4)) *
       (0.93 + 0.07 * noise(x / 5, (p[1] + p[2]) / 4, 4 + n))
     );
@@ -403,13 +406,21 @@ export const skin = (n: number, only?: 'glass') => {
   for (const [x, d] of ends(n)) {
     // A broken end: the skin torn past it, and the ring of its thickness.
     const rim = ring(n, x);
+    const torn = rim.map((p, i) => off(p, [d * (0.15 + 1.1 * hash(i, n, 3 + d)), 0, 0]));
     loft(
       rim,
-      rim.map((p, i) => off(p, [d * (0.15 + 1.1 * hash(i, n, 3 + d)), 0, 0])),
+      torn,
       () => SKIN,
       axis(x),
-      rim.map(() => 0.1),
+      rim.map(() => BURNT),
     );
+    // Its back, 2 cm in, bare metal: seen from inside, the sheet's outer face read as a black void.
+    const back = (p: V) => {
+      const r = sub(p, axis(p[0]));
+      const l = Math.hypot(r[1], r[2]) || 1;
+      return [p[0], p[1] - (0.02 * r[1]) / l, p[2] - (0.02 * r[2]) / l];
+    };
+    loft(rim.map(back), torn.map(back), () => RAW, axis(x), undefined, undefined, true);
     for (const sg of [-1, 1]) {
       loft(
         l.map(h => shell(n, x, h, sg)),
@@ -429,18 +440,20 @@ export const tail = () => {
   rim.slice(1).forEach((p, j) => face([[x0, c, MID], rim[j], p], IRON, [x0 + 9, c, MID], 0.8));
   stand(BELL, [x0 + 0.2, c + 1.6, MID], [-1, 0, 0], [1.75, 1.75, 1.75]);
   for (const sg of [-1, 1]) {
-    // A pylon's root, faired into the flank, torn where the engine left.
-    const at = [10.5, c + 0.4, MID + sg * (wide(0, 15, 0.4) - 0.5)];
+    // A pylon's root, faired into the flank, torn where the engine left. Its inner side stays
+    // in the skin's thickness, out of the cabin's lining: it runs where the hull is widest, from
+    // x 12.6 to 20.85, and reaches 0.7 m inside the skin at most (the lining is 1 m in).
+    const at = [12.6, c + 0.4, MID + sg * (wide(0, 16, 0.4) + 0.3)];
     stand(
       coat(
         smooth(
           [
             [0, 0],
-            [1, 0.4],
-            [1.5, 3],
-            [1.5, 8],
-            [0.9, 10],
-            [0, 10.3],
+            [0.7, 0.35],
+            [1, 2.4],
+            [1, 6.4],
+            [0.6, 8],
+            [0, 8.25],
           ],
           10,
         ),
@@ -450,14 +463,14 @@ export const tail = () => {
       at,
       [1, 0, 0],
     );
-    const stub = [3, 7.5].map(u => [at[0] + u, at[1], at[2] + sg * 1.45]);
+    const stub = [2.4, 6].map(u => [at[0] + u, at[1], at[2] + sg * 0.95]);
     loft(
       stub,
       stub.map(p => off(p, [0, 0.5, 0])),
       () => IRON,
       at,
     );
-    teeth(stub[0], stub[1], [0, 0.2, sg * 1.1], 7, SKIN, 0.16, at);
+    teeth(stub[0], stub[1], [0, 0.2, sg * 0.8], 7, SKIN, 0.16, at);
     teeth(off(stub[0], [0, 0.5, 0]), off(stub[1], [0, 0.5, 0]), [0, 0.1, sg * 0.8], 5, SKIN, 0.2);
     // A fin, canted out from the shoulder and swept aft; blue's snapped half way up.
     const cant = 0.45;

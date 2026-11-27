@@ -21,7 +21,8 @@ import {
   RAW,
   DOWN,
 } from './common';
-import { sheet, ARCH, SILL, form, wide, stations, lines, lining, open } from './hull';
+import { sheet, ARCH, SILL, ends, form, wide, stations, lines, lining, open } from './hull';
+import { scorch } from './scorch';
 
 /** The holds' floors: bright galvanised steel grating, its bars 12.5 cm apart (the user, 2026-11-26: metallic). */
 const FLOOR = tex(TEX.GRATE, 1.7, 2);
@@ -91,6 +92,16 @@ export const inside = (n: number) => {
     if (back && n > 1) {
       q[0] = Math.min(q[0], ARCH);
     }
+    // At a broken end the deck stops 3 cm short: its edge and the ring of the skin's thickness
+    // were one plane there, and fought.
+    for (const [x, d] of ends(n)) {
+      if (Math.abs(p[0] - x) < 0.01 && d < 0) {
+        p[0] += 0.03;
+      }
+      if (Math.abs(q[0] - x) < 0.01 && d > 0) {
+        q[0] -= 0.03;
+      }
+    }
     const w =
       Math.min(...[p[0], (p[0] + q[0]) / 2, q[0]].map(x => wide(n, x, Math.min(b[1] - c, 6.4)))) -
       0.3;
@@ -105,10 +116,12 @@ export const inside = (n: number) => {
   }
   for (const [deck, p, q, half] of holes) {
     const y = c + DECKS[deck];
-    const w = Math.min(
-      half,
-      (deck > 1 ? 2.5 : section(DECKS[deck])) * form(n, (p + q) / 2)[0] - SHAPE.skin,
-    );
+    const span = (deck > 1 ? 2.5 : section(DECKS[deck])) * form(n, (p + q) / 2)[0] - SHAPE.skin;
+    const w = Math.min(half, span);
+    if (deck < 2) {
+      // The passengers' decks are carpeted: the carpet burnt and torn round the hole.
+      scorch(p, q, y, w, span - 0.3, half >= 9, [Math.max(x0, xa), xb]);
+    }
     const m = deck > 1 ? SKIN : FLAT;
     const k = deck > 1 ? 0.14 : 1.05;
     // Inside, the torn panels' backs are flat grey: a texture's lines shimmered on them.

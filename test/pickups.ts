@@ -9,6 +9,7 @@ import {
   PLAYER_R,
   RACK_R,
 } from '../src/shared/constants';
+import { ground } from '../src/shared/relief';
 import { build, hidden } from '../src/shared/world';
 import type { WorldDef } from '../src/shared/world';
 
@@ -30,6 +31,8 @@ export const problems = (def: WorldDef): string[] => {
   const w = build(def);
   const stands = (name: string, [x, y, z]: Vec3, r: number) => {
     if (
+      // On a relief map a pick-up may stand on the ground itself, clear of any brush.
+      !(def.relief && y === ground(w, x, z)) &&
       !brushes.some(
         b =>
           b.max[1] === y &&

@@ -60,8 +60,7 @@ export const slab = (
   rear = m,
 ) => {
   const pr = rounded(lo, hi, r, seg);
-  const at = (u: number, v: number, w: number) =>
-    off(off(off(o, ax[0], u), ax[1], v), ax[2], w);
+  const at = (u: number, v: number, w: number) => off(off(off(o, ax[0], u), ax[1], v), ax[2], w);
   const c = at((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2);
   const ring = (w: number) => pr.map(([u, v]) => at(u, v, w));
   const [a, b] = [ring(lo[2]), ring(hi[2])];

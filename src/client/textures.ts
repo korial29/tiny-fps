@@ -240,8 +240,13 @@ GEN[TEX.HIDE] = (u, v) => {
   const [sx, sy] = [x % 64, y % 64];
   const seam = sx < 2 || sy < 2;
   const stitch = (sx == 4 && (y & 3) < 2) || (sy == 4 && (x & 3) < 2);
-  const k = seam ? 0.55 : (0.82 + 0.1 * pebble - 0.08 * edge) * (0.9 + 0.2 * crease) * (stitch ? 1.15 : 1);
-  return [scale([228, 226, 224], k), seam ? 0.1 : clamp(0.35 + 0.35 * pebble - 0.2 * edge + 0.2 * crease)];
+  const k = seam
+    ? 0.55
+    : (0.82 + 0.1 * pebble - 0.08 * edge) * (0.9 + 0.2 * crease) * (stitch ? 1.15 : 1);
+  return [
+    scale([228, 226, 224], k),
+    seam ? 0.1 : clamp(0.35 + 0.35 * pebble - 0.2 * edge + 0.2 * crease),
+  ];
 };
 
 /** The layers, made once: every renderer (the game's, the character screen's) uploads the same. */

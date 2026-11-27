@@ -52,7 +52,14 @@ const back = (o: V, wd: number, r: number, wide: boolean) => {
   slab(p, across, [-h, 0, -0.09], [h, tall, 0.03], [0, 0, 0.13, 0.13], m, m, 2, false, FRAME);
   if (r < 0.8 && !wide) {
     // The headrest's cover, on the back's face.
-    plate(off(p, bk[0], 0.031), across, [-h * 0.8, tall - 0.26, 0], [h * 0.8, tall - 0.03, 0], [0, 0, 0.09, 0.09], COVER);
+    plate(
+      off(p, bk[0], 0.031),
+      across,
+      [-h * 0.8, tall - 0.26, 0],
+      [h * 0.8, tall - 0.03, 0],
+      [0, 0, 0.09, 0.09],
+      COVER,
+    );
   }
 };
 
@@ -99,7 +106,17 @@ const block = (
       // An armrest, rounded at both ends.
       // Its sides show only at the block's ends.
       const end = j == 0 || j == k;
-      slab([x, fy, e], ax, [0.04, 0.55, -0.025], [0.44, 0.62, 0.025], [0, 0, 0.03, 0.03], FRAME, FRAME, 1, !end);
+      slab(
+        [x, fy, e],
+        ax,
+        [0.04, 0.55, -0.025],
+        [0.44, 0.62, 0.025],
+        [0, 0, 0.03, 0.03],
+        FRAME,
+        FRAME,
+        1,
+        !end,
+      );
     }
   }
   if (wide) {
@@ -179,7 +196,14 @@ export const galley = (n: number, x: number, y: number, sg: number, f: number) =
   for (let i = 0; i < ovens; i++) {
     const z = lo + 0.08 + i * 0.55;
     // An oven's door or a locker's, its corners round.
-    slab([x, fy, 0], [ax[0], S, U], [0.5, z, 1.55], [0.57, z + 0.42, 1.95], 0.04, i & 1 ? INOX : SOOT);
+    slab(
+      [x, fy, 0],
+      [ax[0], S, U],
+      [0.5, z, 1.55],
+      [0.57, z + 0.42, 1.95],
+      0.04,
+      i & 1 ? INOX : SOOT,
+    );
   }
   // A cart rolled out into the aisle's edge, on its side.
   slab(

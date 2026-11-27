@@ -83,7 +83,18 @@ export const put = (p: V, n: V, m: Mat, k: number) => {
     const [u, v] =
       Math.abs(n[1]) > 0.7 ? [p[0], p[2]] : Math.abs(n[0]) > 0.7 ? [p[2], p[1]] : [p[0], p[1]];
     const [a, b] = m.r ? [v, u] : [u, v];
-    o.push(p[0], p[1], p[2], n[0], n[1], n[2], a * m.s, b * m.s, m.l, Math.min(m.c[0] * k, 1.99) + 2 * (m.t ?? 0));
+    o.push(
+      p[0],
+      p[1],
+      p[2],
+      n[0],
+      n[1],
+      n[2],
+      a * m.s,
+      b * m.s,
+      m.l,
+      Math.min(m.c[0] * k, 1.99) + 2 * (m.t ?? 0),
+    );
   }
 };
 

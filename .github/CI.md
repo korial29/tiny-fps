@@ -11,7 +11,7 @@ branches that are merged back into `master` through pull requests.
 ## Workflows
 
 ### `ci.yml` — quality gate
-Runs on every PR and push to `master`: `npm ci`, lint (prettier + eslint + tsc), `build`, `test:ci`
+Runs on every PR and push to `master`: `npm ci`, lint (oxfmt + oxlint + tsc), `build`, `test:ci`
 and the bundle size budget (`npm run size`).
 Exposes the **`verify`** status check used by branch protection.
 

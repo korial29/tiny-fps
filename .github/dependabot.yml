@@ -8,8 +8,8 @@ updates:
     labels:
       - dependencies
       - 'release:patch'
-    # typescript-eslint pins its TypeScript peer range: a TypeScript major
-    # breaks `npm ci` until typescript-eslint supports it. Bump both by hand.
+    # Bump TypeScript majors by hand: a major can drop options or change
+    # checks that `npm run lint` and `npm run build` rely on.
     ignore:
       - dependency-name: typescript
         update-types: ['version-update:semver-major']

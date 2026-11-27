@@ -42,7 +42,7 @@ new code small and in folders.
 './render/camera'`). Imports elsewhere then stay valid, and tests keep
   importing `./render`. Move a test next to the piece it covers when you split.
 - Keep a split a pure move: no behaviour change, no renamed symbol. Check it
-  with `tsc`, ESLint, Prettier and the narrow tests of that module.
+  with `tsc`, oxlint, oxfmt and the narrow tests of that module.
 - Avoid import cycles between the pieces: shared constants and types go in
   their own file (`constants.ts`, `types.ts`) that the others import.
 - Update the paths in `docs/` and `scripts/size.mjs` when a file moves.
@@ -111,7 +111,7 @@ Use Node 24 (`.nvmrc`). Run `npm start` for the Vite demo and
   or less per test file locally. Split slow files by `describe` block.
 - For prediction changes, run the same inputs through the room and predictor
   and check exact agreement. Pass `ROOFTOPS` explicitly to the test room.
-- Run `npm run lint` for formatting, ESLint and TypeScript checks.
+- Run `npm run lint` for formatting (oxfmt), linting (oxlint) and TypeScript checks.
 - For visual work, render the built client with a fake socket in headless
   Chromium and inspect the screenshot.
 

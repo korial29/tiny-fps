@@ -308,7 +308,7 @@ npm start            # demo with hot reload (Vite)
 npm run dev:server   # WebSocket server on :8787
 npm test             # Vitest, with coverage
 npm run test:ci      # Vitest, without coverage
-npm run lint         # Prettier, ESLint, tsc
+npm run lint         # oxfmt, oxlint, tsc (TypeScript 7)
 npm run build        # dist/: client, local, server, types
 npm run size         # gzip budgets
 ```

@@ -105,7 +105,7 @@ Frame time at the windows did not move (2.0 ms, headless Metal); the Tranquility
 - **Walls.** A coat of their own, `TEX.WALL`: uniform off-white satin, no seam, a little shiny (its `SPEC` row); a dark grey skirting and a rail at a metre on every wall inside, broken at the doors (`lining()`).
 - **The first module's shelves** hold rock samples, crystal clusters, jars of coloured liquids and racks of test tubes under white strip lights (`samples.ts`); the spacesuit by the second module's airlock is modelled with rounded limbs, joint rings, a pack and a gold visor (`suit.ts`).
 - **The corridors** (`corridor.ts`): a dark frame with cut upper corners every 3.5 m, in each bay a panel of lit slots on one wall and a dark panel with a red light on the other, lamp slats on the ceiling, a grating in the floor and two pipes along the ceiling's edge.
-- **Numbers:** the furnishing went from 69,636 to 159,756 vertices for both halves, built once at the map's load (about 47 ms); the scenery from 468,291 to 469,671 (the ramps' bands and the walls' trim), under its cap of 470,000. Budgets (with the user): tranquility 30,976 B, local 62,592 B.
+- **Numbers:** the furnishing went from 69,636 to 159,756 vertices for both halves, built once at the map's load (about 47 ms); the scenery from 468,291 to 469,671 (the ramps' bands and the walls' trim), under its cap of 470,000. Budgets (with the user): main 301,824 B, tranquility 30,976 B, local 62,592 B.
 
 ## The base's outside (2026-11-10)
 

@@ -119,7 +119,8 @@ const BUDGETS = [
   // 299,264 B: Landfall's palms near and far and its undergrowth drawn near the eye only, culled by distance (the user, 2026-11-27).
   // 300,544 B: things drawn by instance, culled and faded one by one (src/client/instances/: Landfall's palms) (the user, 2026-11-27).
   // 301,568 B: Tranquility's rift, its cracks, sinkholes, pylons and islands (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 301_568 },
+  // 301,824 B: the moon bases' wall coat (TEX.WALL), the flag's dais, no zone square on the moon (the user, 2026-11-28).
+  { file: 'dist/index.js', max: 301_824 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

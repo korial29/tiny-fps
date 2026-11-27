@@ -4,8 +4,8 @@ import type { PlayerState } from '../../shared/types';
 import { JOINT as J, PARENT, axis, mul, solve } from '../rig';
 import type { Vec3 } from '../mesh';
 import { createRunner, soldier } from '../soldier';
-import { ink, o } from './common';
-import { cube, turn } from './shapes';
+import { ink, o, off } from './common';
+import { ball, slab, turn } from './shapes';
 
 // ---------------------------------------------------------------------------------------------
 // The captain (the user, 2026-11-27: a dead pilot in the captain's seat, the marine's body
@@ -88,11 +88,12 @@ export const captain = (x: number, y: number, z: number) => {
 const STRIDE = 10;
 const GLOW = -2;
 
-/** The captain's cap on the floor at (x, y, z), turned `t` round the vertical: its crown, the black peak, the badge. */
+/** The captain's cap on the floor at (x, y, z), turned `t` round the vertical: its domed crown, the black peak rounded at its front, the round badge. */
 export const cap = (x: number, y: number, z: number, t: number) => {
   const ax = turn([F, U, S], U, t);
   const c = [x, y, z];
-  cube(c, ax, [-0.13, 0, -0.12], [0.13, 0.09, 0.12], NAVY, NAVY, 4);
-  cube(c, ax, [0.1, 0, -0.1], [0.2, 0.02, 0.1], SHOE, SHOE, 4);
-  cube(c, ax, [0.13, 0.04, -0.03], [0.135, 0.08, 0.03], GOLD, GOLD, 4);
+  ball(c, ax, [0.13, 0.09, 0.12], NAVY, 6, 12);
+  const flat = [ax[0], ax[2], ax[1]];
+  slab(c, flat, [0.06, -0.1, 0], [0.2, 0.1, 0.015], [0, 0.07, 0.07, 0], SHOE, SHOE, 3);
+  ball(off(off(c, ax[0], 0.095), U, 0.06), [ax[1], ax[0], ax[2]], [0.02, 0.005, 0.02], GOLD, 2, 8);
 };

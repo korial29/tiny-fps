@@ -19,7 +19,7 @@ import {
 } from './common';
 import { ROWS, ROUND, SILL, form, wide, spot, ring, SHATTER, skin } from './hull';
 import { flat, reach } from './inside';
-import { rod, cube, slab, turn } from './shapes';
+import { rod, ball, slab, turn } from './shapes';
 import { trim } from './trim';
 import { seats, galley, lavatory } from './seats';
 import { LUGGAGE, luggage } from './hold';
@@ -112,17 +112,27 @@ export const cockpit = () => {
       );
       const a = (t: V) => off(off(off(o, ax[0], t[0]), ax[1], t[1]), ax[2], t[2]);
       slab(o, ax, [-0.22, 0.64, e * 1.25 - 0.035], [0.2, 0.71, e * 1.25 + 0.035], 0.03, CONSOLE);
-      rod(a([0.14, 0.68, e * 1.25]), a([0.14, 0.42, e * 1.1]), 0.035, TUBE);
+      rod(a([0.14, 0.68, e * 1.25]), a([0.14, 0.42, e * 1.1]), 0.035, TUBE, 6);
     }
   }
-  // The pedestal between them, its throttles, two pulled back.
-  cube([98.75, y, MID], [F, U, S], [0, 0, -0.22], [1.7, 0.66, 0.22], CONSOLE);
+  // The pedestal between them, its top edges rounded, its throttles, two pulled back: round
+  // shafts and ball knobs.
+  slab(
+    [98.75, y, MID],
+    [S, U, F],
+    [-0.22, 0, 0],
+    [0.22, 0.66, 1.7],
+    [0, 0, 0.1, 0.1],
+    CONSOLE,
+    CONSOLE,
+    3,
+  );
   for (let i = 0; i < 4; i++) {
     const z = MID - 0.13 + (0.26 * i) / 3;
     const b = [99.15 + (i == 1 || i == 2 ? 0.12 : 0), y + 0.66, z];
     const t = off(b, [i % 3 ? 0.16 : -0.1, 0.24, 0]);
-    rod(b, t, 0.035, TUBE);
-    cube(t, [F, U, S], [-0.035, -0.02, -0.04], [0.035, 0.05, 0.04], i < 2 ? CUSHION : DEAD);
+    rod(b, t, 0.03, TUBE, 6);
+    ball(t, [F, U, S], [0.04, 0.035, 0.045], i < 2 ? CUSHION : DEAD, 4, 10);
   }
   for (let i = 0; i < 3; i++) {
     face(
@@ -133,8 +143,31 @@ export const cockpit = () => {
   }
   // The instrument panel under the windscreen, a glare shield over it, its faces dim or dead.
   const lean = turn([F, U, S], S, 0.28);
-  cube([100.45, y, MID], lean, [0, 0, -1.75], [0.85, 0.92, 1.75], CONSOLE);
-  cube(off([100.45, y, MID], lean[1], 0.92), lean, [-0.18, 0, -1.6], [0.6, 0.07, 1.6], DEAD);
+  // The panel's top edge toward the pilots rounded; the glare shield's corners rounded seen from
+  // above, its edge a half round.
+  slab(
+    [100.45, y, MID],
+    lean,
+    [0, 0, -1.75],
+    [0.85, 0.92, 1.75],
+    [0, 0, 0, 0.14],
+    CONSOLE,
+    CONSOLE,
+    3,
+  );
+  const shield = [lean[0], lean[2], lean[1]];
+  slab(
+    off([100.45, y, MID], lean[1], 0.92),
+    shield,
+    [-0.18, -1.6, 0],
+    [0.6, 1.6, 0.07],
+    0.3,
+    DEAD,
+    DEAD,
+    3,
+  );
+  const edge = off(off([100.45, y, MID], lean[1], 0.955), lean[0], -0.18);
+  rod(off(edge, lean[2], -1.3), off(edge, lean[2], 1.3), 0.07, DEAD, 8);
   for (let row = 0; row < 2; row++) {
     for (let i = 0; i < 9; i++) {
       const z = -1.5 + (3 * i) / 8;
@@ -154,7 +187,16 @@ export const cockpit = () => {
   // The overhead panel, still held aft under the roof, torn from its forward mount and hanging, cables down from it.
   const hang = turn([F, U, S], S, -0.35);
   const o = [99.1, spot(2, 97.6, 0, SHAPE.r, 1)[1] - 0.75, MID];
-  cube(o, hang, [-1.6, -0.07, -0.5], [0, 0.07, 0.5], CONSOLE, DEAD);
+  slab(
+    o,
+    [hang[0], hang[2], hang[1]],
+    [-1.6, -0.5, -0.07],
+    [0, 0.5, 0.07],
+    0.2,
+    CONSOLE,
+    CONSOLE,
+    3,
+  );
   for (let i = 0; i < 5; i++) {
     const p = off(off(o, hang[0], -0.2 - 0.3 * i), hang[1], -0.075);
     face(
@@ -172,26 +214,36 @@ export const cockpit = () => {
       off(p, [0.1 * (i - 1.5), -0.5 - 0.4 * hash(i, 1, 72), 0.15 * (i - 1.5)]),
       0.03,
       i & 1 ? SOOT : TUBE,
+      6,
     );
   }
   captain(98.36, y + 0.44, MID - 0.85);
   cap(97.6, y, MID - 1.55, 0.7);
   // Debris on the floor: a fallen panel, a seat's cushion, plates against the flanks.
-  cube(
+  const fallen = turn([F, U, S], U, 0.6);
+  slab(
     [97.5, y, MID + 0.35],
-    turn([F, U, S], U, 0.6),
-    [-0.3, 0, -0.2],
-    [0.3, 0.05, 0.2],
+    [fallen[0], fallen[2], fallen[1]],
+    [-0.3, -0.2, 0],
+    [0.3, 0.2, 0.05],
+    0.1,
     CONSOLE,
-    DEAD,
+    CONSOLE,
+    3,
   );
-  cube(
+  // The cushion: rounded seen from above, its edges rounded seen from the side.
+  const pad = turn([F, U, S], U, -0.4);
+  slab(
     [97.3, y, MID - 1.9],
-    turn([F, U, S], U, -0.4),
-    [-0.25, 0, -0.22],
-    [0.25, 0.1, 0.22],
+    [pad[0], pad[2], pad[1]],
+    [-0.25, -0.22, 0],
+    [0.25, 0.22, 0.1],
+    0.12,
     CUSHION,
+    CUSHION,
+    3,
   );
+  slab([97.3, y, MID - 1.9], pad, [-0.27, 0, -0.18], [0.27, 0.1, 0.18], 0.05, CUSHION, CUSHION, 3);
   for (const sg of [-1, 1]) {
     const z = MID + sg * (half(99.6) - 0.25);
     face(

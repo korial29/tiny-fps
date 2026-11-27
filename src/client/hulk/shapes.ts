@@ -3,14 +3,15 @@ import { sub, cross, unit, mid, off, QUAD, face, loft } from './common';
 
 // Small solids the cabin is furnished with.
 
-/** A tube from a to b, w across: three sides and no ends, enough at arm's length. */
-export const rod = (a: V, b: V, w: number, m: Mat) => {
+/** A tube from a to b, w across: `n` sides (three, enough at arm's length) and no ends. */
+export const rod = (a: V, b: V, w: number, m: Mat, n = 3) => {
   const d = unit(sub(b, a));
   const s = unit(cross(d, Math.abs(d[1]) > 0.9 ? [1, 0, 0] : [0, 1, 0]));
   const u = cross(s, d);
-  const r = 0.58 * w;
-  const tri = [0, 1, 2, 0].map(i =>
-    off(off([0, 0, 0], s, r * Math.cos(2.0944 * i)), u, r * Math.sin(2.0944 * i)),
+  // The triangle's corners 0.58 w out; a rounder tube's half its width.
+  const [r, step] = n == 3 ? [0.58 * w, 2.0944] : [0.5 * w, (2 * Math.PI) / n];
+  const tri = Array.from({ length: n + 1 }, (_, i) => step * (i % n)).map(t =>
+    off(off([0, 0, 0], s, r * Math.cos(t)), u, r * Math.sin(t)),
   );
   loft(
     tri.map(t => off(a, t)),
@@ -18,6 +19,26 @@ export const rod = (a: V, b: V, w: number, m: Mat) => {
     () => m,
     mid(a, b),
   );
+};
+
+/**
+ * A ball at c, its radii along the axes `ax` (r[0] ahead, r[1] up, r[2] across: a knob, a
+ * crown, its lower half sunk in the floor), `lat` rings from pole to pole and `lon` points
+ * round each, the poles on ax[1].
+ */
+export const ball = (c: V, ax: V[], r: V, m: Mat, lat = 4, lon = 8) => {
+  const at = (p: number, t: number) =>
+    off(
+      off(off(c, ax[1], r[1] * Math.cos(p)), ax[0], r[0] * Math.sin(p) * Math.cos(t)),
+      ax[2],
+      r[2] * Math.sin(p) * Math.sin(t),
+    );
+  const rows = Array.from({ length: lat + 1 }, (_, i) => (Math.PI * i) / lat);
+  const ring = (p: number) =>
+    Array.from({ length: lon + 1 }, (_, j) => at(p, (2 * Math.PI * (j % lon)) / lon));
+  for (let i = 0; i < lat; i++) {
+    loft(ring(rows[i]), ring(rows[i + 1]), () => m, c);
+  }
 };
 
 /** A box in the frame of `o` and its axes `ax`, from `lo` to `hi` along them: its faces less those of `skip` (bits as box()'s: 4 the bottom), the top (+ax[1]) in `top`. */

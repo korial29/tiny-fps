@@ -153,11 +153,12 @@ The ship carried troops. Its inside now says so, and the canopy is glass.
   the lining, so a runner pressed to the wall passes 0.3 to 0.6 m into them.
 - **The flight deck** (`cockpit()`), past x 97 on the upper deck's line, behind the wall in the
   trees: seen, never reached. A floor to the panel (x 101.4), two pilots' seats with their harnesses,
-  their backs one rounded shell up to the headrest (`chair.ts`)
-  (the co-pilot's torn from its rails and tipped against the pedestal), the pedestal with four
-  throttles, two pulled back, the instrument panel under the windscreen and its glare shield, faces
-  dim green, amber or dead, the overhead panel torn from its forward mount and hanging, cables
-  down from it, and on the floor a fallen panel, a cushion and plates against the flanks.
+  their backs one rounded shell up to the headrest (`chair.ts`) (the co-pilot's torn from its rails
+  and tipped against the pedestal), the pedestal with four throttles, two pulled back, the
+  instrument panel under the windscreen and its glare shield, faces dim green, amber or dead, the
+  overhead panel torn from its forward mount and hanging, cables down from it, and on the floor a
+  fallen panel, a cushion and plates against the flanks. Nothing on it is a box (the user,
+  2026-11-27): rounded slabs, round tubes and ball knobs (`ball()` in `shapes.ts`).
 - **The canopy's glass** (`canopy()`, paint layer `CANOPY` = −7, `CANOPY_GLSL` in `paint.ts`): the
   panes past the arch (x 92) over the sill, no longer of the skin; one pane on each flank broken
   (`SHATTER`, x 98.3..101), shards round it. It is `Decor.glass`, the ground's vertices before the

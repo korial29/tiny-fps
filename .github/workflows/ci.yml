@@ -41,7 +41,7 @@ jobs:
         if: steps.modules.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Lint (prettier + eslint + tsc)
+      - name: Lint (oxfmt + oxlint + tsc)
         run: npm run lint
 
       - name: Build

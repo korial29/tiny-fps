@@ -138,7 +138,8 @@ const BUDGETS = [
   // 60,928 B: the cloth and leather textures and a world's own tints (the user, 2026-11-27).
   // 61,184 B: the station's command room and its window (the user, 2026-11-27).
   // 62,208 B: Tranquility's rift and the bots' jumps between its islands (the user, 2026-11-27).
-  { file: 'dist/local.js', max: 62_208 },
+  // 62,464 B: the survivors' camp laid round each hearth on Landfall (the user, 2026-11-27).
+  { file: 'dist/local.js', max: 62_464 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
@@ -176,7 +177,8 @@ const LAZY = {
   // 26,624 B: the carpet burnt round the decks' holes, the pylons out of the cabin (the user, 2026-11-27).
   // 27,648 B: a volcano in the island's middle, scenery only (src/client/volcano/; the user, 2026-11-27).
   // 28,672 B: the camps' stretch tents, their leaning masts and guy ropes (hulk/tent.ts; the user, 2026-11-27).
-  landfall: 28_672,
+  // 30,208 B: the survivors' camp in place of the escape pods (hulk/camp.ts; the user, 2026-11-27).
+  landfall: 30_208,
 };
 
 const imports = src => [

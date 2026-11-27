@@ -78,6 +78,7 @@ describe('hulk', () => {
     expect(count(made.wings)).toBeLessThan(8_000);
     expect(count(made.debris)).toBeLessThan(38_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26), and the sand round the crates.
+    // Stretch tents (2026-11-27): camps 9,228 to 10,476, 1,248 a tent; in all 254,778.
     expect(count(made.camps)).toBeLessThan(13_000);
     expect(count(hulk(BEACH))).toBeLessThan(255_000);
   });
@@ -329,8 +330,8 @@ describe('hulk', () => {
       const hue = (v: number[]) => [v[6], v[7], v[9]].map(c => c / Math.max(v[6], v[7], v[9]));
       const want = tint.map(c => c / Math.max(...tint));
       const team = mine.filter(v => hue(v).every((c, i) => Math.abs(c - want[i]) < 1e-6));
-      // Two tarpaulins of 432 vertices (their roofs both faces, their hems), the step's top twice, the band of eight faces.
-      expect(team.length).toBeGreaterThanOrEqual(2 * 432 + 12 + 48);
+      // Two tents' cloth of 576 vertices (8 × 6 quads, both faces), the step's top twice, the band of eight faces.
+      expect(team.length).toBeGreaterThanOrEqual(2 * 576 + 12 + 48);
     });
   });
 
@@ -381,6 +382,24 @@ describe('hulk', () => {
       expect(p.every(v => [TEX.WOOD, TARP].includes(v[8]))).toBe(true);
     }
     expect(Math.min(...tents.filter(p => !poles.includes(p)).map(p => p.max[1]))).toBe(AWNING);
+  });
+
+  it('stretches each tent between its masts’ tips, not square: corners high, edges drawn in and down', () => {
+    const cloth = verts(made.camps).filter(v => v[8] === TARP);
+    const roofs = of('shelter').filter(p => p.max[1] - p.min[1] < 1);
+    expect(roofs).toHaveLength(4);
+    for (const { min, max } of roofs) {
+      const [cx, cz] = [(min[0] + max[0]) / 2, (min[2] + max[2]) / 2];
+      const mine = cloth.filter(v => Math.abs(v[0] - cx) < 4 && Math.abs(v[2] - cz) < 4);
+      expect(mine.length).toBe(576);
+      const ys = mine.map(v => v[1]);
+      // Two tips over the roof's top, the edges' middles down under it.
+      expect(Math.max(...ys)).toBeGreaterThan(AWNING + 0.6);
+      expect(Math.min(...ys)).toBeLessThan(AWNING - 0.5);
+      // The long edges' middle drawn in from the corners.
+      const reach = (vs: number[][]) => Math.max(...vs.map(v => Math.abs(v[2] - cz)));
+      expect(reach(mine.filter(v => Math.abs(v[0] - cx) < 0.5))).toBeLessThan(reach(mine) - 0.4);
+    }
   });
   it('lines the cabin in one painted panel, walls and ceilings alike, untinted', () => {
     const paint = verts(made.inside).filter(v => v[8] === TEX.PAINT);

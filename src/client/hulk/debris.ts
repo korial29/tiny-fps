@@ -3,7 +3,7 @@ import { TEAM_TINT } from '../../shared/map';
 import { hash, noise } from '../../shared/relief';
 import { TEX } from '../../shared/types';
 import { dress, smooth } from '../mesh';
-import { DULL, HEM, HULL, TARP } from '../paint';
+import { DULL, HULL } from '../paint';
 import type { V } from './types';
 import {
   tex,
@@ -33,6 +33,7 @@ import {
   stand,
 } from './common';
 import { coat, BELL, SET_BACK } from './hull';
+import { tent } from './tent';
 
 // ---------------------------------------------------------------------------------------------
 // The debris and the camps.
@@ -42,8 +43,6 @@ import { coat, BELL, SET_BACK } from './hull';
 const [CASE, RIB] = [0.85, 0.7].map(k => tex(TEX.STEEL + DULL, k, 1, true));
 /** The crates' corner battens, paler than their planks, the grain up them. */
 const BATTEN = tex(TEX.WOOD, 1.35, 1, true);
-/** The tents' poles: weathered wood, the grain up them, a plank's width across. */
-const POLE = tex(TEX.WOOD, 1.1, 0.5, true);
 
 /** A wheel lying along -z from its hub's back: 0.6 m in radius, 1 m wide. */
 export const WHEEL = dress(
@@ -192,39 +191,11 @@ export const KIND: Record<
       DOWN,
     );
   },
-  // A tarpaulin sagging between its four poles, lit on both faces, torn (the user, 2026-11-26):
-  // two holes through it, their edges ragged, and strips hanging from its long edges. The poles
-  // are rough wood, the grain up them.
-  shelter: ({ min: a, max: b }, t) => {
-    if (!t) {
-      box(a, b, POLE);
-      return;
-    }
-    const [I, J] = [6, 4];
-    const at = (i: number, j: number, d: number) => [
-      a[0] + ((b[0] - a[0]) * i) / I,
-      b[1] - d - 0.3 * Math.sin((Math.PI * i) / I) * Math.sin((Math.PI * j) / J),
-      a[2] + ((b[2] - a[2]) * j) / J,
-    ];
-    // Whole: the shader tears its holes and frays its hems (paint.ts TARP_GLSL). Each face twice,
-    // one lit from each side; a hem, HEM deep, hangs down each long edge.
-    for (let i = 0; i < I; i++) {
-      for (let j = 0; j <= J; j++) {
-        for (const d of [0, 0.03]) {
-          const [p, q] = [at(i, j, d), at(i + 1, j, d)];
-          const m = ink(t, i & 1 ? 0.7 : 0.8, TARP);
-          if (j < J) {
-            face([p, q, at(i + 1, j + 1, d), at(i, j + 1, d)], m, [a[0], d ? 99 : -99, a[2]]);
-          }
-          if (j % J < 1) {
-            face([p, q, off(q, DOWN, HEM / 99), off(p, DOWN, HEM / 99)], m, [
-              a[0],
-              a[1],
-              d ? 99 : -99,
-            ]);
-          }
-        }
-      }
+  // A stretch tent, not a square sheet (the user, 2026-11-27): drawn whole from its roof's box,
+  // masts and ropes too (tent.ts); its poles' boxes draw nothing. The shader still tears it.
+  shelter: ({ min: a, max: b }, t, s) => {
+    if (t) {
+      tent(a, b, t, s);
     }
   },
   // The landing gear: its strut's housing, cut at the corners, and the bogie's three wheels on their beam.

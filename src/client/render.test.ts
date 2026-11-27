@@ -948,6 +948,15 @@ describe('no NaN out of the shaders', () => {
     expect(FRAG).toContain('k=max(dot(d,O),0.)');
   });
 
+  it('keeps a NaN of the scene out of the bloom and off the canvas: grey squares from orbit', () => {
+    // Metal's fast maths let a few through on the moon's ground where it fades into the globe
+    // (the user, 2026-11-27): the bright pass drops them, the composite takes a neighbour.
+    const bright = POST_FRAG.match(/vec3 b\(vec2 x\)\{[^}]*\}/)?.[0] ?? '';
+    expect(bright).toContain('if(any(isnan(c)))return vec3(0);');
+    const composite = POST_FRAG.slice(POST_FRAG.indexOf('vec3 s=texture(S[0],U).rgb;'));
+    expect(composite).toMatch(/^vec3 s=texture\(S\[0\],U\)\.rgb;\nif\(any\(isnan\(s\)\)\)/);
+  });
+
   it('has no JavaScript keyword at the start of a line: the split once left an `export` in the GLSL', () => {
     for (const src of [FRAG, fragOf(HIGHLINE), fragOf(MAPS.landfall, 'LAND', '', true)]) {
       expect(src).not.toMatch(/^(export|import) /m);

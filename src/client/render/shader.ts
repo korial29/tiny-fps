@@ -108,10 +108,13 @@ out vec2 U;void main(){U=vec2(gl_VertexID&1,gl_VertexID>>1)*2.;gl_Position=vec4(
 // four taps each thresholded alone so a single hot pixel survives the averaging. 1: a 9-tap
 // gaussian along Y.xy in 5 taps (the weights and offsets fold the bilinear filter in). 2: the
 // scene plus the three blurs (S[1..3]) on the canvas. Tone: linear up to .6, then a shoulder
-// toward 1.
+// toward 1. A NaN in the scene is dropped from the bright pass and replaced on the canvas by the
+// pixel two rows down: the blurs spread one into a flat grey square, and the GPU's fast maths
+// still let a few through on the moon's ground at the ring where it fades into the globe, seen
+// from orbit (the user, 2026-11-27). isnan() here costs a test per tap, not the scene's fast maths.
 export const POST_FRAG = `#version 300 es
 precision highp float;uniform sampler2D S[4];uniform vec4 Y;uniform float L,Dp;in vec2 U;out vec4 o;
-vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;return c*smoothstep(.9,2.,max(c.r,max(c.g,c.b)));}
+vec3 b(vec2 x){vec3 c=texture(S[0],x).rgb;if(any(isnan(c)))return vec3(0);return c*smoothstep(.9,2.,max(c.r,max(c.g,c.b)));}
 #define T(k)texture(S[0],U+Y.xy*(k)).rgb
 void main(){
 vec3 c;
@@ -119,6 +122,7 @@ if(Y.z<1.)c=(b(U+Y.xy)+b(U-Y.xy)+b(U+Y.xy*vec2(1,-1))+b(U-Y.xy*vec2(1,-1)))/4.;
 else if(Y.z<2.)c=T(0.)*.227+(T(1.3846)+T(-1.3846))*.3162+(T(3.2308)+T(-3.2308))*.0703;
 else{
 vec3 s=texture(S[0],U).rgb;
+if(any(isnan(s))){s=textureOffset(S[0],U,ivec2(0,-2)).rgb;if(any(isnan(s)))s=vec3(0);}
 if(Dp>0.){vec2 e=Y.xy*3.,f=e*.7;s=mix(s,(s+texture(S[0],U+e*vec2(1,0)).rgb+texture(S[0],U-e*vec2(1,0)).rgb+texture(S[0],U+e*vec2(0,1)).rgb+texture(S[0],U-e*vec2(0,1)).rgb+texture(S[0],U+f).rgb+texture(S[0],U-f).rgb+texture(S[0],U+f*vec2(1,-1)).rgb+texture(S[0],U-f*vec2(1,-1)).rgb)/9.,Dp);}
 c=s+texture(S[1],U).rgb*1.3+texture(S[2],U).rgb*1.+texture(S[3],U).rgb*.7;
 vec2 q=U-.5;

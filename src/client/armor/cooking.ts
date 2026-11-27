@@ -2,11 +2,27 @@ import { GLOSS, WEAVE } from '../mesh';
 import type { Skin } from '../skin';
 import { TURN } from './types';
 import type { Corner, Recipe, Moulded } from './types';
-import { PART, GUSSET, beltOff, BROWN, CLOTH, REGIONS, OFF, WHITE, WALL, partOf } from './regions';
+import {
+  PART,
+  GUSSET,
+  beltOff,
+  BROWN,
+  CLOTH,
+  PAD,
+  REGIONS,
+  OFF,
+  WHITE,
+  WALL,
+  partOf,
+} from './regions';
 import type { Region } from './regions';
 import { angle, split, landed, clip, REACH, BITS, LIMITS, SPANS } from './clip';
 import { shaped, moulding, casting } from './shell';
 import { scratchesOn } from './scratches';
+import { OWN } from './details';
+
+/** The ninja's plates' walls: its colour a shade down, as wear() shades the plates' walls. */
+const EDGE = PAD.map(c => c * 0.75);
 
 /** Skin triangles cooking() goes through between two of its pauses: some 40 ms on an M2. */
 const SLICE = 250;
@@ -213,7 +229,17 @@ export function* cooking(s: Skin, fine: boolean): Generator<undefined, Recipe, u
             : (region.off ?? OFF) + (region.swell ? region.swell(c[0], c[1], c[2]) : 0);
         for (let i = 1; i + 1 < poly.length; i++) {
           const cs = [poly[0], poly[i], poly[i + 1]];
-          add(cs, cs.map(off), region.swell, WHITE, GLOSS, 0, k, mould && cs.map(c => mould(c, k)));
+          // The ninja's in its own near black (OWN), not the plate's that wear() gives the others.
+          add(
+            cs,
+            cs.map(off),
+            region.swell,
+            region.alone ? PAD : WHITE,
+            GLOSS,
+            region.alone ? OWN : 0,
+            k,
+            mould && cs.map(c => mould(c, k)),
+          );
         }
         // The walls along the plate's edge, wound outward (away from its middle, at rest).
         const mid = [0, 1, 2].map(j => poly.reduce((sum, c) => sum + c[j], 0) / poly.length);
@@ -231,8 +257,9 @@ export function* cooking(s: Skin, fine: boolean): Generator<undefined, Recipe, u
           const outward =
             f[0] * (p[0] - mid[0]) + f[1] * (p[1] - mid[1]) + f[2] * (p[2] - mid[2]) >= 0;
           const [P, Q] = outward ? [p, q] : [q, p];
-          add([P, Q, Q], [off(P), off(Q), 0.0015], undefined, WALL, -1, 1, k);
-          add([P, Q, P], [off(P), 0.0015, 0.0015], undefined, WALL, -1, 1, k);
+          const [wall, kind] = region.alone ? [EDGE, 1 | OWN] : [WALL, 1];
+          add([P, Q, Q], [off(P), off(Q), 0.0015], undefined, wall, -1, kind, k);
+          add([P, Q, P], [off(P), 0.0015, 0.0015], undefined, wall, -1, kind, k);
         }
       }
     }

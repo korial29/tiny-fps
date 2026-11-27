@@ -118,7 +118,8 @@ const BUDGETS = [
   // 298,368 B: the station's command room, its red button, beacons, red beams and klaxon (the user, 2026-11-27).
   // 299,264 B: Landfall's palms near and far and its undergrowth drawn near the eye only, culled by distance (the user, 2026-11-27).
   // 300,544 B: things drawn by instance, culled and faded one by one (src/client/instances/: Landfall's palms) (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 300_544 },
+  // 301,568 B: Tranquility's rift, its cracks, sinkholes, pylons and islands (the user, 2026-11-27).
+  { file: 'dist/index.js', max: 301_568 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -136,7 +137,8 @@ const BUDGETS = [
   // 60,800 B: the bots at the wheel of the moon's rovers (the user, 2026-11-26).
   // 60,928 B: the cloth and leather textures and a world's own tints (the user, 2026-11-27).
   // 61,184 B: the station's command room and its window (the user, 2026-11-27).
-  { file: 'dist/local.js', max: 61_184 },
+  // 62,208 B: Tranquility's rift and the bots' jumps between its islands (the user, 2026-11-27).
+  { file: 'dist/local.js', max: 62_208 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
@@ -159,7 +161,8 @@ const LAZY = {
   // 21,120 B: the reflections traced in the base's windows (moonbase/mirror.ts; the user, 2026-11-27).
   // 21,504 B: the hall's round control station (moonbase/console.ts; the user, 2026-11-27).
   // 23,936 B: the station's command room, its window and its computer (the user, 2026-11-27).
-  tranquility: 23_936,
+  // 24,192 B: the rift, its ground and walls drawn round the cracks and islands (moonscape/rift.ts; the user, 2026-11-27).
+  tranquility: 24_192,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

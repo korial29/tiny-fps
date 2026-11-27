@@ -7,7 +7,7 @@
 import { BEACH, HULL, ZED } from './beach';
 import { FALL_SAFE, PLAYER_H, PLAYER_R, STEP_H } from './constants';
 import { HIGHLINE } from './map';
-import { MOON } from './moon';
+import { MOON, hops } from './moon';
 import { floorAt, gravity } from './physics';
 import { ground } from './relief';
 import { HIGH, LAGOON, LOW, MID, UP, flip, leap, mirror } from './routes';
@@ -135,7 +135,7 @@ const ACROSS: [x0: number, x1: number, route: number][] = [
  * moon's three routes, an index of ROUTES each, so that bots spread over them.
  */
 const CROSSINGS: [route: number, start: Vec3, legs: Leg[]][] = [
-  [1, [18, 0, 190], [leap([18, 147], [18, 125], 0, { dash: 20 })]],
+  [1, [18, 0, 169], [leap([18, 147], [18, 125], 0, { dash: 20 })]],
   [
     2,
     [128.5, 0, 150],
@@ -207,7 +207,7 @@ const lowlands = (w: World): Rect[] => {
   if (!r) {
     return [];
   }
-  const { x0, z0, cell, nx, nz, hole, pits, pitted, bound } = r;
+  const { x0, z0, cell, nx, nz, hole, pitted, bound } = r;
   const dry = w.def.floor + WADE;
   const [cx, cz, ea, eb] = bound;
   const [mx, mz] = [nx - 1, nz - 1];
@@ -226,11 +226,7 @@ const lowlands = (w: World): Rect[] => {
       ]) {
         inside &&= ((x - cx) / ea) ** 2 + ((z - cz) / eb) ** 2 <= 1 && ground(w, x, z) >= dry;
       }
-      free[i + j * mx] = +(
-        inside &&
-        !over(q, hole) &&
-        !(pitted[i + j * nx] && pits.some(p => over(q, p)))
-      );
+      free[i + j * mx] = +(inside && !over(q, hole) && !pitted[i + j * nx]?.some(p => over(q, p)));
     }
   }
   const out: Rect[] = [];
@@ -585,6 +581,26 @@ const build = (w: World): Nav => {
         route[i] = a[2];
       }
     });
+    // The jumps between the rift's islands, both ways and both sides: a run-up of 6 m, then the leap.
+    for (const { from, to, sprint } of hops()) {
+      for (const [a, b] of [
+        [from, to],
+        [to, from],
+      ]) {
+        for (const side of [1, -1]) {
+          const [ax, az, bx, bz] = [a[0], 140 + side * a[1], b[0], 140 + side * b[1]];
+          const l = Math.hypot(bx - ax, bz - az);
+          const [sx, sz] = [ax - (6 * (bx - ax)) / l, az - (6 * (bz - az)) / l];
+          const y = Math.max(ground(w, bx, bz), 0);
+          links(
+            nav,
+            w,
+            [sx, Math.max(ground(w, sx, sz), 0), sz],
+            [leap([ax, az], [bx, bz], y, { sprint })],
+          );
+        }
+      }
+    }
     for (const [k, [x, y, z], legs] of CROSSINGS) {
       links(nav, w, [x, y, z], legs, k, true);
       links(

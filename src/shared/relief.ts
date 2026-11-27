@@ -39,8 +39,8 @@ export interface Relief {
   /** The definition's pits and the box round them all (none: an empty box). */
   pits: Quad[];
   box: Quad;
-  /** 1 for each lattice square a pit touches or is next to, by its low node. */
-  pitted: Uint8Array;
+  /** The pits each lattice square touches or is next to, by its low node (none: undefined). */
+  pitted: (Quad[] | undefined)[];
   bound: Quad;
   /** The highest node: a ray above it meets no ground. */
   top: number;
@@ -93,12 +93,13 @@ export const raise = (def: ReliefDef): Relief => {
     }
   }
   // The squares a pit touches, its edge included: ground() looks through the pits only there.
-  const pitted = new Uint8Array(nx * nz);
-  for (const [px0, pz0, px1, pz1] of pits) {
+  const pitted: (Quad[] | undefined)[] = [];
+  for (const q of pits) {
+    const [px0, pz0, px1, pz1] = q;
     for (let j = Math.floor((pz0 - z0) / cell) - 1; j <= Math.floor((pz1 - z0) / cell) + 1; j++) {
       for (let i = Math.floor((px0 - x0) / cell) - 1; i <= Math.floor((px1 - x0) / cell) + 1; i++) {
         if (i >= 0 && j >= 0 && i < nx && j < nz) {
-          pitted[i + j * nx] = 1;
+          (pitted[i + j * nx] ??= []).push(q);
         }
       }
     }
@@ -122,10 +123,7 @@ export const ground = (w: World, x: number, z: number): number => {
   const i = Math.min(Math.floor(u), r.nx - 2);
   const j = Math.min(Math.floor(v), r.nz - 2);
   // A pit's edge has no ground either: two pits side by side leave no line to walk between them.
-  if (
-    r.pitted[i + j * r.nx] &&
-    r.pits.some(q => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3])
-  ) {
+  if (r.pitted[i + j * r.nx]?.some(q => x >= q[0] && x <= q[2] && z >= q[1] && z <= q[3])) {
     return -Infinity;
   }
   const [fu, fv] = [u - i, v - j];

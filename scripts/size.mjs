@@ -110,7 +110,9 @@ const BUDGETS = [
   // 286,528 B: footprints in the sand and the regolith (the user, 2026-11-26).
   // 287,552 B: the glass and steel mirror the boxes near the eye (the user, 2026-11-26).
   // 290,816 B: a more real hand, and the Hunter's nails, spots and hide on his (the user, 2026-11-27).
-  { file: 'dist/index.js', max: 291_328 },
+  // 291,328 B: the porthole's glints (#455).
+  // 291,584 B: Landfall's airliner cabin, its cloth and leather textures and its tints (the user, 2026-11-27).
+  { file: 'dist/index.js', max: 291_584 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).
@@ -126,7 +128,8 @@ const BUDGETS = [
   // 59,520 B: the bots swimming back to shore (the user, 2026-11-26).
   // 59,776 B: the Hunter's pistol in the step and the snapshot (the user, 2026-11-26).
   // 60,800 B: the bots at the wheel of the moon's rovers (the user, 2026-11-26).
-  { file: 'dist/local.js', max: 60_800 },
+  // 60,928 B: the cloth and leather textures and a world's own tints (the user, 2026-11-27).
+  { file: 'dist/local.js', max: 60_928 },
 ];
 
 // The chunks loaded on demand (import()), by name (the file's, less its hash): each is measured
@@ -150,7 +153,8 @@ const LAZY = {
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).
   // 16,256 B: torn metal in petals, the doors' frames, the dull steel cases (the user, 2026-11-27).
-  landfall: 16_256,
+  // 19,456 B: an airliner's cabin, its seats, galleys, luggage, trim and dead captain (the user, 2026-11-27).
+  landfall: 19_456,
 };
 
 const imports = src => [

@@ -513,7 +513,7 @@ c=c*mix(e(l),vec3(1.4),g)+e(sp*R.x*(1.-kx)*(1.-.75*kb)*(.4+.6*mix(1.,t.a,s))+hl+
 vec3 r=reflect(-V,m),k=K1(r,0.);float fr=pow(clamp(1.-dot(m,V),0.,1.),4.);
 c+=kb*k*(.01+.08*fr)*(.4+.6*sv);
 #ifdef MOON
-if(abs(L-(${PANE}))<.05){float so=max(dot(r,O),0.);c=mix(c,mix(k,(.25+.75*X)*.56,smoothstep(.02,-.2,r.y))+exp(-abs(r.y-.02)*30.),.3+.5*fr)+X*(.6*pow(so,60.)+3.*pow(so,900.));}
+if(abs(L-(${PANE}))<.05){c=mix(c,mix(k,(.25+.75*X)*.56,smoothstep(.02,-.2,r.y))+exp(-abs(r.y-.02)*30.),.3+.5*fr)+X*(.6*pow(max(dot(r,O),0.),60.)+3.*pow(max(dot(r,O),0.),900.));}
 #endif
 #ifdef BEACH
 ${WET}

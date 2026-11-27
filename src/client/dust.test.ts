@@ -5,7 +5,16 @@ import { ROVER } from '../shared/rover';
 import { NOBODY, TEX } from '../shared/types';
 import type { Rover } from '../shared/types';
 import { build } from '../shared/world';
-import { DUST_FAR, DUST_LIFE, DUST_MAX, DUST_SLIP, DUST_SPEED, createDust, raising } from './dust';
+import {
+  DUST_FAR,
+  DUST_LIFE,
+  DUST_MAX,
+  DUST_SLIP,
+  DUST_SPEED,
+  SAND_TINT,
+  createDust,
+  raising,
+} from './dust';
 import { STRIDE } from './mesh';
 import { contacts } from './rover';
 
@@ -188,5 +197,27 @@ describe('createDust', () => {
       return t;
     };
     expect(life(earth, world(1))).toBeLessThan(life(moon, W));
+  });
+
+  it("is pale sand on Landfall's beach, the moon's grey elsewhere: its grey and its blue raised by SAND_TINT", () => {
+    const drawn = (w: ReturnType<typeof world>) => {
+      const d = createDust();
+      run(d, rover({ vz: -2 * DUST_SPEED }), 12, w);
+      const out: number[] = [];
+      d.draw(out);
+      return out;
+    };
+    const beach = world(1);
+    beach.def.scenery = 'beach';
+    const [grey, sand] = [drawn(world(1)), drawn(beach)];
+    expect(sand.length).toBe(grey.length);
+    expect(sand.length).toBeGreaterThan(0);
+    for (let i = 0; i < grey.length; i += STRIDE) {
+      expect(sand[i + 6]).toBeCloseTo(grey[i + 6] * SAND_TINT[0], 9);
+      expect(sand[i + 7]).toBeCloseTo(grey[i + 7], 9);
+      expect(sand[i + 9]).toBeCloseTo(grey[i + 9] * SAND_TINT[1], 9);
+    }
+    // Warm: more grey than blue.
+    expect(sand[6]).toBeGreaterThan(sand[9]);
   });
 });

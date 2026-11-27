@@ -123,7 +123,7 @@ describe('LANDFALL', () => {
     expect(BEACH.scenery).toBe('beach');
     expect(BEACH.helmets ?? false).toBe(false);
     expect(BEACH.armor).toBe(true);
-    expect(BEACH.rovers ?? []).toHaveLength(0);
+    expect(BEACH.rovers ?? []).toHaveLength(2);
     expect(Math.hypot(...BEACH.sun.dir)).toBeCloseTo(1, 2);
     expect(BEACH.sun.dir[1]).toBeGreaterThan(0.7);
     expect(BEACH.fog![3]).toBeLessThan(0.003);

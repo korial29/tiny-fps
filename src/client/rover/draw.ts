@@ -25,11 +25,29 @@ interface Kit {
   coil: number[];
 }
 
-const kits = new Map<number, Kit>();
+/**
+ * What a rover is drawn with, each at a level of detail (0 far, 1 mid, 2 near) in the body's frame:
+ * its body (what keeps its colours, and what takes the team's, white), a wheel about the x axis and
+ * a fender over it of `n` plates. The suspension, the yoke and the placing are the same for every
+ * look: they follow the simulation (shared/rover.ts).
+ */
+export interface Look {
+  body: (level: number) => [number[], number[]];
+  wheel: (level: number) => number[];
+  fender: (n: number) => number[];
+}
 
-const kit = (lod: number): Kit => {
+/** Tranquility's rover. */
+export const MOON_LOOK: Look = { body, wheel, fender };
+
+/** Each look's kits by level of detail, built on first use. */
+const kits = new Map<Look, Map<number, Kit>>();
+
+const kit = (lod: number, look: Look): Kit => {
   const level = Math.max(0, Math.min(lod, 2)) | 0;
-  let k = kits.get(level);
+  const built = kits.get(look) ?? new Map<number, Kit>();
+  kits.set(look, built);
+  let k = built.get(level);
   if (!k) {
     // The spring: bands of the team's colour and dark, which close up as it is squeezed.
     const coil = dress(
@@ -44,17 +62,17 @@ const kit = (lod: number): Kit => {
         [coil[i + 6], coil[i + 7], coil[i + 9]] = [0.15, 0.15, 0.15];
       }
     }
-    const [b, team] = body(level);
+    const [b, team] = look.body(level);
     k = {
       level,
       body: b,
       team,
-      wheel: wheel(level),
-      fender: fender(level + 1),
+      wheel: look.wheel(level),
+      fender: look.fender(level + 1),
       yoke: level > 1 ? yoke() : [],
       coil,
     };
-    kits.set(level, k);
+    built.set(level, k);
   }
   return k;
 };
@@ -146,7 +164,8 @@ export const contacts = (r: Rover, w: World): Vec3[] => {
  * `steer`, the wishbones and the coil-overs following, the yoke turning with the wheels. `rgb` is
  * the team's colour (0 to 1): the fenders, the bonnet's stripe, the springs and the whip's light.
  * Its damage shows (wreck.ts, `n` its index among the map's vehicles): scorched where it arcs; a
- * wreck sagged on splayed wheels, charred, falling apart at the end.
+ * wreck sagged on splayed wheels, charred, falling apart at the end. `look` is its body and wheels:
+ * the moon's rover, or a map's own (Decor.car, Landfall's buggy).
  */
 export const rover = (
   out: Out,
@@ -156,8 +175,9 @@ export const rover = (
   rgb: number[],
   lod: number,
   n = 0,
+  look = MOON_LOOK,
 ): void => {
-  const k = kit(lod);
+  const k = kit(lod, look);
   const start = out.length;
   const r = pose(state);
   // A wreck's wheels lean in at the top.

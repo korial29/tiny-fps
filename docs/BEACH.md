@@ -337,3 +337,30 @@ a hole or at a broken end, so a runner pressed to the wall passes into the furni
   (medians of the four runs), outside looking at the wreck 8.8 → 9.4 ms (two runs each). Without the cabin's props
   the main deck draws in 10.9 ms. Highline (5.3 ms) and Tranquility draw none of it and measured
   the same.
+
+## The buggies (the user, 2026-11-27)
+
+A buggy a camp. `BEACH.rovers` parks red's at (79, 222) on the camp's level sand, east of the
+spawns and clear of the crates and the tarpaulins, its nose toward the other camp; blue's is its
+twin across the centre line. The four wheels stand on lattice nodes inside `FLATS`' level margin:
+at x 80 the sand rises toward the node at x 84 and a wheel there sat 8 cm high.
+
+- **The simulation is the moon rover's** (`src/shared/rover.ts`): the same chassis, two seats,
+  lasers, 10 HP, wreck and respawn, under Landfall's full gravity. No gameplay rule changed.
+- **The look is its own** (`src/client/buggy/`, built in `rover()`'s `look`, `Look` in
+  `src/client/rover/draw.ts`): a dune buggy blocked out in Blender, then written in code. A low
+  bonnet, rounded lightly on its top edges and sloping steeply down to a low grille at the front
+  (horizontal bars), side pods with a dip where the crew climbs in, a dark coaming and rocker
+  strip, a step tube and a white roundel, a simple mudguard over each wheel as the moon rover's,
+  fat paddle tyres, a tube roll cage with a light bar, a bare engine, an upright spare tyre and a
+  whip with a pennant. The team's colour is on the bonnet, the pods, the mudguards and the
+  pennant. Landfall's chunk brings it (`Decor.car`, `landfall.ts`): nothing in the main bundle.
+- **The client's rover model** moved to `src/client/rover/` (`constants`, `mesh`, `parts`,
+  `body`, `draw`), `src/client/rover.ts` re-exporting it; the moon's rover draws as before
+  (`MOON_LOOK`, the default).
+- **Dust**: the wheels throw pale sand on the beach (`SAND_TINT` in `dust.ts`), the moon's grey
+  elsewhere.
+- **Cost**: vertices far / mid / near 816 / 2,682 / 5,934 a buggy (the moon rover 396 / 1,194 /
+  3,714). Match-frame JavaScript at red's camp looking at its buggy (headless Chrome on Metal,
+  800 × 450, medians of 120 frames, alternated three times): 0.1 ms without the two buggies, 0.6
+  ms with them; Tranquility's eight vehicles cost 1.2 ms the same way. Highline draws none.

@@ -1,4 +1,4 @@
-// The regolith a rover's wheels throw up: puffs of smoke (layer -3: see-through, casting nothing)
+// The regolith a rover's wheels throw up (Landfall's buggies, sand): puffs of smoke (layer -3: see-through, casting nothing)
 // from each tyre on the ground while the rover goes fast or slides. No air on the moon: a puff
 // flies the arc it was thrown on, under the world's gravity, and is gone where it comes down; it
 // does not billow or hang. No DOM.
@@ -19,6 +19,11 @@ export const DUST_MAX = 240;
 export const DUST_LIFE = 1.6;
 /** Metres from the eye past which no dust is raised: it is too small to see. */
 export const DUST_FAR = 120;
+/**
+ * What PUFF's grey and blue are multiplied by on Landfall's sand (the user, 2026-11-27): a pale
+ * warm sand, not the moon's grey (layer -3 has a grey and a blue only).
+ */
+export const SAND_TINT = [2, 1.5];
 
 /** A ball of radius 1, built once: grey smoke, its opacity in green (see FRAG in render.ts). */
 const PUFF = dress(
@@ -75,6 +80,8 @@ export const createDust = (): Dust => {
   /** What each wheel of each rover owes: a puff when it passes 1. */
   const owed: number[] = [];
   let seed = 1;
+  /** The grey's and the blue's factors: the world's ground, from the last update. */
+  let [grey, blue] = [1, 1];
   /** In [0, 1): the same run every time. */
   const rnd = () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -83,6 +90,7 @@ export const createDust = (): Dust => {
   return {
     update(rovers, world, dt, eye) {
       const g = gravity(world);
+      [grey, blue] = world.def.scenery === 'beach' ? SAND_TINT : [1, 1];
       for (let i = puffs.length - 1; i >= 0; i--) {
         const p = puffs[i];
         p[4] -= g * dt;
@@ -131,7 +139,7 @@ export const createDust = (): Dust => {
     draw(out) {
       for (const [x, y, z, , , , t] of puffs) {
         const k = t / DUST_LIFE;
-        place(out, PUFF, [x, y, z], WORLD, [0, 0, 0], 0.14 + 0.42 * k, [1, 1 - k * k, 1]);
+        place(out, PUFF, [x, y, z], WORLD, [0, 0, 0], 0.14 + 0.42 * k, [grey, 1 - k * k, blue]);
       }
     },
     get count() {

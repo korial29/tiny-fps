@@ -94,6 +94,8 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   if (!gl) {
     throw new Error('WebGL2 is not available');
   }
+  /** The map's rovers' own look (Landfall's buggy), else the moon's. */
+  const look = d.car;
   /** The animation state of each runner drawn. */
   let runners = new Map<number, Runner>();
   let builds: ReadonlyMap<number, number> = new Map();
@@ -716,6 +718,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
           teamRgb(+(i >= cars.length / 2)),
           d < ROVER_NEAR ? 2 : +(d < ROVER_MID),
           i,
+          look,
         );
       });
       ships.forEach((r, i) => {

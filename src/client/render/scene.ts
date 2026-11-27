@@ -7,6 +7,7 @@ import { skyline, trees } from '../skyline';
 import { deepen, street } from '../street';
 import { drive } from '../tasks';
 import { vision, zones } from '../vision';
+import type { Look } from '../rover/draw';
 
 import { FOG_CLIMB, FOG_FAR, FOG_LAYER, FOG_RISE, HAZE, MAX_TINTS } from './constants';
 
@@ -104,6 +105,8 @@ export type Decor = {
   glass?: number[];
   /** GLSL for the map's rocks (TEX.ROCK) under BEACH, spliced in by fragOf(): Landfall's granite, which its chunk brings. */
   rock?: string;
+  /** How the map's rovers look, if not as the moon's: Landfall's buggy, which its chunk brings. */
+  car?: Look;
 };
 /** The scenery of a map that has none of its own: the city's is drawn here. */
 export const BARE: Decor = { land: [], sky: [] };

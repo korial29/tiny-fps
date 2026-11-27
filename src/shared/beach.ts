@@ -931,6 +931,8 @@ const team = (red: boolean) => {
     rail: side(on(RAILS)),
   };
 };
+/** Where red's buggy is parked, x and z: by the camp's east crate, inside the level sand (FLATS). */
+const BUGGY = [79, 222];
 /** In the gallery, inside red's tear. */
 const GALLERY: Vec3 = [70.5, HULL.axis[1] + DECKS[1], MID + 3];
 
@@ -985,6 +987,12 @@ export const BEACH: WorldDef = {
   ),
   // Armour: on the engine in the lagoon, and on the hull's back over the wings.
   vests: both([on(ENGINE)], [63, BACK[1], MID]),
+  // A buggy a camp (the user, 2026-11-27), at the east edge of its level sand clear of the crates,
+  // its nose toward the other camp: red's, then blue's. The rover's chassis (rover.ts).
+  rovers: [
+    [BUGGY[0], CAMP, BUGGY[1], 0],
+    [BUGGY[0], CAMP, ZED - BUGGY[1], Math.PI],
+  ],
   floor: DEPTH,
   water: FRAME.water,
   fires: FIRES.map(([x, y, z, , r]): [number, number, number, number, number] => [

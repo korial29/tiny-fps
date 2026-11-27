@@ -183,33 +183,33 @@ export const CROSSINGS = [
   [136, 45, 1, 0],
 ];
 /**
- * The rovers' ramps, red's (the user, 2026-11-27: discreet, white, like pieces of a wing): a point
- * in a crack's middle and the way a rover jumps it (a unit vector), and a seed for the debris'
- * shape. The relief rises WING_H m over 7 m to 2 m short of the point, level 4 m across and 2.5 m
+ * The rovers' ramps, red's (the user, 2026-11-27: discreet, marked by an orange band at the top as
+ * the west long jump's spur is): a point in a crack's middle, the way a rover jumps it (a unit
+ * vector). The relief rises KICK_H m over 7 m to 2 m short of the point, level 4 m across and 2.5 m
  * of flank each side (moon.ts at()); a rover at speed flies the crack off it. One on each branch
  * of the cracks between two islands where there is room for one, and both ways over the front
  * crack facing the rovers parked before the base.
  */
-export const WINGS = [
+export const KICKERS = [
   // Over the front: both ways facing the parked rovers, one way elsewhere.
-  [62, 61.25, 0, -1, 1],
-  [62, 61.25, 0, 1, 2],
-  [154, 62.5, 0, -1, 3],
-  [154, 62.5, 0, 1, 4],
-  [18, 60.6, 0, 1, 5],
-  [90, 54.7, 0, -1, 6],
-  [117, 50.8, 0, 1, 7],
+  [62, 61.25, 0, -1],
+  [62, 61.25, 0, 1],
+  [154, 62.5, 0, -1],
+  [154, 62.5, 0, 1],
+  [18, 60.6, 0, 1],
+  [90, 54.7, 0, -1],
+  [117, 50.8, 0, 1],
   // Between the islands.
-  [35.8, 55, 1, 0, 8],
-  [14, 34.8, 0, -1, 9],
-  [65, 17, 1, 0, 11],
-  [74, 52.5, 1, 0, 12],
-  [78, 35.5, 0, -1, 13],
-  [91.7, 44, 1, 0, 14],
+  [35.8, 55, 1, 0],
+  [14, 34.8, 0, -1],
+  [65, 17, 1, 0],
+  [74, 52.5, 1, 0],
+  [78, 35.5, 0, -1],
+  [91.7, 44, 1, 0],
 ];
-export const WING_H = 1.2;
+export const KICK_H = 1.2;
 /** Round each ramp, x0, z0, x1, z1 from the centre line: its slope and flanks, the field level under it. */
-export const WING_RECTS = WINGS.map(([rx, rz, ux, uz]) => {
+export const KICKER_RECTS = KICKERS.map(([rx, rz, ux, uz]) => {
   const [xs, zs] = [
     [rx - 9 * ux, rx + ux],
     [rz - 9 * uz, rz + uz],
@@ -220,10 +220,9 @@ export const WING_RECTS = WINGS.map(([rx, rz, ux, uz]) => {
 /** The ramps' relief at (x, z from the centre line): 0 off them. */
 export const ramped = (x: number, z: number) => {
   let h = 0;
-  for (const [rx, rz, ux, uz] of WINGS) {
+  for (const [rx, rz, ux, uz] of KICKERS) {
     const [a, b] = [(x - rx) * ux + (z - rz) * uz, (z - rz) * ux - (x - rx) * uz];
-    const c = (t: number) => Math.min(Math.max(t, 0), 1);
-    h = Math.max(h, WING_H * c((a + 9) / 7) * c((1.5 - a) / 3) * c((4.5 - Math.abs(b)) / 2.5));
+    h = Math.max(h, KICK_H * c1((a + 9) / 7) * c1((1.5 - a) / 3) * c1((4.5 - Math.abs(b)) / 2.5));
   }
   return h;
 };
@@ -246,6 +245,8 @@ export const PYLONS = [
 ];
 
 const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
+/** t clamped to [0, 1]. */
+export const c1 = (t: number) => Math.min(Math.max(t, 0), 1);
 
 /** How far (x, z from the centre line) is inside a crack or a sinkhole: over 0 open. */
 const open = (x: number, z: number) => {

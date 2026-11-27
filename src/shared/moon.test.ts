@@ -27,7 +27,7 @@ import {
   FLATS,
   CRACKS,
   HOLLOW,
-  WINGS,
+  KICKERS,
   LAYOUT,
   LIP,
   PYLONS,
@@ -1364,7 +1364,7 @@ describe('MOON, the field, the mounds and the carved rille', () => {
 
   it('flies a rover over a crack off each wing ramp, both sides: from 25 m back, flat out, it lands past it', () => {
     const failed: string[] = [];
-    for (const [rx, rz, ux, uz] of WINGS) {
+    for (const [rx, rz, ux, uz] of KICKERS) {
       for (const side of [1, -1]) {
         // Red's frame to the world: z mirrored on blue's side. Back up to 25 m, on unbroken ground.
         // (From the rover parked facing it, if one is.)
@@ -1400,8 +1400,8 @@ describe('MOON, the field, the mounds and the carved rille', () => {
   }, 60_000);
 
   it('parks a rover in sight before each base facing each two-way ramp over the front crack', () => {
-    for (const [rx, rz, ux] of WINGS.filter(
-      w => w[3] < 0 && WINGS.some(v => v[0] === w[0] && v[3] > 0),
+    for (const [rx, rz, ux] of KICKERS.filter(
+      w => w[3] < 0 && KICKERS.some(v => v[0] === w[0] && v[3] > 0),
     )) {
       expect(ux).toBe(0);
       for (const side of [1, -1]) {

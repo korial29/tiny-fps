@@ -9,14 +9,14 @@ import { TEAM_TINT } from './map';
 import { BASE, DOME, DOORS, MODULES, TUBES, box, bx } from './moonbase';
 import type { Bx, Vec3 } from './moonbase';
 import { hash, noise } from './relief';
-import { HOLLOW, LIP, WING_RECTS, floor, pylons, ramped, voids } from './moon/rift';
+import { HOLLOW, KICKER_RECTS, LIP, c1, floor, pylons, ramped, voids } from './moon/rift';
 import { station } from './station';
 import { TEX } from './types';
 import type { Brush, Spawn, WorldDef } from './world';
 
 /** The crater is 280 m long: a point at z has its twin at ZED - z. */
 export const ZED = 280;
-export { CRACKS, CROSSINGS, HOLLOW, LIP, PYLONS, SINKS, WINGS, hops } from './moon/rift';
+export { CRACKS, CROSSINGS, HOLLOW, LIP, PYLONS, SINKS, KICKERS, hops } from './moon/rift';
 const [RED, BLUE] = TEAM_TINT;
 const { STONE, CONCRETE, METAL, STEEL, PAINT } = TEX;
 
@@ -46,7 +46,6 @@ const MASTS = [
 /** Red's flag: in the hall, 2 m from the dome's centre toward the door. */
 const FLAG = DOME[1] - 2;
 
-const c1 = (t: number) => Math.min(Math.max(t, 0), 1);
 const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
 const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
 
@@ -300,7 +299,7 @@ const at = (x: number, z: number): number => {
       );
     }
     // Under the rovers' ramps: level, the field back 6 m past them.
-    for (const [x0, z0, x1, z1] of WING_RECTS) {
+    for (const [x0, z0, x1, z1] of KICKER_RECTS) {
       m *= sm(far(Math.max(x0 - x, x - x1, 0), Math.max(z0 - z, z - z1, 0)) / 6);
     }
     h =

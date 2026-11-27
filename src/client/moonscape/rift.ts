@@ -6,7 +6,7 @@
 // corner, cut along the diagonal (the chamfer that keeps an edge from reading as steps); with four,
 // not at all. A cell collides when it has two open corners or fewer (gap()... with three it is
 // open): the ground drawn covers every brush, and is past one at most by a chamfer's triangle.
-import { NX, NZ, S, WINGS, corner, gap, mask } from '../../shared/moon/rift';
+import { NX, NZ, S, KICKERS, corner, gap, mask } from '../../shared/moon/rift';
 import { raise } from '../../shared/relief';
 import type { Relief } from '../../shared/relief';
 import { TEX } from '../../shared/types';
@@ -26,6 +26,13 @@ const lattice = (r: Relief, x: number, z: number) => {
   return fu >= fv ? a + (b - a) * fu + (d - b) * fv : a + (c - a) * fv + (d - c) * fu;
 };
 
+/** A cell's corners in metres, x and z from the centre line, in the order of mask()'s bits. */
+const cornersOf = (i: number, j: number) => [
+  [i * S, j * S],
+  [(i + 1) * S, j * S],
+  [(i + 1) * S, (j + 1) * S],
+  [i * S, (j + 1) * S],
+];
 const count = (m: number) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1) + ((m >> 3) & 1);
 /** Drawn whole: a closed cell. */
 const whole = (i: number, j: number) => !gap(i, j);
@@ -122,12 +129,7 @@ export const rift = (o: number[], def: WorldDef) => {
             if (count(m) === 3) {
               // The closed corner and its two neighbours.
               const c = [1, 2, 4, 8].findIndex(b => !(m & b));
-              const q = [
-                [i, j],
-                [i + 1, j],
-                [i + 1, j + 1],
-                [i, j + 1],
-              ].map(([a, b]) => vert(a * S, b * S));
+              const q = cornersOf(i, j).map(([a, b]) => vert(a, b));
               tri(q[c], q[(c + 1) % 4], q[(c + 3) % 4]);
             }
             i++;
@@ -327,52 +329,30 @@ export const rift = (o: number[], def: WorldDef) => {
         const m = mask(i, j);
         if (!whole(i, j) && count(m) === 3) {
           const c = [1, 2, 4, 8].findIndex(b => !(m & b));
-          const q = [
-            [i, j],
-            [i + 1, j],
-            [i + 1, j + 1],
-            [i, j + 1],
-          ].map(([a, b]) => [a * S, b * S]);
+          const q = cornersOf(i, j);
           wall(q[(c + 1) % 4], q[(c + 3) % 4], k++);
         }
       }
     }
   }
-  // The rovers' ramps: a piece of a wing on each (moon/rift.ts WINGS), white, a hand's breadth
-  // over the slope, from its root 9 m back to a torn end at the crack's edge; each its own length,
-  // widths, slant and tears, from its seed. A grey spar along it.
+  // The rovers' ramps (moon/rift.ts KICKERS): an orange band painted along the crack's edge at the
+  // top of each, 4 m across, as on the west long jump's spur: a jump is taken here.
   for (const side of [1, -1]) {
-    for (const [rx, rz, ux, uz, seed] of WINGS) {
-      const h = (k: number) => hash(seed, k, 97);
-      // From the wing's own a (along the jump) and b (across it) to the world.
+    for (const [rx, rz, ux, uz] of KICKERS) {
       const p = (a: number, b: number): Vec3 => {
         const [x, zc] = [rx + a * ux - b * uz, rz + a * uz + b * ux];
-        return [x, Math.max(lattice(r, x, 140 + side * zc), 0) + 0.08, 140 + side * zc];
+        return [x, Math.max(lattice(r, x, 140 + side * zc), 0) + 0.05, 140 + side * zc];
       };
-      const [a0, a1] = [-9.5 - h(1), -2.4 + 1.2 * h(2)];
-      const [wl, wr, t, sk] = [2 + 0.7 * h(3), 2 + 0.7 * h(4), 0.55 + 0.3 * h(5), h(6) - 0.5];
-      const tears = [0.75, 0.5, 0.25].map((f, k) => [
-        a1 - 0.3 - 0.9 * h(7 + k),
-        sk + (wr * t + wl * t) * f - wl * t,
-      ]);
-      const rim = [[a0, -wl], [a0, wr], [a1, sk + wr * t], ...tears, [a1, sk - wl * t]].map(
-        ([a, b]) => p(a, b),
-      );
-      const mid = p((a0 + a1) / 2, (wr - wl) / 4 + sk / 2);
-      const under: Vec3 = [mid[0], -50, mid[2]];
-      rim.forEach((q, k) => face(o, [mid, q, rim[(k + 1) % rim.length]], [0.86, 0.87, 0.9], under));
-      // The spar: a grey strip a third of the way across.
-      const bs = (wr - wl) / 3;
+      // The edge: the first open cell on the ramp's middle line.
+      let e = -6;
+      while (e < 0 && !gap(Math.floor((rx + e * ux) / S), Math.floor((rz + e * uz) / S))) {
+        e += 0.1;
+      }
       face(
         o,
-        [
-          p(a0 + 0.3, bs - 0.12),
-          p(a0 + 0.3, bs + 0.12),
-          p(a1 - 0.4, bs + sk + 0.1),
-          p(a1 - 0.4, bs + sk - 0.1),
-        ].map(q => [q[0], q[1] + 0.01, q[2]] as Vec3),
-        [0.55, 0.56, 0.6],
-        under,
+        [p(e - 0.7, -2), p(e - 0.7, 2), p(e - 0.1, 2), p(e - 0.1, -2)],
+        [1, 0.42, 0.08],
+        [rx, -50, 140 + side * rz],
       );
     }
   }

@@ -238,9 +238,9 @@ wreck on the Bowl's floor).
   links them both ways (`nav.ts`), each flown with the physics in `moon.test.ts`.
 - **Pylons** (`PYLONS`): nine a side in the sinkholes and the cracks' wide parts, tops from -0.4
   to 1.2 m, each within 3.5 m of another or an edge.
-- **Rovers.** Ramps in the relief (`WINGS`, 1.2 m up over 7 m to the crack's edge, level 4 m
-  across), each drawn as a white piece of a wing, its own length, widths, slant and torn end
-  (the user: discreet, debris rather than signs): one on each crack branch between two islands
+- **Rovers.** Ramps in the relief (`KICKERS`, 1.2 m up over 7 m to the crack's edge, level 4 m
+  across), each marked by an orange band painted along the crack's edge at its top, as the west
+  long jump's spur is (the user: discreet; white wing debris first, then this): one on each crack branch between two islands
   where there is room, toward the rille, and both ways over the front crack at x 62 and x 154.
   None on the short branch west of the west sinkhole (the west jump's strip and a rock), on the
   east one from the sinkhole to the front (a rack, a rock and the east run-up) nor on the second
@@ -287,7 +287,7 @@ Known limits: a rover never pushes a ship, nor a ship another vehicle: each stop
 
 The user: the wings went through everything, shots on another ship or a rover seemed to do nothing, and a ship should be heard and hurt when it crashes.
 
-- `WING` (the wings' three sections) moved from `craft.ts` to `ship.ts`: what is drawn is what collides. `wings()` are four stadiums along the middle of the chord (two a side, `WING_H` thick over the wing's bottom), added to the hull by `shipBodies()` and `hulls()` (`rover.ts`): players on foot walk into the wings and stand on them, rovers and cuts meet them. `struck()` and `reach()` add the wings as boxes along the span in the ship's frame (`WING_BOXES`), so a bolt, a ball or a missile on a wing hurts the ship.
+- `WING` (the wings' three sections) moved from `craft.ts` to `ship.ts`: what is drawn is what collides. `wings()` are four stadiums along the middle of the chord (two a side, `KICK_H` thick over the wing's bottom), added to the hull by `shipBodies()` and `hulls()` (`rover.ts`): players on foot walk into the wings and stand on them, rovers and cuts meet them. `struck()` and `reach()` add the wings as boxes along the span in the ship's frame (`WING_BOXES`), so a bolt, a ball or a missile on a wing hurts the ship.
 - In flight (`pilot()`): the wing tips are pushed out of the brushes' sides like the hull's circles, the wings' undersides (`TOUCH`) lift the ship over the floor under them (banked low, a tip went into the ground) without landing it, and the hull's circles and the tips stop on the other vehicles' bodies (`drive()` hands them in), `SHIP.BOUNCE` of the speed into them sent back. Ships now collide with rovers and with each other.
 - A crash: the speed a step's collisions take away (the vertical part halved: sinking onto a pad on C is no crash) is the jolt; past `SHIP.CRASH` (12 m/s) it costs 1 hp each `SHIP.CRASH_HP` (4) more (`Room.crash()`, nobody's shot, the blast its own team's). A wall at the top speed takes 9, at full boost the ship blows up. Piloted or not.
 - The lasers' aim (`aimOf()`, the room's `sight()`): the two beams crossed at a fixed `GUN_AIM` (50 m for a rover, 80 m for a ship), so on a rover nearer than that they went either side of it. They now cross on what the look meets within the guns' range (a brush, an enemy vehicle's hull, an enemy on foot as the driver drew him), `AIM_MIN` (8 m) at least; the missiles fly there too, and the reticle shows the same point.

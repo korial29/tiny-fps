@@ -12,7 +12,7 @@ import type { World, WorldDef } from '../shared/world';
 import { GLOW, glow, ring } from './flag';
 import { STRIDE, dot, dress, mix, place, smooth, unit } from './mesh';
 import type { Vec3 } from './mesh';
-import { UP, cross, face, lit } from './brick';
+import { UP, box, cross, face, lit } from './brick';
 import { moonbase } from './moonbase';
 import { rift, rifted } from './moonscape/rift';
 import { hull } from './moonhull';
@@ -789,23 +789,7 @@ const ravine = (o: number[]) => {
   PYLONS.forEach(([x, z, h, y], i) => {
     const [x0, z0, x1, z1] = [x - h, 140 + z - h, x + h, 140 + z + h];
     boulder(o, [[x0, y - 3, z0, x1, y, z1]], y - 2.6, i + 420, 1, 0.9);
-    for (const [ax, az, bx, bz] of [
-      [x0, z0, x1, z0],
-      [x1, z0, x1, z1],
-      [x1, z1, x0, z1],
-      [x0, z1, x0, z0],
-    ]) {
-      face(
-        o,
-        [
-          [ax, y - 2.6, az],
-          [bx, y - 2.6, bz],
-          [bx, -30, bz],
-          [ax, -30, az],
-        ],
-        [0.05, 0.05, 0.055],
-      );
-    }
+    box(o, [x0, -30, z0], [x1, y - 2.6, z1], [0.05, 0.05, 0.055], 12);
   });
   // The bottom, black, 30 m down; a seam of light in it along the middle; rubble.
   face(

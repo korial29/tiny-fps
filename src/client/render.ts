@@ -397,7 +397,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
   const place = (depth = false) => {
     let glow = false;
     for (let i = 0; i < pieces.length; i++) {
-      const { m, q, t, k, f, w, h, s } = pieces[i];
+      const { m, q, t, k, f, w, h, s, z } = pieces[i];
       if (!depth && glow !== !!glowPieces[i]) {
         glow = !glow;
         uni('uniform1f', 'Gp', +glow);
@@ -406,6 +406,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
         continue;
       }
       uni('uniform1f', 'Ak', +(w ?? 0));
+      uni('uniform1f', 'Fz', z ?? 0);
       if (f) {
         // Posed by the shader from its texels: no vertex array.
         gl.bindVertexArray(none);
@@ -438,6 +439,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, world: World, d = BARE
       uni('uniform1f', 'Gp', 0);
     }
     uni('uniform1f', 'Ak', 0);
+    uni('uniform1f', 'Fz', 0);
     uni('uniform4fv', 'R', STILL);
     gl.bindVertexArray(main);
   };

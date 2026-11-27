@@ -29,6 +29,8 @@ export interface Draw {
   s?: boolean;
   /** Close hair (hair.ts), coloured `rgb`, swung by `sw` in the head's frame at the time `t`: the shader sways it (swayOf()). */
   h?: { rgb: number[]; sw: Vec3; t: number };
+  /** How far the rail gun's bolt has burnt it away, 0 to 1 (fried()): the shader does dissolve(). */
+  z?: number;
 }
 
 /**

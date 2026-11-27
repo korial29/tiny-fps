@@ -9,6 +9,7 @@ import { HULL, PARTS } from '../shared/station';
 import type { StationDef } from '../shared/station';
 import { GILT, SHINE, aim, dress, place, segment, smooth } from './mesh';
 import type { Vec3 } from './mesh';
+import { PLATE, foiled, plating } from './station/hull';
 
 type Out = number[];
 
@@ -145,12 +146,19 @@ const crinkle = (i: number, j: number, k: number) => {
   return 2 * (h - Math.floor(h)) - 1;
 };
 
-export const satellite = ({
-  hall: [lo],
-  post,
-  hull: [cx, y0, cz, y1],
-  gun,
-}: StationDef): number[] => {
+/** The grey plating's panels, 4 columns by 3 rows of the wall each, a shade apart, mirrored across z. */
+const tone = (t: number, y: number) => {
+  const k = crinkle(Math.floor(Math.min(t, TAU - t) / ((4 * TAU) / 72)), Math.floor(y / 6), 3);
+  return PLATE.map(c => c * (1 + 0.12 * k));
+};
+
+export const satellite = (def: StationDef): number[] => {
+  const {
+    hall: [lo],
+    post,
+    hull: [cx, y0, cz, y1],
+    gun,
+  } = def;
   const o: Out = [];
   const { R } = HULL;
   const deck = post[0][1];
@@ -165,8 +173,8 @@ export const satellite = ({
     (a, b) => a - b,
   );
   for (let y = y0; y < y1 - 0.01; y += 2) {
-    // As in the picture: gold foil over the upper part, silver under it and at the top.
-    const foil = y >= deck + 30 && y < y1 - 14;
+    // Gold foil round the middle, grey plating under it and over it (station/hull.ts).
+    const foil = foiled(y, deck, y1);
     for (let i = 0; i + 1 < cols.length; i++) {
       const [a, b] = [cols[i], cols[i + 1]];
       const m = (a + b) / 2;
@@ -175,6 +183,7 @@ export const satellite = ({
         continue;
       }
       const gold = foil;
+      const rgb = gold ? GOLD : tone(m, y);
       // The foil's normals lean a little each their own way at every corner, shared by the
       // facets round it, so it shades in soft crinkles; the silver is smoother.
       const k = gold ? 0.22 : 0.03;
@@ -190,13 +199,7 @@ export const satellite = ({
         const j0 = j % (cols.length - 1);
         const [t, u] = [crinkle(j0, h, 1) * k, crinkle(j0, h, 2) * k];
         const n: Vec3 = [Math.cos(c) + t * Math.sin(c), u, Math.sin(c) - t * Math.cos(c)];
-        vert(
-          o,
-          [cx + R * Math.cos(c), h, cz + R * Math.sin(c)],
-          n,
-          gold ? GOLD : SILVER,
-          gold ? GILT : SHINE,
-        );
+        vert(o, [cx + R * Math.cos(c), h, cz + R * Math.sin(c)], n, rgb, gold ? GILT : -1);
       }
     }
   }
@@ -320,6 +323,7 @@ export const satellite = ({
       }
     }
   }
+  plating(def, o);
   return o;
 };
 

@@ -1,66 +1,98 @@
-import type { V } from './types';
-import { ink, bar } from './common';
+import { STILL } from '../../shared/physics';
+import { MODE } from '../../shared/types';
+import type { PlayerState } from '../../shared/types';
+import { JOINT as J, PARENT, axis, mul, solve } from '../rig';
+import type { Vec3 } from '../mesh';
+import { createRunner, soldier } from '../soldier';
+import { ink, o } from './common';
 import { cube, turn } from './shapes';
 
 // ---------------------------------------------------------------------------------------------
-// The captain (the user, 2026-11-27: a dead pilot in the captain's seat): still strapped in the
-// left seat, slumped forward and toward the window, the head on the chest, one arm hanging by
-// the pedestal and the other in the lap. His cap lies on the floor behind the seat.
+// The captain (the user, 2026-11-27: a dead pilot in the captain's seat, the marine's body
+// without its armour): still strapped in the left seat, sat as a rover's rider sits, slumped
+// forward and toward the window, the head on the chest. His cap lies on the floor behind the
+// seat. Posed once and baked into the hulk.
 
-/** A white shirt, navy trousers and cap, black shoes, gold braid, skin and dark hair. */
-const SHIRT = ink([0.55, 0.56, 0.57]);
+/** His shirt, white; navy cap, its black peak and gold badge. */
+const SHIRT = [0.8, 0.81, 0.83];
 const NAVY = ink([0.05, 0.06, 0.1]);
 const SHOE = ink([0.03, 0.03, 0.035]);
 const GOLD = ink([0.55, 0.42, 0.12]);
-const FLESH = ink([0.5, 0.36, 0.28]);
-const HAIR = ink([0.07, 0.055, 0.045]);
 
 const F = [1, 0, 0];
 const U = [0, 1, 0];
 const S = [0, 0, 1];
 
-/** The captain, seated with the middle of his seat's cushion at (x, y, z) (y the cushion's top). */
+/** How far over the seat point the rider's pose sits on its cushion (gait.test.ts' CUSHION). */
+const CUSHION = 0.13;
+/** A sixtieth of a second: a second of them settles the gait's springs. */
+const DT = 1 / 60;
+
+/** The captain, seated with the middle of his seat's cushion at (x, y, z) (y the cushion's top), facing +x. */
 export const captain = (x: number, y: number, z: number) => {
-  const at = (dx: number, dy: number, dz: number): V => [x + dx, y + dy, z + dz];
-  // The hips on the cushion, the thighs forward, the shins down to the shoes.
-  cube(at(-0.05, 0, 0), [F, U, S], [-0.17, 0, -0.18], [0.17, 0.2, 0.18], NAVY, NAVY, 4);
-  for (const e of [-1, 1]) {
-    const knee = at(0.42, 0.12, e * 0.12);
-    bar(at(0.0, 0.1, e * 0.1), knee, 0.15, NAVY, 0.15);
-    const ankle = at(0.55, -0.38, e * 0.14);
-    bar(knee, ankle, 0.12, NAVY, 0.12);
-    bar(off3(ankle, -0.03, -0.02, 0), off3(ankle, 0.22, -0.03, 0), 0.1, SHOE, 0.08);
-  }
-  // The torso, slumped forward and to the left, the tie and the braid on the shoulders.
-  const [hip, neck] = [at(-0.02, 0.2, 0), at(0.28, 0.62, -0.1)];
-  bar(hip, neck, 0.38, SHIRT, 0.22);
-  bar(at(0.33, 0.52, -0.09), at(0.22, 0.32, -0.045), 0.06, NAVY, 0.02);
-  for (const e of [-1, 1]) {
-    bar(at(0.27, 0.64, -0.1 + e * 0.06), at(0.26, 0.61, -0.1 + e * 0.17), 0.06, GOLD, 0.025);
-  }
-  // The head hanging on the chest, rolled toward the window.
-  const hd = turn(turn([F, U, S], S, -0.75), F, -0.35);
-  const head = at(0.4, 0.66, -0.17);
-  cube(head, hd, [-0.1, -0.12, -0.085], [0.11, 0.13, 0.085], FLESH);
-  cube(head, hd, [-0.115, 0.02, -0.095], [0.05, 0.15, 0.095], HAIR, HAIR, 4);
-  // The right arm hanging by the pedestal, the left in the lap.
-  const arm = (s: V, e: V, h: V) => {
-    bar(s, e, 0.1, SHIRT, 0.1);
-    bar(e, h, 0.085, SHIRT, 0.085);
-    cube(h, [F, U, S], [-0.05, -0.09, -0.03], [0.05, 0.02, 0.03], FLESH);
+  const p: PlayerState = {
+    id: 1,
+    x,
+    y: y - CUSHION,
+    z,
+    vy: 0,
+    // Yaw zero faces -z: -π/2 faces +x, the nose.
+    yaw: -Math.PI / 2,
+    pitch: -0.6,
+    ground: false,
+    ...STILL,
+    mode: MODE.RIDE,
+    ammo: 0,
+    fists: true,
   };
-  arm(at(0.25, 0.58, 0.08), at(0.25, 0.26, 0.24), at(0.32, 0.0, 0.29));
-  arm(at(0.25, 0.58, -0.28), at(0.33, 0.28, -0.25), at(0.5, 0.2, -0.08));
+  const r = createRunner(p, undefined, 0, undefined, true);
+  for (let i = 0; i < 60; i++) {
+    r.gait.update(p, DT);
+  }
+  const pose = r.gait.pose();
+  const rot = pose.rot.slice();
+  const bend = (j: number, a: Vec3, t: number) => (rot[j] = mul(rot[j], axis(a, t)));
+  // Slumped forward and to his left, the window's side, held only by the harness; the head
+  // fallen on the chest and rolled over.
+  bend(J.SPINE, [1, 0, 0], -0.4);
+  bend(J.CHEST, [1, 0, 0], -0.35);
+  bend(J.CHEST, [0, 0, 1], 0.22);
+  bend(J.NECK, [1, 0, 0], -0.6);
+  bend(J.HEAD, [1, 0, 0], -0.5);
+  bend(J.HEAD, [0, 0, 1], 0.5);
+  // The right arm limp over the armrest, by the pedestal: the upper arm out over it, the forearm
+  // and the hand hanging straight down. Each set in the world, then brought into its parent's frame.
+  const hang = (j: number, out: number) => {
+    const [x, y, z, w] = solve({ ...pose, rot }).rot[PARENT[j]];
+    rot[j] = mul([-x, -y, -z, w], mul(axis([0, 1, 0], pose.yaw), axis([0, 0, 1], out)));
+  };
+  hang(J.ARM_R, 0.5);
+  hang(J.FOREARM_R, 0.05);
+  hang(J.HAND_R, 0);
+  const still = { ...pose, rot };
+  r.gait = { ...r.gait, pose: () => still };
+  const from = o.length;
+  soldier(o, r, SHIRT, 1, false, false);
+  // Without the glow of the spare battery in his pouch (pouch.ts): the dead show no light.
+  const kept = [];
+  for (let i = from; i < o.length; i += 3 * STRIDE) {
+    if (o[i + 8] != GLOW && o[i + STRIDE + 8] != GLOW && o[i + 2 * STRIDE + 8] != GLOW) {
+      kept.push(...o.slice(i, i + 3 * STRIDE));
+    }
+  }
+  o.length = from;
+  o.push(...kept);
 };
 
-/** A point off p. */
-const off3 = (p: V, dx: number, dy: number, dz: number) => [p[0] + dx, p[1] + dy, p[2] + dz];
+/** Floats a vertex, and the layer of an unlit glow (put() in common.ts). */
+const STRIDE = 10;
+const GLOW = -2;
 
 /** The captain's cap on the floor at (x, y, z), turned `t` round the vertical: its crown, the black peak, the badge. */
 export const cap = (x: number, y: number, z: number, t: number) => {
   const ax = turn([F, U, S], U, t);
-  const o = [x, y, z];
-  cube(o, ax, [-0.13, 0, -0.12], [0.13, 0.09, 0.12], NAVY, NAVY, 4);
-  cube(o, ax, [0.1, 0, -0.1], [0.2, 0.02, 0.1], SHOE, SHOE, 4);
-  cube(o, ax, [0.13, 0.04, -0.03], [0.135, 0.08, 0.03], GOLD, GOLD, 4);
+  const c = [x, y, z];
+  cube(c, ax, [-0.13, 0, -0.12], [0.13, 0.09, 0.12], NAVY, NAVY, 4);
+  cube(c, ax, [0.1, 0, -0.1], [0.2, 0.02, 0.1], SHOE, SHOE, 4);
+  cube(c, ax, [0.13, 0.04, -0.03], [0.135, 0.08, 0.03], GOLD, GOLD, 4);
 };

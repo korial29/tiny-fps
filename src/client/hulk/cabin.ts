@@ -19,11 +19,12 @@ import {
 } from './common';
 import { ROWS, ROUND, SILL, form, wide, spot, ring, SHATTER, skin } from './hull';
 import { flat, reach } from './inside';
-import { rod, cube, turn } from './shapes';
+import { rod, cube, slab, turn } from './shapes';
 import { trim } from './trim';
 import { seats, galley, lavatory } from './seats';
 import { LUGGAGE, luggage } from './hold';
 import { captain, cap } from './pilot';
+import { back } from './chair';
 
 // ---------------------------------------------------------------------------------------------
 // The cabin of an airliner (the user, 2026-11-27): the passengers' seats, the galleys and a
@@ -76,27 +77,41 @@ export const cockpit = () => {
       ax = turn(turn(ax, F, -0.32), U, -0.35);
       o[1] += 0.06;
     }
-    cube(o, ax, [-0.2, 0, -0.17], [0.2, 0.32, 0.17], CONSOLE);
-    cube(o, ax, [-0.26, 0.32, -0.26], [0.27, 0.44, 0.26], CUSHION);
+    // The pedestal, then the cushion rounded at its front and back, raised at its sides, and the
+    // back's shell (chair.ts).
+    slab(o, ax, [-0.2, 0, -0.17], [0.2, 0.32, 0.17], 0.05, CONSOLE);
+    slab(
+      o,
+      ax,
+      [-0.26, 0.31, -0.24],
+      [0.27, 0.44, 0.24],
+      [0.02, 0.04, 0.07, 0.04],
+      CUSHION,
+      CUSHION,
+      3,
+    );
+    for (const e of [-1, 1]) {
+      const [z0, z1] = [e * 0.17, e * 0.27].sort((a, b) => a - b);
+      slab(o, [ax[2], ax[1], ax[0]], [z0, 0.33, -0.25], [z1, 0.5, 0.25], 0.06, CUSHION, CUSHION, 3);
+    }
     const bk = turn(ax, ax[2], 0.22);
     const p = off(off(o, ax[0], -0.24), ax[1], 0.42);
-    cube(p, bk, [-0.13, 0, -0.26], [0, 0.82, 0.26], CUSHION);
-    cube(p, bk, [-0.12, 0.84, -0.16], [0.03, 1.08, 0.16], CONSOLE);
+    back(p, bk, CUSHION, CONSOLE);
     for (const e of [-0.24, 0.24]) {
       // The harness's straps over the back, and the armrests.
       const h = (t: V) => off(off(off(p, bk[0], t[0]), bk[1], t[1]), bk[2], t[2]);
       face(
         [
-          h([0.01, 0.8, e * 0.5 - 0.04]),
-          h([0.01, 0.8, e * 0.5 + 0.04]),
-          h([0.02, 0.05, e * 0.7 + 0.04]),
-          h([0.02, 0.05, e * 0.7 - 0.04]),
+          h([0.035, 0.8, e * 0.5 - 0.04]),
+          h([0.035, 0.8, e * 0.5 + 0.04]),
+          h([0.04, 0.05, e * 0.7 + 0.04]),
+          h([0.04, 0.05, e * 0.7 - 0.04]),
         ],
         WEB,
         h([-1, 0.4, 0]),
       );
       const a = (t: V) => off(off(off(o, ax[0], t[0]), ax[1], t[1]), ax[2], t[2]);
-      rod(a([-0.22, 0.68, e * 1.25]), a([0.2, 0.68, e * 1.25]), 0.06, CONSOLE);
+      slab(o, ax, [-0.22, 0.64, e * 1.25 - 0.035], [0.2, 0.71, e * 1.25 + 0.035], 0.03, CONSOLE);
       rod(a([0.14, 0.68, e * 1.25]), a([0.14, 0.42, e * 1.1]), 0.035, TUBE);
     }
   }

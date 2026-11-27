@@ -7,9 +7,8 @@ import {
   ink,
   MID,
   SKIN,
-  GIRDER,
+  TRIM,
   IRON,
-  RAW,
   BELT,
   PANE,
   sm,
@@ -360,7 +359,7 @@ export const skin = (n: number, only?: 'glass') => {
   }
   const l = lines(n);
   for (const sg of [-1, 1]) {
-    // The tears, in the thickness: bare steel between the skin and its lining, bent teeth outside.
+    // The tears, in the thickness: the panels' edge in flat grey between the skin and its lining (a texture's lines shimmered on so thin a face), bent teeth outside.
     for (const [p, q, a, b] of SHIP[n].tears) {
       const hs = l.map((h, i) => [h, i]).filter(([h]) => h >= a && h <= b);
       const mid = [(p + q) / 2, c + (a + b) / 2, MID + sg * 6];
@@ -372,7 +371,7 @@ export const skin = (n: number, only?: 'glass') => {
         loft(
           out,
           hs.map(([, i]) => lining(n, x, i, sg)),
-          () => RAW,
+          () => TRIM,
           mid,
           undefined,
           undefined,
@@ -391,7 +390,7 @@ export const skin = (n: number, only?: 'glass') => {
         loft(
           out,
           along.map(x => off(lining(n, x, i, sg), [0, y, 0])),
-          () => RAW,
+          () => TRIM,
           mid,
           undefined,
           undefined,
@@ -415,7 +414,7 @@ export const skin = (n: number, only?: 'glass') => {
       loft(
         l.map(h => shell(n, x, h, sg)),
         l.map((_, i) => lining(n, x, i, sg)),
-        j => (j & 1 ? GIRDER : IRON),
+        j => (j & 1 ? TRIM : IRON),
         axis(x - 9 * d),
       );
     }

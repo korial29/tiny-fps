@@ -1,4 +1,5 @@
 import type { World, WorldDef } from '../../shared/world';
+import { tints } from '../../shared/world';
 import { lagoon, shore } from '../shore';
 import { plumes } from '../smoke';
 import type { Vec3 } from '../mesh';
@@ -9,14 +10,8 @@ import { vision, zones } from '../vision';
 
 import { FOG_CLIMB, FOG_FAR, FOG_LAYER, FOG_RISE, HAZE, MAX_TINTS } from './constants';
 
-/** The tints of a world's brushes, white first and each once: the shader's palette, MAX_TINTS at most. */
-export const palette = ({ def }: Pick<World, 'def'>): Vec3[] =>
-  [
-    ...new Map<string, Vec3>([
-      ['1,1,1', [1, 1, 1]],
-      ...def.brushes.flatMap(({ tint }): [string, Vec3][] => (tint ? [[`${tint}`, tint]] : [])),
-    ]).values(),
-  ].slice(0, MAX_TINTS);
+/** The tints of a world's textures (tints()): the shader's palette, MAX_TINTS at most. */
+export const palette = ({ def }: Pick<World, 'def'>): Vec3[] => tints(def).slice(0, MAX_TINTS);
 
 /** The corners of a face's two triangles, as [along p, along q] picks of its min or max. */
 export const CORNERS = [

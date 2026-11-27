@@ -8,10 +8,15 @@ import {
   RISE,
   SHIP,
   ZED,
+  LINES,
+  CABIN,
   thick,
 } from '../shared/beach';
+import { build } from '../shared/world';
 import { TEAM_TINT } from '../shared/map';
 import { canopy, hulk, parts } from './hulk';
+import { TRIM } from './hulk/common';
+import { MAX_TINTS, city, palette } from './render';
 import { CANOPY, DULL, HULL, TARP } from './paint';
 import { STRIDE } from './mesh';
 import { TEX } from '../shared/types';
@@ -55,24 +60,32 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 112,000 vertices in all', () => {
-    // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, inside 18,708, wings 7,224, debris 27,246.
+  it('keeps each part within its share: under 210,000 vertices in all', () => {
+    // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224, debris 27,246.
     expect(count(made.hull)).toBeLessThan(35_000);
     expect(count(made.ends)).toBeLessThan(2_500);
-    expect(count(made.inside)).toBeLessThan(20_000);
-    expect(count(made.cabin)).toBeLessThan(16_000);
+    // An airliner's cabin, rounded (the user, 2026-11-27): inside 14,784, cabin 112,914 (seats about
+    // 80,000, luggage 18,600, trim 15,000).
+    expect(count(made.inside)).toBeLessThan(16_000);
+    expect(count(made.cabin)).toBeLessThan(116_000);
     expect(count(made.wings)).toBeLessThan(8_000);
     expect(count(made.debris)).toBeLessThan(28_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26): 6,348.
     expect(count(made.camps)).toBeLessThan(7_000);
-    expect(count(hulk(BEACH))).toBeLessThan(112_000);
+    expect(count(hulk(BEACH))).toBeLessThan(210_000);
   });
 
-  it('keeps the troops’ seats against the flanks, clear of the ways through, the doors and the tears', () => {
-    // Under the upper deck: the flight deck and the nose's lining are over it.
-    const seats = verts(made.cabin).filter(
-      v => v[0] < 95 && v[1] < SHAPE.axis[sectionAt(v[0])] + DECKS[1],
-    );
+  it('keeps the seats, galleys and luggage against the flanks, clear of the ways through, the doors and the tears', () => {
+    // Under the upper deck (the flight deck and the nose's lining are over it), and under head
+    // height: the trim along the ceilings runs over the runners' heads.
+    const seats = verts(made.cabin).filter(v => {
+      const c = SHAPE.axis[sectionAt(v[0])];
+      return (
+        v[0] < 95 &&
+        v[1] < c + DECKS[1] &&
+        [LINES[1], LINES[4]].every(h => Math.abs(v[1] - c - h) > 0.5)
+      );
+    });
     expect(seats.length).toBeGreaterThan(5_000);
     const bad = seats.filter(v => {
       const n = sectionAt(v[0]);
@@ -187,6 +200,7 @@ describe('hulk', () => {
 
   it('lays no level face of a tear’s frame on a deck’s top or underside, where the two would fight', () => {
     const l = verts(made.hull);
+    let frames = 0;
     SHIP.forEach((_, n) => {
       const faces = DECKS.slice(0, 2).flatMap(h => [h, h - 0.3].map(e => SHAPE.axis[n] + e));
       const [x0, x1] = SHAPE.sections[n];
@@ -196,8 +210,9 @@ describe('hulk', () => {
         if (
           t[0][0] >= x0 &&
           t[0][0] <= x1 &&
-          t.every(v => v[8] === TEX.STEEL && Math.abs(v[1] - y) < 1e-3)
+          t.every(v => v[8] === -1 && v[6] === TRIM.c[0] && Math.abs(v[1] - y) < 1e-3)
         ) {
+          frames++;
           expect(
             faces.some(f => Math.abs(f - y) < 5e-3),
             `at ${t[0]}`,
@@ -205,6 +220,8 @@ describe('hulk', () => {
         }
       }
     });
+    // The frames are flat grey since 2026-11-27 (brushed steel shimmered there): still found.
+    expect(frames).toBeGreaterThan(50);
   });
 
   it('hangs no lamp or cable under a hole: nothing would hold it there', () => {
@@ -324,5 +341,41 @@ describe('hulk', () => {
       expect(p.every(v => [TEX.WOOD, TARP].includes(v[8]))).toBe(true);
     }
     expect(Math.min(...tents.filter(p => !poles.includes(p)).map(p => p.max[1]))).toBe(AWNING);
+  });
+  it('lines the cabin in one painted panel, walls and ceilings alike, untinted', () => {
+    const paint = verts(made.inside).filter(v => v[8] === TEX.PAINT);
+    expect(paint.filter(v => v[4] < -0.9).length).toBeGreaterThan(100);
+    expect(paint.filter(v => Math.abs(v[4]) < 0.5).length).toBeGreaterThan(1_000);
+    // A texture's tint is its slot in the palette (2 a slot) over its light: white, slot 0.
+    expect(paint.every(v => v[9] < 2)).toBe(true);
+  });
+
+  it('tints the seats’ cloth and the carpet with the slots the renderer’s palette gives them', () => {
+    // The renderer adds the skyline's brushes (city()): their tints must not move the cabin's.
+    const keys = palette(city(build(BEACH))).map(String);
+    expect(keys.length).toBeLessThanOrEqual(MAX_TINTS);
+    const slot = (t: number[]) => keys.indexOf(`${t}`);
+    expect(Object.values(CABIN).every(t => slot(t) > 0)).toBe(true);
+    const cloth = verts(made.cabin).filter(v => v[8] === TEX.FABRIC);
+    expect(cloth.filter(v => Math.floor(v[9] / 2) === slot(CABIN.navy)).length).toBeGreaterThan(
+      5_000,
+    );
+    const carpet = verts(made.inside).filter(v => v[8] === TEX.FABRIC);
+    expect(carpet.length).toBeGreaterThan(50);
+    expect(carpet.every(v => Math.floor(v[9] / 2) === slot(CABIN.carpet))).toBe(true);
+  });
+
+  it('seats the dead captain in the left seat of the flight deck', () => {
+    const y = SHAPE.axis[2] + DECKS[1] + 0.44;
+    const body = verts(made.cabin).filter(
+      v =>
+        v[0] > 97.9 &&
+        v[0] < 99 &&
+        v[1] > y &&
+        v[1] < y + 1.1 &&
+        Math.abs(v[2] - (MID - 0.85)) < 0.35,
+    );
+    // His white shirt, over the seat's cushion.
+    expect(body.filter(v => v[8] === -1 && v[6] > 0.5 && v[7] > 0.5).length).toBeGreaterThan(30);
   });
 });

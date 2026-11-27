@@ -60,4 +60,27 @@ describe("LANDFALL's buggies", () => {
     }
     expect(z - r.z).toBeGreaterThan(20);
   });
+
+  it("drives up red's wing from the sand onto the fairing's ledge, over the breaks and never under them (the user, 2026-11-27)", () => {
+    for (const [x, throttle] of [
+      [54.5, 1],
+      [56.5, 1],
+      [55, 0.5],
+    ]) {
+      const cars = park(world);
+      const r = cars[0];
+      Object.assign(r, { x, z: 192, y: walked(x, 192) + ROVER.L0 + WR, yaw: 0 });
+      let low = Infinity;
+      for (let t = 0; t < 8 * TICK_HZ && r.z > 138; t++) {
+        drive(r, input(t % 2 < 2 * throttle ? KEY.FORWARD : 0), world, cars);
+        if (r.z > 148 && r.z < 165) {
+          low = Math.min(low, r.y - walked(r.x, r.z));
+        }
+      }
+      // Up on the wing's middle, metres over the sand; a fall into a break would roll it under.
+      expect(low, `from x ${x}`).toBeGreaterThan(2);
+      expect(r.z, `from x ${x}`).toBeLessThanOrEqual(138);
+      expect(r.y, `from x ${x}`).toBeGreaterThan(8.5);
+    }
+  });
 });

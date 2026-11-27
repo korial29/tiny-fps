@@ -55,6 +55,7 @@ import { floorAt, move, spawn } from './physics';
 import { decodeSnapshot, encodeInput } from './protocol';
 import { ground } from './relief';
 import { Room } from './room';
+import { ROVER } from './rover';
 import { EV, FLAG, KEY, MODE, TEAM, TEX } from './types';
 import type { Conn, PlayerState, Snapshot } from './types';
 import { build } from './world';
@@ -867,7 +868,7 @@ describe('LANDFALL, the wreck', () => {
     expect(s.modes).toEqual(new Set([MODE.GROUND]));
   });
 
-  it("lays red's wing from the ledge down to the sand in three pieces, swept and tapered, two breaks of 3.6 m in it and two rails through each", () => {
+  it("lays red's wing from the ledge down to the sand in three pieces, swept and tapered, two breaks of a metre in it and two rails through each", () => {
     const rows = pieces('wingpiece').sort((a, b) => a.min[2] - b.min[2]);
     const lip = MID + HULL.r + 4.4;
     const groups: (typeof rows)[] = [[]];
@@ -877,7 +878,7 @@ describe('LANDFALL, the wreck', () => {
       }
       groups.at(-1)!.push(p);
     }
-    expect(groups.map(l => l.length)).toEqual([15, 23, 13]);
+    expect(groups.map(l => l.length)).toEqual([15, 24, 12]);
     // The first piece is attached: against the fairing's lip, level with its ledge, as wide as the root.
     expect(rows[0].min[2]).toBe(lip);
     expect(rows[0].max[1]).toBe(8.5);
@@ -885,7 +886,7 @@ describe('LANDFALL, the wreck', () => {
     expect(Math.abs(rows[0].max[0] - WING.root[1])).toBeLessThan(0.5);
     // The tip: on the sand, a step up from it, a third as wide.
     const tip = rows.at(-1)!;
-    expect(tip.max[2]).toBeCloseTo(lip + WING.span * 47.5 + 4, 9);
+    expect(tip.max[2]).toBeCloseTo(lip + WING.span * 47.5 + 0.4, 9);
     expect(tip.max[1] - ground(world, 55, tip.max[2] + 0.5)).toBeLessThanOrEqual(STEP_H);
     expect(tip.max[1] - ground(world, 55, tip.max[2] + 0.5)).toBeGreaterThan(0);
     expect(tip.max[0] - tip.min[0]).toBeLessThan(4);
@@ -905,14 +906,16 @@ describe('LANDFALL, the wreck', () => {
       // Swept: the trailing edge's rows start further east as the wing runs out.
       expect(l.at(-1)!.min[0]).toBeGreaterThan(l[0].min[0]);
     }
-    // The breaks, and the rails through them: 0.45 m wide, level with the lower lip, a step from the other.
+    // The breaks, a stride and shorter than the buggy's wheelbase (the user, 2026-11-27), and the rails
+    // through them: 0.45 m wide, level with the lower lip, a step from the other.
     const rails = pieces('rail').sort((a, b) => a.min[2] - b.min[2]);
     expect(rails).toHaveLength(4);
     for (const [n, [a, b]] of [
       [groups[0].at(-1)!, groups[1][0]],
       [groups[1].at(-1)!, groups[2][0]],
     ].entries()) {
-      expect(b.min[2] - a.max[2]).toBeCloseTo(3.6, 1);
+      expect(b.min[2] - a.max[2]).toBeCloseTo(0.98, 9);
+      expect(b.min[2] - a.max[2]).toBeLessThan(ROVER.A);
       expect(Math.abs(a.max[1] - b.max[1])).toBeLessThan(STEP_H);
       for (const [k, r] of rails.slice(2 * n, 2 * n + 2).entries()) {
         expect(r.min[2]).toBeCloseTo(a.max[2], 9);
@@ -1002,25 +1005,21 @@ const WAYS = {
     go(59, MID, HOLD.floor, false),
   ],
 };
-/** The high road, red's half: up the wing from the spawn to the fairing's ledge, a jump over each break. */
+/** The high road, red's half: up the wing from the spawn to the fairing's ledge, a stride over each break. */
 const WING_UP = [
   g(66, 224),
   g(62, 185),
   g(55, 180),
-  go(55, 177, 1.6),
-  go(55.5, 166.2, 3.3, false),
-  leap([55.5, 165.9], [55.5, 161], 3.6, W),
-  go(55.5, 151.8, 6.8, false),
-  leap([55.5, 151.4], [55.5, 146.5], 6.4, W),
+  go(55, 173.3, 1.45),
+  go(55.5, 161.7, 3),
+  go(55.5, 148.9, 6.6),
   go(62, 137, 8.5),
 ];
 /** And down it from the ledge to the sand. */
 const WING_DOWN = [
-  go(55.5, 146.7, 6.4, false),
-  leap([55.5, 146.9], [55.5, 151.5], 6.8, W),
-  go(55.5, 161.4, 3.6, false),
-  leap([55.5, 161.4], [55.5, 166], 3.3, W),
-  go(55, 177, 1.6),
+  go(55.5, 147.4, 6.4, false),
+  go(55.5, 160.2, 3.2),
+  go(55, 173.3, 1.45),
   g(55, 181),
   g(62, 185),
 ];
@@ -1028,13 +1027,13 @@ const WING_DOWN = [
 const GALLERY = [go(67.5, 133.5, 8.5), go(67.5, MID, 8.5)];
 /** The whole of it: red's wing, the gallery, blue's wing. */
 const HIGH = [...WING_UP, ...GALLERY, ...blue([GALLERY[0], go(62, 136, 8.5), ...WING_DOWN])];
-/** The same on a rail over each break, with no jump: from the spawn to the centre line. */
+/** The same on a rail over each break: from the spawn to the centre line. */
 const RAIL = [
   ...WING_UP.slice(0, 4),
-  go(53.5, 166, 3.3),
-  go(53.5, 161.4, 3.6, false),
-  go(53.5, 151.4, 6.8),
-  go(53.5, 147, 6.4, false),
+  go(53.5, 161.8, 3),
+  go(53.5, 160.1, 3.2, false),
+  go(53.5, 149, 6.6),
+  go(53.5, 147.4, 6.4, false),
   go(62, 137, 8.5),
   ...GALLERY,
 ];
@@ -1131,20 +1130,19 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(w.p.z).toBeGreaterThan(130.75);
   });
 
-  it('takes the high road: up the wing with a jump over each break, along the ledge, through the gallery and down the other wing', () => {
+  it('takes the high road: up the wing with a stride over each break, along the ledge, through the gallery and down the other wing', () => {
     const s = red();
     const f = fly(s, HIGH);
     expect(f.failed).toBeUndefined();
     expect(s.p.z).toBeLessThan(70);
     expect(s.p.y).toBeCloseTo(walked(62, ZED - 185), 1);
-    expect(s.ev & EV.JUMP).toBeTruthy();
     expect(s.ev & EV.RESPAWN).toBe(0);
     expect(s.modes).toEqual(new Set([MODE.GROUND, MODE.AIR]));
     expect(f.seconds).toBeLessThan(30);
     expect(s.hard).toBeLessThan(12);
   });
 
-  it('crosses each break of the wing on a rail with no jump, both ways; off a lip without one, a runner falls short', () => {
+  it('crosses each break of the wing on a rail with no jump, both ways; off a lip beside them, a runner strides onto the next piece', () => {
     const s = red();
     const f = fly(s, across(RAIL));
     expect(f.failed).toBeUndefined();
@@ -1152,20 +1150,20 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
     expect(s.ev & (EV.JUMP | EV.RESPAWN)).toBe(0);
     expect(s.modes).toEqual(new Set([MODE.GROUND]));
     expect(f.seconds).toBeLessThan(30);
-    // Sprinting off each lip between the rails, up the wing and down it: not onto the next piece on his feet.
-    for (const [z, y, yaw] of [
-      [169, 2.7, NORTH],
-      [155, 5.43, NORTH],
-      [143, 7, SOUTH],
-      [157, 4.97, SOUTH],
+    // Sprinting off each lip between the rails, up the wing and down it: onto the next piece on his
+    // feet, the breaks a stride wide (the user, 2026-11-27).
+    for (const [z, y, yaw, z1] of [
+      [164, 2.6, NORTH, 158],
+      [152, 5.6, NORTH, 145],
+      [144, 6.7, SOUTH, 151],
+      [157, 4, SOUTH, 164],
     ]) {
       const t = red()
         .put(55.75, y + 0.5, z, yaw)
         .settle();
-      const y0 = t.p.y;
-      t.until(p => !p.ground, KEY.FORWARD | KEY.SPRINT, yaw, 200);
-      t.until(p => p.ground, KEY.FORWARD | KEY.SPRINT, yaw, 200);
-      expect(t.modes.has(MODE.HANG) || t.p.y < y0 - 2, `from ${z}`).toBe(true);
+      t.until(p => (yaw == NORTH ? p.z < z1 : p.z > z1), KEY.FORWARD | KEY.SPRINT, yaw, 200);
+      expect(t.p.y - ground(world, t.p.x, t.p.z), `from ${z}`).toBeGreaterThan(1);
+      expect(t.modes.has(MODE.HANG), `from ${z}`).toBe(false);
     }
   });
 
@@ -1363,11 +1361,12 @@ describe('LANDFALL, the ways across, flown with the real physics', () => {
       leap([69.8, 176.4], [69.8, 171.8], tops[2], W),
       leap([69, 171], [66, 167], tops[3], W),
       go(65.5, 166.5, tops[3], false),
-      // And off it onto the wing's last piece, at its lip over the second break.
-      leap([64.6, 166.5], [59, 166.5], 3.3, W),
+      // And off it onto the wing's last piece.
+      leap([64.6, 166.5], [59, 166.5], 2.44, W),
     ]);
     expect(f.failed).toBeUndefined();
-    expect(s.p.y - ground(world, s.p.x, s.p.z)).toBeGreaterThan(1.8);
+    // On the wing, over the sand.
+    expect(s.p.y - ground(world, s.p.x, s.p.z)).toBeGreaterThan(0.9);
     expect(s.ev & EV.RESPAWN).toBe(0);
     expect(s.hard).toBeLessThan(12);
   });

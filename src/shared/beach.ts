@@ -183,7 +183,7 @@ export const HOLD = {
  * metres on the ground. `root` is x0 and x1 at the hull. `pieces`: the span each runs from and to,
  * how far it was pushed out, its top at its inner and its outer end, and how far its outline is
  * sheared along x for each 1.4 m of it on the ground (it lies turned in the wing's plane). The first is
- * still attached; the breaks are 3.6 m wide. `rails`: the x of the two beams that run through the
+ * still attached; the breaks are 0.98 m wide, shorter than a buggy's wheelbase (the user, 2026-11-27). `rails`: the x of the two beams that run through the
  * breaks and hold the pieces, 0.45 m wide. Blue's is its twin.
  */
 export const WING = {
@@ -209,9 +209,9 @@ export const WING = {
   ],
   span: 0.78,
   pieces: [
-    [0, 14, 0, 8.5, 6.4, 0],
-    [16, 30, 2, 6.8, 3.6, 0.17],
-    [32, 47.5, 4, 3.3, 1.6, -0.2],
+    [0, 14.5, 0, 8.5, 6.4, 0],
+    [15.5, 30.5, 0.2, 6.6, 3.2, 0.17],
+    [31.5, 47.5, 0.4, 3.0, 1.45, -0.2],
   ],
   rails: [53.5, 58],
 };

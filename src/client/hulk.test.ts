@@ -16,6 +16,8 @@ import { build } from '../shared/world';
 import { TEAM_TINT } from '../shared/map';
 import { canopy, hulk, parts } from './hulk';
 import { TRIM, drift, o, setGy, setO } from './hulk/common';
+import { ends } from './hulk/hull';
+import { wall } from './hulk/trim';
 import { MAX_TINTS, city, palette } from './render';
 import { CANOPY, DULL, HULL, TARP } from './paint';
 import { STRIDE } from './mesh';
@@ -62,20 +64,22 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 240,000 vertices in all', () => {
+  it('keeps each part within its share: under 255,000 vertices in all', () => {
     // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224.
+    // The torn ends' skin given a bare back too (2026-11-27): hull 34,896.
     // Debris 37,710 and camps 12,684 with the sand banked round each box (2026-11-27, drift()).
     expect(count(made.hull)).toBeLessThan(35_000);
     expect(count(made.ends)).toBeLessThan(2_500);
     // An airliner's cabin, rounded (the user, 2026-11-27): inside 14,784, cabin 127,290 (seats about
     // 80,000, luggage 18,600, trim 15,000, the dead captain the marine's body at LOD 1, 11,736).
-    expect(count(made.inside)).toBeLessThan(16_000);
+    // The carpet burnt round the passengers' decks' holes (the user, 2026-11-27): inside 32,268.
+    expect(count(made.inside)).toBeLessThan(33_000);
     expect(count(made.cabin)).toBeLessThan(130_000);
     expect(count(made.wings)).toBeLessThan(8_000);
     expect(count(made.debris)).toBeLessThan(38_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26), and the sand round the crates.
     expect(count(made.camps)).toBeLessThan(13_000);
-    expect(count(hulk(BEACH))).toBeLessThan(240_000);
+    expect(count(hulk(BEACH))).toBeLessThan(255_000);
   });
 
   it('keeps the seats, galleys and luggage against the flanks, clear of the ways through, the doors and the tears', () => {
@@ -228,7 +232,10 @@ describe('hulk', () => {
   });
 
   it('hangs no lamp or cable under a hole: nothing would hold it there', () => {
-    const soot = verts(made.inside).filter(v => v[8] === -1 && v[6] < 0.04 && v[7] < 0.04);
+    // Soot is grey: the carpet's charred hem, hanging into the hole, is brown.
+    const soot = verts(made.inside).filter(
+      v => v[8] === -1 && v[6] < 0.04 && v[7] < 0.04 && v[6] === v[7],
+    );
     expect(soot.length).toBeGreaterThan(100);
     SHIP.forEach(({ holes }, n) => {
       const c = SHAPE.axis[n];
@@ -412,5 +419,51 @@ describe('hulk', () => {
     expect(body.filter(v => v[8] === -1 && v[6] > 0.5 && v[7] > 0.5).length).toBeGreaterThan(2_000);
     // Dead: no glow on him, the pouch's spare battery left dark.
     expect(body.filter(v => v[8] === -2)).toEqual([]);
+  });
+
+  it('keeps the tail engines’ pylon roots out of the cabin: inside the skin, past the lining', () => {
+    const c = SHAPE.axis[0];
+    const [floor, ceil] = [DECKS[0], LINES[4]];
+    const near = verts(made.ends).filter(
+      v => v[0] > 12 && v[0] < 21.5 && v[1] > c + floor && v[1] < c + ceil,
+    );
+    expect(near.length).toBeGreaterThan(100);
+    for (const v of near) {
+      const sg = v[2] > MID ? 1 : -1;
+      expect(Math.abs(v[2] - MID)).toBeGreaterThan(
+        Math.abs(wall(0, v[0], v[1] - c, sg)[2] - MID) - 0.01,
+      );
+    }
+  });
+
+  it('stops each deck short of a broken end, where the ring of the skin’s thickness stands', () => {
+    const at = SHIP.flatMap((_, n) => ends(n).map(([x]) => x));
+    const fight = verts(made.inside).filter(
+      v =>
+        v[8] === TRIM.l &&
+        v[6] === TRIM.c[0] &&
+        Math.abs(v[3]) > 0.9 &&
+        at.some(x => Math.abs(v[0] - x) < 0.005),
+    );
+    expect(fight).toEqual([]);
+  });
+
+  it('burns the carpet round each hole in a passengers’ deck, and nowhere past the hull', () => {
+    const lifted = verts(made.inside).filter(v =>
+      SHIP.some((_, n) =>
+        DECKS.slice(0, 2).some(d => Math.abs(v[1] - (SHAPE.axis[n] + d + 0.012)) < 0.003),
+      ),
+    );
+    for (const [n, { holes }] of SHIP.entries()) {
+      const [x0, x1] = SHAPE.sections[n];
+      for (const [deck, p, q] of holes.filter(([d]) => d < 2)) {
+        const y = SHAPE.axis[n] + DECKS[deck] + 0.012;
+        const mine = lifted.filter(v => Math.abs(v[1] - y) < 0.003 && v[0] > p - 2 && v[0] < q + 2);
+        // The char and the embers' glow, the front alive somewhere along it.
+        expect(mine.length).toBeGreaterThan(50);
+        expect(mine.some(v => v[8] === -2)).toBe(true);
+        expect(mine.every(v => v[0] >= x0 - 0.001 && v[0] <= x1 + 0.001)).toBe(true);
+      }
+    }
   });
 });

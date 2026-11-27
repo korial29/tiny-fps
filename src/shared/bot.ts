@@ -215,8 +215,6 @@ const HELP = 40;
 
 /** Metres round its flag a guard walks, the points of its round, and the ticks it stands at one. */
 const ROUND = 5;
-/** How far under its flag a guard's post may stand when none is on the flag's own floor. */
-const DOWN = 2.5;
 const POSTS = 8;
 const PAUSE = 90;
 
@@ -235,27 +233,22 @@ const round = (w: World, base: Vec3, from: Vec3): { at: Vec3; look: number }[] =
     const pts = [from, ...path(nav, w, from, base, r).map(st => st.to)];
     return pts.reverse().find(q => flat(q[0], q[2], base[0], base[2]) > ENTRY) ?? from;
   });
-  // On the flag's own floor; failing that (a flag up on a dais narrower than the round, as on
-  // Tranquility), on the floor round the dais, up to DOWN below the flag.
-  for (const down of [0.6, DOWN]) {
-    const out: { at: Vec3; look: number }[] = [];
-    for (let k = 0; k < POSTS; k++) {
-      const a = (k * 2 * Math.PI) / POSTS;
-      const v: Vec3 = [base[0] + ROUND * Math.sin(a), base[1], base[2] + ROUND * Math.cos(a)];
-      const [i, on] = locate(nav, w, v);
-      const dy = on[1] - base[1];
-      if (i >= 0 && dy < 0.6 && dy > -down && flat(on[0], on[2], v[0], v[2]) < 0.5) {
-        const away = toward(base[0], base[2], on[0], on[2]);
-        const side = (q: Vec3) => Math.abs(turn(away, toward(base[0], base[2], q[0], q[2])));
-        const q = ins.reduce((m, c) => (side(c) < side(m) ? c : m));
-        out.push({ at: on, look: toward(on[0], on[2], q[0], q[2]) });
-      }
-    }
-    if (out.length) {
-      return out;
+  const out: { at: Vec3; look: number }[] = [];
+  for (let k = 0; k < POSTS; k++) {
+    const a = (k * 2 * Math.PI) / POSTS;
+    const v: Vec3 = [base[0] + ROUND * Math.sin(a), base[1], base[2] + ROUND * Math.cos(a)];
+    const [i, on] = locate(nav, w, v);
+    if (i >= 0 && Math.abs(on[1] - base[1] + 1) < 1.6 && flat(on[0], on[2], v[0], v[2]) < 0.5) {
+      const away = toward(base[0], base[2], on[0], on[2]);
+      const side = (q: Vec3) => Math.abs(turn(away, toward(base[0], base[2], q[0], q[2])));
+      const q = ins.reduce((m, c) => (side(c) < side(m) ? c : m));
+      out.push({ at: on, look: toward(on[0], on[2], q[0], q[2]) });
     }
   }
-  return [];
+  // On the flag's own floor (within 0.6 m of it); failing that (a flag up on a dais narrower than
+  // the round, as on Tranquility), on the floor round the dais, up to 2.6 m below the flag.
+  const own = out.filter(p => p.at[1] > base[1] - 0.6);
+  return own.length ? own : out;
 };
 
 /** What a bot of a team does, handed out by squad(). */

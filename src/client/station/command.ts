@@ -87,12 +87,6 @@ export const hole = (def: StationDef, x: number, z: number, y: number, pad: numb
   return x > px - 4 && Math.hypot(z - cz, y - cy) < COLLAR + 0.5 + pad;
 };
 
-/** Both faces of a quad: seen from either side. */
-const both = (o: Out, a: Vec3, b: Vec3, c: Vec3, d: Vec3, rgb: number[]) => {
-  quad(o, a, b, c, d, rgb);
-  quad(o, d, c, b, a, rgb);
-};
-
 /** The command room's dressing, onto o. */
 export const command = (o: Out, def: StationDef) => {
   const { X0, X1, Z, H, STAIR0, STAIR1, STEPS, W, DAIS, GALLERY, SIDE, R } = COMMAND;
@@ -137,6 +131,9 @@ export const command = (o: Out, def: StationDef) => {
     quad(o, at(q[3], px + 0.5), at(q[2], px + 0.5), at(q[1], px + 0.5), at(q[0], px + 0.5), WALL);
   }
   // Outside: a tube from the pane out through the hull and a collar lying on the hull round it.
+  // One face each, the one seen: the tube's faces its axis (it is seen from inside it, from the
+  // room as from space), the collar's faces out. Nothing is culled, so a second face the other way
+  // would lie on the first, split along the other diagonal, and the two would flicker in turn.
   const hull = (r: number, t: number, off: number): Vec3 => {
     const [z, y] = ring(r, t);
     return [cx + Math.sqrt(HULL.R ** 2 - (z - cz) ** 2) + off, y, z];
@@ -145,8 +142,8 @@ export const command = (o: Out, def: StationDef) => {
     const [a, b] = [(i * TAU) / N, ((i + 1) * TAU) / N];
     const [za, ya] = ring(R, a);
     const [zb, yb] = ring(R, b);
-    both(o, [px + 0.5, ya, za], [px + 0.5, yb, zb], hull(R, b, 0.3), hull(R, a, 0.3), FRAME);
-    both(
+    quad(o, [px + 0.5, ya, za], [px + 0.5, yb, zb], hull(R, b, 0.3), hull(R, a, 0.3), FRAME);
+    quad(
       o,
       hull(R, a, 0.3),
       hull(R, b, 0.3),
@@ -154,7 +151,7 @@ export const command = (o: Out, def: StationDef) => {
       hull(COLLAR, a, 0.15),
       COLLARED,
     );
-    both(
+    quad(
       o,
       hull(COLLAR, a, 0.15),
       hull(COLLAR, b, 0.15),

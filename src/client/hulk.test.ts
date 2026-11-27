@@ -65,7 +65,7 @@ describe('hulk', () => {
     expect(v.length).toBe(Object.values(made).reduce((n, p) => n + p.length, 0));
   });
 
-  it('keeps each part within its share: under 255,000 vertices in all', () => {
+  it('keeps each part within its share: under 260,000 vertices in all', () => {
     // Torn metal in petals, each with a bare back (2026-11-26): hull 33,744, ends 2,244, wings 7,224.
     // The torn ends' skin given a bare back too (2026-11-27): hull 34,896.
     // Debris 37,710 and camps 12,684 with the sand banked round each box (2026-11-27, drift()).
@@ -80,9 +80,10 @@ describe('hulk', () => {
     expect(count(made.debris)).toBeLessThan(38_500);
     // The tarpaulins' hems and the crates' corner battens (2026-11-26), and the sand round the crates.
     // Stretch tents (2026-11-27): camps 9,228 to 10,476, 1,248 a tent; in all 254,778.
-    // The pod gone for the survivors' camp (the user, 2026-11-27): camps CAMPS.
-    expect(count(made.camps)).toBeLessThan(16_000);
-    expect(count(hulk(BEACH))).toBeLessThan(255_000);
+    // The pod gone for the survivors' camp (the user, 2026-11-27): camps 15,012, in all 259,314,
+    // both budgets raised with the user.
+    expect(count(made.camps)).toBeLessThan(15_500);
+    expect(count(hulk(BEACH))).toBeLessThan(260_000);
   });
 
   it('keeps the seats, galleys and luggage against the flanks, clear of the ways through, the doors and the tears', () => {

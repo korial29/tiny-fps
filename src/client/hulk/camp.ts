@@ -59,7 +59,7 @@ const rod = (a: V, b: V, r: number, m: Mat, n = 7) => {
  * radii r (along, across, up), each point pushed in or out a little, its normals smooth.
  */
 const pebble = (c: V, t: number, r: V, m: Mat, n: number) => {
-  const [S, B] = [8, 3];
+  const [S, B] = [7, 3];
   const [ct, st] = [Math.cos(t), Math.sin(t)];
   const at = (i: number, j: number) => {
     // From the top (j 0) down to a little under the middle, where the sand hides the rest.
@@ -108,19 +108,12 @@ const fish = (top: V, n: V, len: number, k: number) => {
     // The tail's fork, then the body, slim: its back (+s) dark, its belly pale, the head down.
     face([at(-0.1, 0), at(0, 0.16), at(0.1, 0)].map(o), ink([0.3, 0.25, 0.18], k), c);
     face(
-      [
-        at(0, 0.13),
-        at(0.07, 0.35),
-        at(0.11, 0.62),
-        at(0.06, 0.9),
-        at(0, 1),
-        at(-0.06, 0.88),
-        at(-0.09, 0.6),
-        at(-0.05, 0.35),
-      ].map(o),
+      [at(0, 0.13), at(0.08, 0.4), at(0.09, 0.75), at(0, 1), at(-0.08, 0.72), at(-0.07, 0.4)].map(
+        o,
+      ),
       m,
       c,
-      [0.8, 0.55, 0.5, 0.6, 0.9, 1.25, 1.35, 1.1],
+      [0.8, 0.55, 0.55, 0.9, 1.3, 1.15],
     );
   }
 };
@@ -156,15 +149,15 @@ const DRAW: Record<string, (p: Piece) => void> = {
         return [c[0] + r * Math.cos(t), y + dy, c[2] + r * Math.sin(t)];
       });
     face(ring(0.66, 0.02, 10), ASH, [c[0], y - 9, c[2]]);
-    for (let i = 0; i < 9; i++) {
-      const t = (2 * Math.PI * (i + 0.2 * h(i, 0))) / 9;
+    for (let i = 0; i < 8; i++) {
+      const t = (2 * Math.PI * (i + 0.2 * h(i, 0))) / 8;
       const r = 0.74;
       const at = [c[0] + r * Math.cos(t), y - 0.03, c[2] + r * Math.sin(t)];
       const g = 0.32 + 0.12 * h(i, 1);
-      pebble(at, t, [0.2, 0.14, 0.12 + 0.06 * h(i, 2)], ink([g, g * 0.97, g * 0.93]), seed(p) + i);
+      pebble(at, t, [0.23, 0.15, 0.12 + 0.06 * h(i, 2)], ink([g, g * 0.97, g * 0.93]), seed(p) + i);
     }
-    for (let i = 0; i < 6; i++) {
-      const t = (2 * Math.PI * (i + 0.3 * h(i, 3))) / 6;
+    for (let i = 0; i < 5; i++) {
+      const t = (2 * Math.PI * (i + 0.3 * h(i, 3))) / 5;
       const foot = [c[0] + 0.5 * Math.cos(t), y + 0.05, c[2] + 0.5 * Math.sin(t)];
       bar(
         foot,
@@ -208,7 +201,7 @@ const DRAW: Record<string, (p: Piece) => void> = {
         const [f, g] = [e.slice(), e.slice()];
         f[j] = p.min[j] + 0.05 * hash(i, row, seed(p));
         g[j] = p.max[j] - 0.05 * hash(i, row + 3, seed(p));
-        rod(f, g, r, BARK, 6);
+        rod(f, g, r, BARK, 5);
       }
     });
   },
@@ -224,7 +217,7 @@ const DRAW: Record<string, (p: Piece) => void> = {
       [CABIN.red, CABIN.tan],
       [CABIN.green, CABIN.tan],
     ][Math.floor(hash(a[0], 1, 67) * 3)].map(t => tinted(TEX.FABRIC, t, 1.1, 2));
-    const [I, J] = [9, 11];
+    const [I, J] = [7, 9];
     const y = a[1] + 0.02;
     const below = [a[0], y - 99, a[2]];
     const [W, D] = [b[0] - a[0], b[2] - a[2]];

@@ -72,6 +72,27 @@ describe('textures', () => {
     expect(Math.max(...inner) - Math.min(...inner)).toBeLessThan(30);
   });
 
+  it('lays metal in smooth plates of 1 m: dark seams, no rivet or rust inside (the user, 2026-11-27)', () => {
+    const at = (x: number, y: number) =>
+      Array.from(layer(TEX.METAL).subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 3));
+    expect(at(0, 40)[0]).toBeLessThan(at(8, 40)[0] - 30);
+    expect(at(40, SIZE / 2)[0]).toBeLessThan(at(40, SIZE / 2 + 8)[0] - 30);
+    for (const [x0, y0] of [
+      [0, 0],
+      [SIZE / 2, SIZE / 2],
+    ]) {
+      const inner: number[] = [];
+      for (let y = y0 + 6; y < y0 + SIZE / 2 - 6; y++) {
+        for (let x = x0 + 6; x < x0 + SIZE / 2 - 6; x++) {
+          const [r, , b] = at(x, y);
+          expect(b).toBeGreaterThan(r);
+          inner.push(r);
+        }
+      }
+      expect(Math.max(...inner) - Math.min(...inner)).toBeLessThan(20);
+    }
+  });
+
   it('frames glass panes in steel: the frame is light and the pane dark, and the pane is bluer', () => {
     const at = (x: number, y: number) =>
       Array.from(layer(TEX.GLASS).subarray((y * SIZE + x) * 4, (y * SIZE + x) * 4 + 3));

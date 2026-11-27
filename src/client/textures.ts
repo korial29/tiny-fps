@@ -78,26 +78,19 @@ GEN[TEX.STONE] = (u, v) => {
   return [scale([128, 124, 120], 0.45 + 0.7 * n), clamp(f * 1.4 - 0.2)];
 };
 
-// Two by two plates of 1 m, riveted along the edges and in the middle of each side, with wear.
+// Two by two plates of 1 m (the user, 2026-11-27: no more bolted metal, uniform and modern): satin
+// blue-grey steel, a fine recessed seam round each plate, a faint tone apart from plate to plate
+// and a slow mottle; no rivets, no rust.
 GEN[TEX.METAL] = (u, v) => {
   const [a, b, fu, fv] = [Math.floor(u * 2), Math.floor(v * 2), (u * 2) % 1, (v * 2) % 1];
-  const wear = noise(u * 8, v * 8, 8, 13);
-  const rust = clamp((wear - 0.68) * 6);
-  // The nearest of the three rivet columns and rows (0.1, 0.5, 0.9), none in the middle.
-  const near = (f: number) => Math.min(Math.max(Math.round((f - 0.1) / 0.4), 0), 2) * 0.4 + 0.1;
-  const [ru, rv] = [near(fu), near(fv)];
-  const d = ru == rv && ru == 0.5 ? 1 : Math.hypot(fu - ru, fv - rv);
-  const dome = clamp(1 - d / 0.07);
-  const steel = scale(
-    [98, 108, 124],
-    (0.9 + 0.2 * noise(u * 32, v * 32, 32, 9) + 0.12 * hash(a, b, 6)) *
-      (1 + 0.3 * dome) *
-      (0.65 + 0.35 * clamp((d - 0.06) / 0.04)),
-  );
-  const seam = Math.min(fu, fv, 1 - fu, 1 - fv);
-  return seam < 0.03
-    ? [scale([40, 44, 50], 1 + rust), 0.05]
-    : [mix(steel, [105, 68, 45], rust * 0.7), 0.5 + 0.1 * (1 - rust) + 0.4 * dome];
+  const seam = Math.min(fu, fv, 1 - fu, 1 - fv) - 0.008;
+  const n = 0.6 * fbm(u * 4, v * 4, 4, 3, 13) + 0.4 * noise(u * 64, v * 64, 64, 9);
+  return seam < 0
+    ? [[44, 48, 56], 0.15]
+    : [
+        scale([104, 114, 130], 0.97 - 0.06 * clamp(seam * 100) + 0.07 * hash(a, b, 6) + 0.05 * n),
+        0.6 + 0.04 * n,
+      ];
 };
 
 // Eight planks of 25 cm across, 1 m long and staggered, the grain along u.

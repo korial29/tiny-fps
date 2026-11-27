@@ -457,13 +457,13 @@ against 474 in headless Chrome). Wreck 238,158
 Scenery only, in the island's middle behind the forest (`src/client/volcano/`, in `Decor.land`):
 no collision, no rule.
 
-- Its crater's axis is (700, 125), on the centre line; the rim stands about 340 m over the sea
-  (750, then 480, were too high). Rings of 160 points from the crater's floor to the foot, lit
+- Its crater's axis is (700, 125), on the centre line; the rim stands about 400 m over the sea
+  (750 and 480 were too high, 340 too low). Rings of 160 points from the crater's floor to the foot, lit
   paint (layer −1): 26,880 vertices, one level of detail.
 - Not a cone (the user: too symmetric): the foot runs out 560 to 800 m and the flank's concavity
   changes round it (`swell()`), the rim is higher on one side and breached on the beach's side
   toward +z (`BREACH`), the breach running on down the flank as a valley, and an older, lower
-  cone (`SHOULDER`, 190 m) stands on the −z flank, blended in by a soft maximum.
+  cone (`SHOULDER`, 220 m) stands on the −z flank, blended in by a soft maximum.
 - The foot never comes nearer the sea than x = 160 (`SHORE`), under the canopy's hills. Pulled
   out by the noise, it once reached the waterline: a sheet a few metres over the camps that hid
   the sky and shaded the beach (`volcano.test.ts`).

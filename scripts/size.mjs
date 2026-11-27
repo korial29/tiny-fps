@@ -171,7 +171,8 @@ const LAZY = {
   // 24,960 B: palms only, ferns and red flowers, the burnt trees and their fires, the sand banked round the crates (the user, 2026-11-27).
   // 25,600 B: the palms by instance, their shader code, bark and ferns' blades (the user, 2026-11-27).
   // 26,624 B: the carpet burnt round the decks' holes, the pylons out of the cabin (the user, 2026-11-27).
-  landfall: 26_624,
+  // 27,648 B: a volcano in the island's middle, scenery only (src/client/volcano/; the user, 2026-11-27).
+  landfall: 27_648,
 };
 
 const imports = src => [

@@ -1,12 +1,12 @@
 // Landfall's volcano (docs/BEACH.md): a tall cone in the island's middle, behind the forest, drawn
-// only. Its foot is under the far canopy's hills; its crater stands some 340 m over the sea, where
+// only. Its foot is under the far canopy's hills; its crater stands some 400 m over the sea, where
 // the haze, which thins with height, leaves its upper slopes clear against the sky.
 import { ZED } from '../../shared/beach';
 import { TAU } from '../../shared/physics';
 import { noise } from '../../shared/relief';
 
 /** Its crater's axis (x, z), its rim's mean height and radius, metres. */
-export const VOLCANO = { x: 700, z: ZED / 2, top: 340, rim: 75 };
+export const VOLCANO = { x: 700, z: ZED / 2, top: 400, rim: 75 };
 
 /**
  * The rings' radii: the crater's floor and wall, then the flanks, closer near the rim where the
@@ -41,7 +41,7 @@ const breach = (a: number) =>
 /** The breach's direction: toward the beach and +z, so it is seen from it. */
 const BREACH = 2.25;
 /** An older cone on the flank toward -z, worn lower: its foot's centre (x, z), its height and radius. */
-const SHOULDER = { x: VOLCANO.x - 170, z: VOLCANO.z - 300, top: 190, foot: 300 };
+const SHOULDER = { x: VOLCANO.x - 170, z: VOLCANO.z - 300, top: 220, foot: 300 };
 
 /** Toward the older cone, from the crater. */
 const TOWARD = Math.atan2(SHOULDER.z - VOLCANO.z, SHOULDER.x - VOLCANO.x);

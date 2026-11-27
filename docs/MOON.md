@@ -244,7 +244,8 @@ wreck on the Bowl's floor).
   where there is room, toward the rille, and both ways over the front crack at x 62 and x 154.
   None on the short branch west of the west sinkhole (the west jump's strip and a rock), on the
   east one from the sinkhole to the front (a rack, a rock and the east run-up) nor on the second
-  long crack's lower half (no landing room). Three rovers a team, parked in sight before the base:
+  long crack's lower half and the east side crack (their south side is a strip of lip, no room to
+  land). Three rovers a team, parked in sight before the base:
   one facing each two-way ramp, (57, 219) turned toward the west one, off the bots' way to the
   door, and (154, 218); one in front of the dome (90, 208), facing the middle ramp, which a bot
   boards on its way out. Each ramp is flown by a rover both sides in `moon.test.ts`.

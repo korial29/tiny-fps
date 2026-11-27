@@ -19,6 +19,7 @@ import {
   WEAVE,
   TWILL,
 } from '../mesh';
+import { ARC } from '../gun/paint';
 import { MAX_LIGHTS, MAX_SHADOWS } from '../lights';
 import { GRAIN, SAND, SKY, WATER, WET } from '../shore';
 import { N as PRINT_TEXELS, SPAN } from '../prints';
@@ -56,10 +57,12 @@ import {
 // whether the plates take Sc[0] (Sc[1] the accent); Sq the joints' dual quaternions, Sp the
 // palette, Sw the face's weights. k() is skin() for one vertex (and hb the ninja's hood over it,
 // dress()), the rest armor() for one corner.
+// fz() is dissolve() in grasp.ts for a piece the bolt burns (Fz of the way): a triangle past its
+// share collapses to a point, the others drift up and out and glow violet white (ARC), unlit.
 export const VERT = `#version 300 es
 layout(location=0)in vec3 p;layout(location=1)in vec3 n;layout(location=2)in vec4 c;
 uniform mat4 m,Hh[2];uniform float Y;uniform vec3 J[3];uniform vec4 R[2];
-uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2],Hc;uniform float Ak;uniform vec4 Hs;
+uniform highp sampler2D Sg;uniform int Sm;uniform ivec4 Sb;uniform vec4 Sq[${2 * (JOINTS + 2)}],Sw[${Math.ceil(CHANNELS / 4)}];uniform vec3 Sp[${COLOURS}],Sc[2],Hc;uniform float Ak,Fz;uniform vec4 Hs;
 out vec3 P,N,Rp;out vec4 C;out float Wa;
 vec3 r(vec3 v){vec3 t=2.*cross(R[0].xyz,v);return v+R[0].w*t+cross(R[0].xyz,t);}
 vec4 g(int i){return texelFetch(Sg,ivec2(i&2047,i>>11),0);}
@@ -72,6 +75,8 @@ int u=int(f.x)*2,v=int(f.y)*2;float l=a.w,s=dot(Sq[u],Sq[v])<0.?-l:l;
 vec4 E=(1.-l)*Sq[u]+s*Sq[v],F=(1.-l)*Sq[u+1]+s*Sq[v+1];float L=length(E);E/=L;F/=L;
 vec3 t=cross(E.xyz,x);x+=2.*(E.w*t+cross(E.xyz,t)+E.w*F.xyz-F.w*E.xyz-cross(F.xyz,E.xyz));
 t=cross(E.xyz,y);y+=2.*(E.w*t+cross(E.xyz,t));}
+void fz(){int i=gl_VertexID/3;float h=float(uint(i+1)*0x9e3779b1u%1000u)/1000.,fi=float(i),w=min(1.,Fz*4.);
+if(h<Fz){P=vec3(-1e4);return;}P+=vec3(sin(fi)*.3,1.2*h,cos(fi)*.3)*Fz*Fz;C.xyw+=(vec3(${ARC.join(',')})*(1.-Fz)-C.xyw)*w;if(w>.5)C.z=-2.;}
 void main(){
 Rp=vec3(0);Wa=0.;
 if(Y>.5){vec2 q=vec2(gl_VertexID&1,gl_VertexID>>1)*4.-1.;gl_Position=vec4(q,1,1);P=J[0]*q.x+J[1]*q.y+J[2];N=vec3(0);C=vec4(0);return;}
@@ -80,7 +85,7 @@ if(hb.x>=0.&&(hb.y>.5||a==${REGION.FLESH}))l=vec3(${CLOTH})+(l-vec3(${CLOTH}))*h
 float hw=0.;for(int i=0;i<3;i++){vec4 o=g(Sb.y+gl_VertexID/3*3+i);hw+=int(o.y)==${REGION.HAIR}?1.-(int(o.z)!=${REGION.HAIR}?o.w:0.):int(o.z)==${REGION.HAIR}?o.w:0.;}hw/=3.;
 float bw=float(${BARE_REGIONS.map(r => `a==${r}`).join('||')})*(hb.x<0.?1.:hb.x);
 float cw=Sb.w!=3?0.:${SUIT.map(r => `a==${r}`).join('||')}?1.:a==${REGION.FLESH}&&hb.x>=0.?1.-hb.x:0.;
-C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?a==${REGION.HAIR}?${GLOSS}:${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw+(${WEAVE}+1.)*cw+(Sb.w==3&&a==${REGION.UPPER}?${BOOT_LAYER - WEAVE}:0.),l.z);gl_Position=m*vec4(P,1);return;}
+C=vec4(l.xy,a==${UNLIT[0]}||a==${UNLIT[1]}?-2.:Sb.w==2&&a!=${REGION.BELT}?a==${REGION.HAIR}?${GLOSS}:${CHITIN}:hw>.5&&hb.x<0.?${HAIR_ROOT}-${HAIR_SPAN}*clamp((${TOP}-ry)/.3,0.,1.):-1.+(${SKIN_LAYER}+1.)*bw+(${WEAVE}+1.)*cw+(Sb.w==3&&a==${REGION.UPPER}?${BOOT_LAYER - WEAVE}:0.),l.z);fz();gl_Position=m*vec4(P,1);return;}
 if(Sm==2){int b=Sb.y+gl_VertexID*${PLATE},j,K,t;vec4 h=g(b),G4=g(b+4),R4=g(b+5);j=int(h.y);K=int(h.z);t=int(h.x)*3;
 vec3 X[3],Z[3],W3[3],M3[3],XR[3],RR[3];
 for(int i=0;i<3;i++){k(int(g(Sb.z+t+i).x),X[i],Z[i]);XR[i]=kr;}
@@ -94,11 +99,11 @@ if(sn>1e-6){float cs=dot(o,q);vec3 u=e/sn;s=s*cs+cross(u,s)*sn+u*dot(u,s)*(1.-cs
 q-=s;l=length(q);q/=l>0.?l:1.;}
 vec3 l=g(b+6).xyz;bool pl=Sb.w!=0;
 if(l.x<0.)l=Sc[1];else if((K&${OWN})!=0){}else if(pl&&abs(h.w-(${GLOSS}))<.01)l=Sc[0];else if(pl&&(K&1)!=0)l=Sc[0]*.75;else if(pl&&G4.w>0.)l=l.x>.55?vec3(${SCRATCHED[1]}):vec3(${SCRATCHED[0]});
-Wa=(Ak>0.?((K&1)!=0?2.:1.):0.)+(Sb.w==4?4.:0.);N=q;C=vec4(l.xy,h.w,l.z);gl_Position=m*vec4(P,1);return;}
+Wa=(Ak>0.?((K&1)!=0?2.:1.):0.)+(Sb.w==4?4.:0.);N=q;C=vec4(l.xy,h.w,l.z);fz();gl_Position=m*vec4(P,1);return;}
 if(Sm==3){float f=c.y,ph=c.w<0.?-1.:floor((${CARD_BASE}-c.z)*${(1 / CARD_STEP).toFixed(1)})*1.7,T=Hs.w,fo=f*step(0.,ph),o2=fo*(.002+.0015*sin(T*2.7+ph));
 vec3 d=.6*f*Hs.xyz+fo*vec3(.005*sin(T*2.3+ph)+.003*sin(T*5.1+ph*1.7),.002*sin(T*3.1+ph*.7),.004*sin(T*1.9+ph*1.3)+.003)+n*o2;
-P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);Rp=vec3(c.w<0.?-1.-c.w:c.w,step(c.w,0.),0);Wa=-1.;gl_Position=m*vec4(P,1);return;}
-P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;gl_Position=m*vec4(P,1);
+P=R[1].xyz+r(p+d);N=r(n);C=vec4(Hc.rg*c.x,c.z,Hc.b*c.x);Rp=vec3(c.w<0.?-1.-c.w:c.w,step(c.w,0.),0);Wa=-1.;fz();gl_Position=m*vec4(P,1);return;}
+P=R[1].xyz+r(p*R[1].w);Rp=p*R[1].w;Wa=Ak;N=r(n);C=c;fz();gl_Position=m*vec4(P,1);
 if(c.z<-1.03&&c.z>-1.08&&R[1]==vec4(0,0,0,1)){vec3 a=(Hh[0]*vec4(P,1)).xyz,b=(Hh[1]*vec4(P,1)).xyz;Rp=(dot(a,a)<dot(b,b)?a:b)+vec3(${HAND_MARK}.,0,0);}}`;
 
 // A fullscreen triangle from gl_VertexID, no buffer.
@@ -589,6 +594,7 @@ export const UNIFORMS = [
   'Sg',
   'Sm',
   'Ak',
+  'Fz',
   'Gp',
   'Hc',
   'Hs',
@@ -624,6 +630,7 @@ export const DEPTH_UNIFORMS = [
   'Sc',
   'Hc',
   'Ak',
+  'Fz',
   'Hs',
 ];
 

@@ -139,7 +139,9 @@ export const soldier = (
   if (k >= 1) {
     return;
   }
-  const gpu = k > 0 ? undefined : list;
+  // A body coming apart stays posed by the shader, which burns it away (Fz, dissolve()): skinned
+  // on the CPU, it cost 5 to 75 ms a frame for the bolt's 0.9 s.
+  const [gpu, n0] = [list, list?.length ?? 0];
   /** A rigid piece on a joint: into `out`, or made once at the origin into the store and placed there, `scale` its size. */
   const rigid = (
     key: string,
@@ -691,6 +693,9 @@ export const soldier = (
     const [s, c] = [Math.sin(yaw), Math.cos(yaw)];
     const { x, y, z } = r.p;
     streaks(out, r, color, ([a, u, f]) => [x + a * c - f * s, y + u, z - a * s - f * c]);
+  }
+  for (let i = n0; k > 0 && gpu && i < gpu.length; i++) {
+    gpu[i].z = k;
   }
   return s;
 };

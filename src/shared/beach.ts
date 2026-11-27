@@ -779,7 +779,7 @@ const SCRAP = {
     lay('container', 49.5, 132.4, 52.5, 135, 2.6, METAL, ORANGE),
   ],
   east: [
-    plate(65.5, 149.5, 68.5, 152.5),
+    plate(58.5, 140.5, 61.5, 143.5),
     crate(80, 171),
     crate(85.5, 165),
     crate(84, 153),

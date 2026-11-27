@@ -170,7 +170,8 @@ const LAZY = {
   // 22,912 B: no box left on the flight deck, and room after the moon base's decor (the user, 2026-11-27).
   // 24,960 B: palms only, ferns and red flowers, the burnt trees and their fires, the sand banked round the crates (the user, 2026-11-27).
   // 25,600 B: the palms by instance, their shader code, bark and ferns' blades (the user, 2026-11-27).
-  landfall: 25_600,
+  // 26,624 B: the carpet burnt round the decks' holes, the pylons out of the cabin (the user, 2026-11-27).
+  landfall: 26_624,
 };
 
 const imports = src => [

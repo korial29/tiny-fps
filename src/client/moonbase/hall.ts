@@ -1,5 +1,5 @@
 // The moon base's hall in the dome (docs/MOON.md), red's half.
-import { CONSOLE_BOX, CRATES, FIT, HALL, MOUTHS, PARAPETS } from '../../shared/moonbase';
+import { CONSOLE_BOX, CRATES, FIT, FLIGHT, HALL, MOUTHS, PARAPETS } from '../../shared/moonbase';
 import { TAU } from '../../shared/physics';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
@@ -86,10 +86,23 @@ export const hall = (o: Out) => {
     );
     put(s, t, 0, 0.25, FRAME, 0, 0.02);
     put(s, t, TOP - 0.6, TOP - 0.4, LAMP, 0, 0.03);
+    // Round windows, as the portholes outside (the user, 2026-11-28): a dark disc, the glass on it.
     for (const [c, y] of panes) {
-      put(c - 0.72, c + 0.72, y, y + 1.4, FRAME, 0, 0.02);
+      /** A 12-gon of radius r, off the wall: four quads round its rim and one in its middle (30 vertices). */
+      const disc = (r: number, off: number, rgb: number[]) => {
+        const at2 = (i: number): Vec3 => {
+          const v: Vec3 = [0, y + 0.7 + r * Math.sin((i * TAU) / 12), 0];
+          [v[k], v[j]] = [at - sign * off, C[j] + c + r * Math.cos((i * TAU) / 12)];
+          return v;
+        };
+        for (const i of [0, 3, 6, 9]) {
+          quad(o, [at2(i), at2(i + 1), at2(i + 2), at2(i + 3)], rgb);
+        }
+        quad(o, [at2(0), at2(3), at2(6), at2(9)], rgb);
+      };
+      disc(0.74, 0.02, FRAME);
       const from = o.length;
-      put(c - 0.6, c + 0.6, y + 0.2, y + 1.2, GLASS, 0, 0.04);
+      disc(0.6, 0.04, GLASS);
       const n = [0, 0, 0];
       n[k] = -sign;
       glazed(o, from, n, HALL_GLASS);
@@ -142,7 +155,8 @@ export const hall = (o: Out) => {
     ];
     quad(o, [[CX, 16.2, CZ], rim(i), rim(i + 1), rim(i + 2)], LAMP);
   }
-  // The railings, the console, the eagles and the machine are props.ts's (statue.ts).
-  const dressed = new Set([CONSOLE_BOX, ...PARAPETS, ...CRATES]);
+  // The railings, the console, the eagles and the machine are props.ts's (statue.ts), the stairs
+  // gangway.ts's.
+  const dressed = new Set([CONSOLE_BOX, ...PARAPETS, ...CRATES, ...FLIGHT]);
   FIT.filter(b => !dressed.has(b)).forEach(b => block(o, b));
 };

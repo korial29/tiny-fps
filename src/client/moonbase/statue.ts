@@ -13,6 +13,7 @@ import { inside, panel } from './kit';
 import { walls } from './hall';
 import { bevel } from './round';
 import { desk } from './desk';
+import { gangway } from './gangway';
 
 const ROD = dress(capsule(1, [1, 1], 6, [0, 0]), [1, 1, 1]);
 const STEEL = [0.6, 0.62, 0.66];
@@ -114,7 +115,7 @@ const pilasters = (o: Out) => {
   }
 };
 
-/** The hall's railings, eagles, machine, console and pilasters, red's half. */
+/** The hall's railings, eagles, machine, stairs, console and pilasters, red's half. */
 export const statues = (o: Out) => {
   pilasters(o);
   inside(o, () => {
@@ -122,6 +123,7 @@ export const statues = (o: Out) => {
     plinth(o, CRATES[0]);
     plinth(o, CRATES[1]);
     machine(o, CRATES[2]);
+    gangway(o);
   });
   const { min, max } = CONSOLE_BOX;
   desk(o, 2, max[2], 1, min[0], max[0], min[1], max[2] - min[2] - 0.02);

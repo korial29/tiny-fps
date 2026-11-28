@@ -24,6 +24,8 @@ import {
 import { Ctf } from './ctf';
 import { TEAM_TINT } from './map';
 import {
+  DAIS,
+  DAIS_STEP,
   FLATS,
   CRACKS,
   HOLLOW,
@@ -302,6 +304,25 @@ describe('MOON, bases and spawns', () => {
       expect(top!.ghost).toBe(true);
       // Under the dome's roof: nothing between it and the sky but the dome.
       expect(ray(world, [x, y + 1.5, z], [0, 1, 0], 100)).toBeLessThan(10);
+    }
+  });
+
+  it('collides with each round tier of the dais within 5 % of its radius, all round', () => {
+    for (const { base } of teams) {
+      DAIS.forEach((r, i) => {
+        const y = (i + 0.5) * DAIS_STEP;
+        const tier = brushes.filter(
+          b => b.ghost && b.min[1] === i * DAIS_STEP && b.max[1] === y + DAIS_STEP / 2,
+        );
+        const solid = (x: number, z: number) =>
+          tier.some(b => x > b.min[0] && x < b.max[0] && z > b.min[2] && z < b.max[2]);
+        for (let a = 0; a < 360; a += 3) {
+          const [c, s] = [Math.cos((a * Math.PI) / 180), Math.sin((a * Math.PI) / 180)];
+          const at = (k: number) => solid(base[0] + k * r * c, base[2] + k * r * s);
+          expect(at(0.95), `tier ${i} at ${a} degrees, in`).toBe(true);
+          expect(at(1.05), `tier ${i} at ${a} degrees, out`).toBe(false);
+        }
+      });
     }
   });
 

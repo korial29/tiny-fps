@@ -167,7 +167,8 @@ const LAZY = {
   // 23,936 B: the station's command room, its window and its computer (the user, 2026-11-27).
   // 24,192 B: the rift, its ground and walls drawn round the cracks and islands (moonscape/rift.ts; the user, 2026-11-27).
   // 30,976 B: the bases dressed: the dais, desks, statues, banners, corridors, shelves and suit (moonbase/; the user, 2026-11-28).
-  tranquility: 30_976,
+  // 31,360 B: the mezzanine's stairs as a steel gangway and the dais round (moonbase/gangway.ts, dais.ts; the user, 2026-11-28).
+  tranquility: 31_360,
   // 14,464 B: the wreck's cockpit, troop seats and canopy glass (the user, 2026-11-26).
   // 15,616 B: Landfall's headland of granite blocks and the granite's shader, out of the main bundle (the user, 2026-11-26).
   // 15,744 B: the camps' torn tents, wooden poles and battens, the steel containers (the user, 2026-11-26).

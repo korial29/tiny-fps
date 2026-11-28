@@ -2,9 +2,9 @@
 // the hall's door, the falcon as an emblem standing on edge, in relief on both faces of a dark
 // plate, its pieces of polished silver parted by dark grooves. In profile, its head toward the door:
 // a level top from the wing over the head to the heavy hooked beak, a big eye of blue gem high by
-// the beak's root with a dark stroke falling back from it, the wings as bars stacked without gaps
-// (behind the head, and under the beak), four spiral curls at the neck, five long feathers slanting
-// down the breast and a column of scales beside them. Drawn in red's frame and mirrored into
+// the beak's root with a dark stroke falling back from it, the wing behind the head as bars stacked
+// without gaps, the dark plate bare under the beak, four spiral curls at the neck, five long feathers
+// slanting down the breast and a column of scales beside them. Drawn in red's frame and mirrored into
 // blue's hall (furnishing()); over the plinth, not collided. banner.ts draws the same emblem flat.
 import { CRATES } from '../../shared/moonbase';
 import type { Brush } from '../../shared/world';
@@ -26,27 +26,26 @@ const metres = (px: number[][]) => px.map(([x, y]) => [U(x), Y(y)]);
 /** A piece of the emblem: its outline (u, y in metres, convex), how far proud of the plate's middle, its colour. */
 export type Piece = { at: number[][]; d: number; rgb: number[] };
 
-/** The emblem's pieces, back to front: the plate, the wings' bars, the head, the beak and its hook, the breast's feathers. */
+/** The emblem's pieces, back to front: the plate, the wings, the head, the beak and its hook, the breast's feathers. */
 export const EAGLE: Piece[] = (() => {
   const out: Piece[] = [];
   const add = (px: number[][], d: number, rgb: number[]) => out.push({ at: metres(px), d, rgb });
+  // The plate stands out a margin past every piece on each side (the user, 2026-11-28).
   add(
     [
-      [20, 128],
-      [495, 134],
-      [507, 170],
-      [502, 390],
-      [482, 450],
-      [445, 470],
-      [200, 445],
-      [100, 425],
-      [95, 300],
+      [6, 114],
+      [522, 114],
+      [522, 432],
+      [480, 486],
+      [250, 486],
+      [94, 434],
+      [6, 292],
     ],
     0.05,
     PLATE,
   );
-  // The wings: bars stacked with a hairline between them, behind the head (their outer ends on a
-  // slant) and under the beak.
+  // The wings: bars stacked with a hairline between them behind the head (their outer ends on a
+  // slant).
   const GAP = 1.5;
   for (let k = 0; k < 7; k++) {
     const [t, b] = [130 + k * 24.3, 130 + (k + 1) * 24.3 - GAP];
@@ -62,20 +61,7 @@ export const EAGLE: Piece[] = (() => {
       k & 1 ? SILVER : BRIGHT,
     );
   }
-  for (let k = 0; k < 7; k++) {
-    const [t, b] = [222 + k * 24.3, 222 + (k + 1) * 24.3 - GAP];
-    const right = (py: number) => (py < 390 ? 500 : 500 - (py - 390) * 0.35);
-    add(
-      [
-        [340, t],
-        [right(t), t],
-        [right(b), b],
-        [340, b],
-      ],
-      0.068,
-      k & 1 ? SILVER : BRIGHT,
-    );
-  }
+  // Nothing under the beak: the dark plate shows there, so the beak reads (the user, 2026-11-28).
   // The head, its top level with the wing's, the beak running on from it, heavy, and its hook.
   add(
     [

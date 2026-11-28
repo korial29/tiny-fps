@@ -100,7 +100,8 @@ describe('moonscape', () => {
     expect(verts.length).toBeGreaterThan(330000);
     // The craters' stones and twelve small craters more are 12,600: then the rims' bands of detail 33,000 and the pits 10,000 (gone since): the cap went from 380,000 to 440,000.
     // The ranges on the horizon are 28,800: the cap went to 470,000. The rocks were 117,000; the pebbles are 98,000 and the sixteen boulders 22,000.
-    expect(verts.length).toBeLessThan(470000);
+    // The hall's round windows took it to 476,000 (the user, 2026-11-28).
+    expect(verts.length).toBeLessThan(476000);
     expect(moonscape(MOON).concat(heavens())).toEqual(v);
   });
 
@@ -699,8 +700,8 @@ describe('moonscape, the small relief', () => {
     expect(turns.filter(t => t > 1).length / turns.length).toBeGreaterThan(0.6);
   });
 
-  it('adds no vertex for it: the cap stays at 470,000', () => {
-    expect(verts.length).toBeLessThan(470000);
+  it('adds no vertex for it: the cap stays at 476,000', () => {
+    expect(verts.length).toBeLessThan(476000);
   });
 });
 
@@ -890,11 +891,12 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 469,095 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
+  it('is 475,527 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
     // 468,291 until the ramps' bands were laid in eight pieces along their edge (1,068 more), then
     // the dark rails and skirting on the base's walls (312 more, the hall's blocks being props now),
-    // then the mezzanine's stairs drawn as a gangway with the props (576 fewer).
-    expect(verts.length).toBe(469095);
+    // then the mezzanine's stairs drawn as a gangway with the props (576 fewer), then the hall's
+    // windows round (6,432 more).
+    expect(verts.length).toBe(475527);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

@@ -7,6 +7,8 @@ import { build } from '../shared/world';
 import { PANE, STRIDE } from './mesh';
 import { GAPS, INDOORS, LINTELS, furnishing, moonbase } from './moonbase';
 import { eagles } from './moonbase/eagle';
+import { C, HALL_GLASS } from './moonbase/constants';
+import { walls } from './moonbase/hall';
 import { rams } from './moonbase/ram';
 import { eagleBanners, ramBanners } from './moonbase/banner';
 import { PORTHOLES, TIP, hull } from './moonhull';
@@ -101,12 +103,38 @@ describe('moonbase', () => {
     }
   });
 
-  it('stays within its vertices: under 5000 more a half than the closed base', () => {
+  it("draws the hall's windows round, as the portholes outside: the glass on a circle round each", () => {
+    const o: number[] = [];
+    moonbase(o);
+    const glass = Array.from({ length: o.length / STRIDE }, (_, i) =>
+      o.slice(i * STRIDE, (i + 1) * STRIDE),
+    ).filter(p => Math.abs(p[8] - HALL_GLASS) < 1e-6);
+    const centres = walls().flatMap(({ k, j, at, panes }) =>
+      panes.map(([c, y]) => {
+        const v = [0, y + 0.7, 0];
+        [v[k], v[j]] = [at, C[j] + c];
+        return { v, k, j };
+      }),
+    );
+    expect(glass).toHaveLength(centres.length * 30);
+    for (const p of glass) {
+      // In its wall's plane, every corner of the glass is 0.6 m from its window's middle.
+      const d = Math.min(
+        ...centres
+          .filter(({ v, k }) => Math.abs(p[k] - v[k]) < 0.1)
+          .map(({ v, j }) => Math.hypot(p[j] - v[j], p[1] - v[1])),
+      );
+      expect(Math.abs(d - 0.6)).toBeLessThan(0.01);
+    }
+  });
+
+  it('stays within its vertices: under 7500 more a half than the closed base', () => {
+    // 5000 until the hall's 67 windows were drawn round (the user, 2026-11-28): 48 more each.
     const o: number[] = [];
     moonbase(o);
     expect(o.length % (3 * STRIDE)).toBe(0);
     expect(o.length / STRIDE).toBeGreaterThan(4704 + 3000);
-    expect(o.length / STRIDE).toBeLessThan(4704 + 5000);
+    expect(o.length / STRIDE).toBeLessThan(4704 + 7500);
   });
 
   it("gets none of the runner's red on the walls of the modules and the tubes: only on the crates and where a module roof stands over a tube", () => {

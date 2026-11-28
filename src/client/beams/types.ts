@@ -34,7 +34,7 @@ export interface Glow {
   /** The own muzzle's: it follows the muzzle. */
   own?: boolean;
   splash?: boolean;
-  /** A pistol's or a rifle's splash: SPLASH_WIDE of the old size, the rifle's a quarter of the pistol's. */
+  /** A pistol's or a rifle's splash: SPLASH_WIDE of the old size, the rifle's 40 % of the pistol's. */
   fine?: boolean;
   /** How charged the shot was, 0 to 1: orange and bigger as it goes up. */
   hot?: number;

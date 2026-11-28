@@ -212,16 +212,16 @@ describe('the burst of a ball', () => {
     // The station's strike keeps the old splash and its 24 sparks.
     expect(b).toHaveLength(48 + 24 * 12);
     expect(f).toHaveLength(48 + 7 * 12);
-    expect(w(f)).toBeLessThan(w(b) / 12);
+    expect(w(f)).toBeLessThan(w(b) / 8);
   });
 
-  it('of the laser rifle splashes a quarter as wide (the user, 2026-11-28), lights red, and throws a few more sparks', () => {
+  it('of the laser rifle splashes 40 % as wide (the user, 2026-11-28), lights red, and throws a few more sparks', () => {
     const [blue, red] = [createTracer(), createTracer()];
     blue.burst(TO);
     red.burst(TO, true);
     const [b, r] = [drawn(blue), drawn(red)];
     expect(r).toHaveLength(48 + 7 * 12);
-    expect(w(r)).toBeCloseTo(w(b) / 4, 6);
+    expect(w(r)).toBeCloseTo(w(b) / 2.5, 6);
     // Red over blue: in the splash's core, and every spark.
     expect(r[0][6]).toBeGreaterThan(r[0][9]);
     expect(r[r.length - 1][6]).toBeGreaterThan(r[r.length - 1][9]);

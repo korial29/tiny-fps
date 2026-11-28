@@ -140,8 +140,9 @@ export const CLAW_ROLL: Vec3 = [0.8, 0.45, -0.4];
  * the other side, low and further out: up over the swing's first fifth, across by two fifths.
  */
 export const [RAKE_UP, RAKE_DOWN]: Vec3[] = [
-  [0.38, 0.12, 0.4],
-  [-0.2, -0.2, 0.58],
+  // Wider since the user, 2026-11-28 (ampler moves): [0.38, 0.12, 0.4] and [-0.2, -0.2, 0.58] before.
+  [0.44, 0.17, 0.4],
+  [-0.28, -0.26, 0.58],
 ];
 
 /** The Hunter's left hand in its guard while the blades are out (view space, mirrored): low left, ahead. */

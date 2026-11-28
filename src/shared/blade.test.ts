@@ -202,14 +202,15 @@ describe('the strike test: arc', () => {
   });
 
   it('keeps the thrust a narrow line and the cuts across a wide arc', () => {
-    // 0.6 rad off, 1.5 m away: across and slash reach it, the thrust does not.
-    expect(at2(CUT.THRUST, 1.5, 0.6)).toBe(false);
-    expect(at2(CUT.LEFT, 1.5, 0.6)).toBe(true);
-    expect(at2(CUT.RIGHT, 1.5, -0.6)).toBe(true);
-    expect(at2(CUT.SLASH, 1.5, 0.6)).toBe(true);
-    // Square to the side: only the cuts across, and not by much.
+    // 0.8 rad off, 1.5 m away: across and slash reach it, the thrust does not.
+    expect(at2(CUT.THRUST, 1.5, 0.8)).toBe(false);
+    expect(at2(CUT.LEFT, 1.5, 0.8)).toBe(true);
+    expect(at2(CUT.RIGHT, 1.5, -0.8)).toBe(true);
+    expect(at2(CUT.SLASH, 1.5, 0.8)).toBe(true);
+    // Square to the side: only the cuts across reach it, and not much further back.
     expect(at2(CUT.SLASH, 1.5, Math.PI / 2)).toBe(false);
-    expect(at2(CUT.LEFT, 1.5, Math.PI / 2)).toBe(false);
+    expect(at2(CUT.LEFT, 1.5, Math.PI / 2)).toBe(true);
+    expect(at2(CUT.LEFT, 1.5, 1.8)).toBe(false);
   });
 
   it('misses behind, for every cut', () => {
@@ -298,10 +299,10 @@ describe('the strike test: who', () => {
 
   it('reads the cut from the attacker, and defaults to the thrust when he has none', () => {
     const me = at(0, 0, EAST).p;
-    const foe = at(2.7, 0, EAST).p;
+    const foe = at(3.1, 0, EAST).p;
     delete me.cut;
     expect(strike(flat, me, [foe])).toEqual([foe]);
-    // 2.7 m is out of reach of a slash.
+    // 3.1 m is out of reach of a slash.
     me.cut = CUT.SLASH;
     expect(strike(flat, me, [foe])).toEqual([]);
   });
@@ -568,8 +569,8 @@ describe('the special cuts', () => {
   });
 
   it('reaches furthest with the lunge, straight ahead', () => {
-    expect(hits(CUT.LUNGE, 3.3)).toBe(true);
-    expect(hits(CUT.THRUST, 3.3)).toBe(false);
+    expect(hits(CUT.LUNGE, 3.7)).toBe(true);
+    expect(hits(CUT.THRUST, 3.7)).toBe(false);
   });
 
   it('strike while the swing runs, each once, and every swing fits the wire’s 6 bits', () => {

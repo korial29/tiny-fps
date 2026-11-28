@@ -121,7 +121,8 @@ const BUDGETS = [
   // 301,568 B: Tranquility's rift, its cracks, sinkholes, pylons and islands (the user, 2026-11-27).
   // 301,824 B: the moon bases' wall coat (TEX.WALL), the flag's dais, no zone square on the moon (the user, 2026-11-28).
   // 302,592 B: the pistol's and the rifle's finer impacts and their molten marks (src/client/melt/) (the user, 2026-11-28).
-  { file: 'dist/index.js', max: 302_592 },
+  // 304,640 B: the melee hits' scars, blood, sounds, hit-stop and zoom, and the daze (the user, 2026-11-28).
+  { file: 'dist/index.js', max: 304_640 },
   // 40 KB until the bots after UT2004's (the user, 2026-11-13).
   // 44 KB until the bots that fly the orbital station's mission (the user, 2026-11-15).
   // 46 KB until the ninja's parry (the user, 2026-11-16).

@@ -4,6 +4,7 @@
 // gun.ts); place() carries it to the world. No DOM.
 import { swingOf } from '../shared/blade';
 import { CUTS, TICK_HZ } from '../shared/constants';
+import { CUT } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { glow as lit, tri } from './flag';
 import { button, grip } from './gun';
@@ -827,6 +828,20 @@ export const progress = (
 
 /** How much wider a heavy release swings than its cut: the hands round the guard, and the trunk. */
 export const [AMPLE, AMPLE_TRUNK] = [1.3, 1.5];
+/**
+ * How much wider the cuts across and down swing than their keys, the hands round the guard and the
+ * trunk (the user, 2026-11-28: ampler moves); a heavy release is AMPLE times wider again. Not the
+ * thrusts, the arcs and the leap: their arms are straight or wide already. The width comes on out
+ * of the guard and goes back into it (BROAD_EASE of the swing each way), so neither jumps.
+ */
+export const [BROAD, BROAD_TRUNK] = [1.15, 1.3];
+const BROAD_EASE = [0.15, 0.3];
+/** How much wider cut `c` swings than its keys at `prog`: up to `k` for the wide cuts, else none. */
+const broad = (c: number, prog: number, k: number) =>
+  c == CUT.LEFT || c == CUT.RIGHT || c == CUT.SLASH
+    ? 1 + (k - 1) * smooth(clamp(prog / BROAD_EASE[0])) * smooth(clamp((1 - prog) / BROAD_EASE[1]))
+    : 1;
+const smooth = (x: number) => x * x * (3 - 2 * x);
 
 /**
  * The grip and the blade (see stroke()) of the cut `p` swings at `prog`, as drawn: a heavy
@@ -841,7 +856,8 @@ export const poised = (
   const k = stroke(p.cut ?? 0, prog);
   // Across and up only, and from the strike on: nearer the eye, or wider in the wind-up over the
   // shoulder, the arms would fill the view.
-  const big = p.heavy ? 1 + (AMPLE - 1) * ample(p.cut ?? 0, prog) : 1;
+  const big =
+    broad(p.cut ?? 0, prog, BROAD) * (p.heavy ? 1 + (AMPLE - 1) * ample(p.cut ?? 0, prog) : 1);
   for (let j = 0; j < 2; j++) {
     k[j] = GUARD[j] + (k[j] - GUARD[j]) * big;
   }
@@ -855,7 +871,10 @@ export const poised = (
 /** The trunk's twist, bend and lean (see trunk()) for the cut `p` swings at `prog`: AMPLE_TRUNK times a heavy release's, from its strike on. */
 export const bent = (p: Pick<PlayerState, 'cut' | 'heavy'>, prog: number) =>
   trunk(p.cut ?? 0, prog).map(
-    v => v * (p.heavy ? 1 + (AMPLE_TRUNK - 1) * ample(p.cut ?? 0, prog) : 1),
+    v =>
+      v *
+      broad(p.cut ?? 0, prog, BROAD_TRUNK) *
+      (p.heavy ? 1 + (AMPLE_TRUNK - 1) * ample(p.cut ?? 0, prog) : 1),
   );
 
 /** How much of a heavy release's width is on at `prog` of cut `cut`: none in the wind-up, all from just before the strike. */

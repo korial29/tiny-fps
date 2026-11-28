@@ -92,7 +92,9 @@ export const GROUP =
   '2222222222' +
   '2442222' +
   '00' +
-  '11';
+  '11' +
+  // SLICE, REND, KILL, SEVER: the combat's, with the blades' and the claws'.
+  '2222';
 const level = (id: number) => LEVELS[+GROUP[id]] + (LOUD[id] ?? 0);
 let mixed: (fade?: number) => void = () => {};
 /** Sets bus `i` to `db` live, and keeps the mix for the next visit; none, the mix as made. */

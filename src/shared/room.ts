@@ -49,6 +49,7 @@ import {
   RULES,
   SHOCK_KNOCK,
   SHOCK_TICKS,
+  DAZE_TICKS,
   STUMBLE_KNOCK,
   STUMBLE_TICKS,
   ACID_HP,
@@ -956,6 +957,7 @@ export class Room {
       lob: 0,
       zapping: false,
       slow: 0,
+      daze: 0,
     });
     this.ctf.drop(foe.state);
     const n = by && by.info.team !== foe.info.team ? this.ctf.frag(by.info.id) : 0;
@@ -1219,6 +1221,7 @@ export class Room {
       } else {
         const [dx, dz] = knock(p.state);
         stumble(foe.state, dx, dz, SHOCK_TICKS, SHOCK_KNOCK * (p.state.heavy ? HEAVY : 1));
+        foe.state.daze = DAZE_TICKS;
         foe.state.zap = true;
         foe.by = p.info.id;
       }
@@ -1261,6 +1264,7 @@ export class Room {
       ) {
         continue;
       }
+      foe.state.daze = DAZE_TICKS;
       if (!xeno && (blow.knock || foe.blows >= PUNCH_STUN)) {
         foe.blows = 0;
         this.drop(foe.info.id);

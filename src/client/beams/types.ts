@@ -102,7 +102,7 @@ export interface Tracer {
   /** One spark out of `at`, up and a little aside: a cut limb's stump spitting. */
   spit(at: Vec3): void;
   /** `n` drops of blood out of `at`, flung at `speed` m/s each way and up, falling. */
-  gore(at: Vec3, n: number, speed?: number): void;
+  gore(at: Vec3, n: number, speed?: number, dir?: Vec3): void;
   /** Where the own muzzle is now: its flash stays there, so that a kick of the view does not leave it behind. */
   mount(a: Vec3): void;
   /** Ages everything by dt seconds and drops what is over. */

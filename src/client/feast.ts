@@ -595,8 +595,11 @@ const [c0, home] = [EXEC.CUTS[0], EXECUTE.KNEEL[0]];
 const [top, down] = [EXECUTE.RAISE[0] + EXECUTE.RAISE[1], EXEC.TICKS - 1];
 export const LUNGE = [
   [c0 - 4, 0, 0, 0, 0],
-  [c0 + 3, -0.07, 0.05, 0, 0],
-  [home - 3, 0.1, 0.08, 0.2, 0.07],
+  // A tick from the draw and two from the strike, not three each: the thrust strikes 8 ticks in since
+  // the user's quicker cuts (2026-11-28), not 10: the lunge keeps 5 ticks between, and is
+  // further on by the last key (0.1, 0.08, 0.2, 0.07 before), so that its last two ticks are no jump.
+  [c0 + 1, -0.07, 0.05, 0, 0],
+  [home - 2, 0.15, 0.1, 0.25, 0.06],
   [home, 0.26, 0.15, 0.34, 0],
   [home + 7, 0.26, 0.15, 0.34, 0],
   [home + 14, 0.1, 0.06, 0.18, 0.06],

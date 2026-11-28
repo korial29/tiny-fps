@@ -177,4 +177,14 @@ export const SOUND = {
   WADE: 97,
   /** A swimmer's stroke through the water, looped: a low wash with a rustle over it, louder with his speed. */
   SWIM: 98,
+  /**
+   * A melee hit's own sounds (the user, 2026-11-28: the most feedback): SLICE the katana through
+   * flesh, a wet tearing hiss over a thump with the blade's crackle in it; REND the claws, three
+   * quick tears; KILL the blow that puts him down, a deep boom with a ring; SEVER a limb taken off,
+   * a wet crunch.
+   */
+  SLICE: 99,
+  REND: 100,
+  KILL: 101,
+  SEVER: 102,
 } as const;

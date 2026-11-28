@@ -7,12 +7,12 @@
 //   the others were drawn at, in 1/256 tick: integer part u16, then frac u8 (0 when absent).
 //   keys is a u16: KEY bits 0 to 15 (forward, back, left, right, jump, sprint, dash, crouch, fire, blade, special, rail, reload, rifle, use, fists).
 // Snapshot: [type u8 = MSG_SNAPSHOT][tick u16][players u8][rovers u8], the rovers 0 on a map
-//   without any. Then players × 64 bytes:
+//   without any. Then players × 65 bytes:
 //   [id u8][x f32][y f32][z f32][vx f32][vy f32][vz f32][edge f32]
 //   [yaw u16][pitch i16][ack u16][mode u8][t u8][dash u8][timers u8][stun u8]
 //   [gun u24][shots u8][hits u8][swing u8][lost u8][charge u8][lock u8][foe u8][pushes u8][away u8]
 //   [rail u8][railing u8][slow u8][mag u8][cap u8][reload u8][rifle u8][clip u8][heat u8][nade u8]
-//   [side u8][sideMag u8]
+//   [side u8][sideMag u8][daze u8]
 //   mode: bits 0-2 MODE (its high bit is bit 6 of foe: the xenomorph's CLING), bits 3-5 wall (SIDE), bit 6 jumps left, bit 7 the low bit of the dashes left
 //   (its high bit is bit 4 of foe: a ninja chains three)
 //   dash: bits 0-5 the dash timer, bits 6-7 the high bits of the tackler's id (see stun)
@@ -46,7 +46,8 @@
 //   left swapping the one in hand (bits 0-6), bit 7: fists selected; rifle: the laser rifle's rounds plus one (0: none); clip: its cell;
 //   heat: the rail gun's heat (HEAT_MAX at most). nade: bits 0-5 the ticks before the rifle's
 //   launcher fires again (`lob`), bits 6-7 its grenades left (`nades`). side: bits 0-6 the Hunter's
-//   pistol's shots plus one (0: none), bit 7 `sided` (it is in hand); sideMag: its battery.
+//   pistol's shots plus one (0: none), bit 7 `sided` (it is in hand); sideMag: its battery; daze:
+//   the ticks left dazed by a melee hit (DAZE_TICKS).
 //   Then the rovers, rovers × 57 bytes, in the order of WorldDef.rovers then WorldDef.ships:
 //     [x f32][y f32][z f32][vx f32][vy f32][vz f32][yaw f32][pitch f32][roll f32][wy f32][wp f32]
 //     [wr f32][steer f32][driver u8][rider u8][kind u8][wreck u8][nades u8]
@@ -75,7 +76,7 @@
 //   Then, only on a map with a station (station.ts), the doors' section written even with no door:
 //   [station u16] bits 0-1 the PHASE, bit 2 the team that armed it, bits 3-9 the whole seconds left
 //   in the phase (Snapshot.station).
-//   A snapshot is 5 + 64 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
+//   A snapshot is 5 + 65 × players + 57 × rovers + 10 + 2 to 16 bytes: 12 on top of the players and
 //   the rovers when both flags are home and no ball flies; with balls, 1 + 11 × balls more.
 // Every multi-byte field is big-endian (DataView's default).
 import type { BotView } from './bot';
@@ -159,7 +160,7 @@ export const MSG_SNAPSHOT = 2;
 
 export const INPUT_BYTES = 12;
 export const SNAP_HEAD = 5;
-export const SNAP_PLAYER = 64;
+export const SNAP_PLAYER = 65;
 /** Bytes of a rover: thirteen float32, the two seats, then the kind and health, the wreck's time and a ship's missiles. */
 export const SNAP_ROVER = 57;
 /** The most rovers and ships a snapshot carries (Tranquility has eight: four rovers, four ships). */
@@ -356,6 +357,7 @@ export function encodeSnapshot(
     v.setUint8(o + 61, ((p.nades ?? 0) << 6) | (p.lob ?? 0));
     v.setUint8(o + 62, ((p.side ?? -1) + 1) | (+!!p.sided << 7));
     v.setUint8(o + 63, p.sideMag ?? 0);
+    v.setUint8(o + 64, p.daze ?? 0);
   });
   rovers.forEach((r, i) => {
     const o = mid + i * SNAP_ROVER;
@@ -514,6 +516,7 @@ export const decodeSnapshot = (buf: ArrayBuffer): Snapshot | null => {
       lob: v.getUint8(o + 61) & 63,
       side: (v.getUint8(o + 62) & 127) - 1,
       sideMag: v.getUint8(o + 63),
+      daze: v.getUint8(o + 64),
       sided: v.getUint8(o + 62) > 127,
     });
   }

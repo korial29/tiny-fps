@@ -242,7 +242,8 @@ export const BLOW = {
 } as const;
 /** A swipe of the claws: XENO_CLAW health (the user, 2026-11-16: they hurt; then 4 was too much). */
 export const XENO_CLAW = 2;
-const CLAW = { ticks: 16, strike: 5, reach: 1.8, arc: 0.7, hp: XENO_CLAW, hold: -1, knock: 0 };
+// Quicker and wider since the user, 2026-11-28 (16 ticks, strike at 5, 1.8 m, 0.7 rad before): swipes missed.
+const CLAW = { ticks: 14, strike: 5, reach: 2.4, arc: 1, hp: XENO_CLAW, hold: -1, knock: 0 };
 export const PUNCHES = [
   PUNCH,
   PUNCH,
@@ -341,7 +342,8 @@ export const EXEC = {
   REACH: 1.3,
   // 0.7 before: the kneeling victim's head went into the killer's belly (the user, 2026-11-24).
   FIST: 0.85,
-  CUTS: [26, 71],
+  // The slash's strike (14 ticks in) on the lock's last tick.
+  CUTS: [26, 73],
   KILLER: 1,
   VICTIM: 2,
 } as const;
@@ -467,15 +469,18 @@ export const PICK_H = 1;
  * of his look, at a height his body overlaps, with no brush between. A hit takes `hp`.
  */
 export const CUTS = [
+  // The four cuts are some 15 % quicker and reach further and wider since the user, 2026-11-28
+  // (cuts missed too often; a quarter quicker was too fast): 28/10, 34/13 and 40/16 ticks to the
+  // end and the strike, 2.65 and 2.15 m, arcs of 0.3, 1.2 and 0.45 rad before.
   /** THRUST: quick and the longest, a narrow line. */
-  { ticks: 28, strike: 10, reach: 2.65, arc: 0.3, hp: 2, hold: 8 },
+  { ticks: 24, strike: 8, reach: 3, arc: 0.4, hp: 2, hold: 6 },
   /** LEFT, then RIGHT: across, a wide arc. */
-  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2, hold: 4 },
-  { ticks: 34, strike: 13, reach: 2.15, arc: 1.2, hp: 2, hold: 4 },
+  { ticks: 29, strike: 11, reach: 2.6, arc: 1.4, hp: 2, hold: 3 },
+  { ticks: 29, strike: 11, reach: 2.6, arc: 1.4, hp: 2, hold: 3 },
   /** SLASH: down from above, the slowest and the hardest. */
-  { ticks: 40, strike: 16, reach: 2.15, arc: 0.45, hp: 3, hold: 11 },
-  /** LUNGE: thrown forward on the point (LUNGE_SPEED), the longest reach. */
-  { ticks: 36, strike: 12, reach: 3.2, arc: 0.3, hp: 3, hold: -1 },
+  { ticks: 34, strike: 14, reach: 2.6, arc: 0.65, hp: 3, hold: 9 },
+  /** LUNGE: thrown forward on the point (LUNGE_SPEED), the longest reach (3.2 m before 2026-11-28). */
+  { ticks: 36, strike: 12, reach: 3.6, arc: 0.3, hp: 3, hold: -1 },
   /**
    * ARC_L, then ARC_R (the user, 2026-11-08): a heavy cut down across, from high on its side to low
    * on the other. It strikes no one itself: at its strike it throws an arc of energy (wave(),
@@ -521,6 +526,14 @@ export const [NECK, HIPS, MIDLINE] = [0.82, 0.45, 0.12];
  * SHOCK_TICKS (0.4 s), thrown SHOCK_KNOCK m/s the way the blade goes.
  */
 export const SHOCK_TICKS = 24;
+/**
+ * Dazed by a melee hit (the user, 2026-11-28): a foe a katana's cut, a blow of the fists or a
+ * swipe of the claws or tail hits and does not put down is slowed for DAZE_TICKS steps (`daze`),
+ * his speed on the floor plane held under a cap that climbs back from DAZE_SPEED to SPRINT_SPEED
+ * as the steps run out (physics.ts). The count waits while he stumbles, so a knock still throws
+ * him. u8 on the wire.
+ */
+export const [DAZE_TICKS, DAZE_SPEED] = [60, 2];
 export const SHOCK_KNOCK = 4;
 /**
  * The ninja's parry (the user, 2026-11-16): with the katana in hand, a ball (not a grenade or an arc)

@@ -154,7 +154,7 @@ export const decor = (def: WorldDef): Decor | Promise<Decor> => {
   const keep = (d: Decor) => (decors.set(def, d), d);
   return (
     def.scenery === 'moon'
-      ? import('../tranquility').then(m => drive(m.default(def, palette({ def }).map(String))))
+      ? import('../tranquility').then(m => drive(m.default(def)))
       : import('../landfall').then(m => drive(m.default(def)))
   ).then(keep);
 };

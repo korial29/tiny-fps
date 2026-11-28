@@ -238,14 +238,17 @@ const round = (w: World, base: Vec3, from: Vec3): { at: Vec3; look: number }[] =
     const a = (k * 2 * Math.PI) / POSTS;
     const v: Vec3 = [base[0] + ROUND * Math.sin(a), base[1], base[2] + ROUND * Math.cos(a)];
     const [i, on] = locate(nav, w, v);
-    if (i >= 0 && Math.abs(on[1] - base[1]) < 0.6 && flat(on[0], on[2], v[0], v[2]) < 0.5) {
+    if (i >= 0 && Math.abs(on[1] - base[1] + 1) < 1.6 && flat(on[0], on[2], v[0], v[2]) < 0.5) {
       const away = toward(base[0], base[2], on[0], on[2]);
       const side = (q: Vec3) => Math.abs(turn(away, toward(base[0], base[2], q[0], q[2])));
       const q = ins.reduce((m, c) => (side(c) < side(m) ? c : m));
       out.push({ at: on, look: toward(on[0], on[2], q[0], q[2]) });
     }
   }
-  return out;
+  // On the flag's own floor (within 0.6 m of it); failing that (a flag up on a dais narrower than
+  // the round, as on Tranquility), on the floor round the dais, up to 2.6 m below the flag.
+  const own = out.filter(p => p.at[1] > base[1] - 0.6);
+  return own.length ? own : out;
 };
 
 /** What a bot of a team does, handed out by squad(). */

@@ -206,7 +206,8 @@ describe('doors, shots and sight', () => {
       const ball = launch(p);
       fly(w, ball, 30, []);
       expect(ball.z > Z + 1, `ball, open ${open}`).toBe(through);
-      expect(!!ball.burst).toBe(!through);
+      // Burst at the door only when it is shut: through it, it may burst further on the flag's dais.
+      expect(!!ball.burst && ball.z < Z + 1).toBe(!through);
       expect(beam(w, p).t > 9, `beam, open ${open}`).toBe(through);
       const r = { ...park(w)[0], x: 80, y: 1, z: Z - 6, yaw: SOUTH };
       for (const bolt of bolts(r, 1, 0, SOUTH, 0, 2)) {

@@ -1,10 +1,47 @@
 // The moon base's hall in the dome (docs/MOON.md), red's half.
-import { FIT, HALL, MOUTHS } from '../../shared/moonbase';
+import { CONSOLE_BOX, CRATES, FIT, HALL, MOUTHS, PARAPETS } from '../../shared/moonbase';
 import { TAU } from '../../shared/physics';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
 import { C, CONCRETE, CX, CZ, FRAME, GLASS, HALL_GLASS, LAMP, R, TOP, WHITE } from './constants';
 import { block, frame, glazed, lining, panel, quad } from './kit';
+
+const RECTS = [...HALL, ...HALL.map(([a, b]) => [b, a]).reverse()];
+
+/**
+ * The hall's wall, piece by piece round the centre: each stands in the plane of the axis k at `at`
+ * (the hall toward -sign) and runs along j from s to t about the centre, with the mouth through it
+ * if any (its middle, half width, height and depth) and its windows (middle along j, sill height):
+ * on the long faces, a row for the floor and one for the mezzanine.
+ */
+export const walls = () => {
+  // The wall's corners, round the centre: a quarter, then its mirrors.
+  const qd = RECTS.flatMap(([c, d], i) => [
+    [c, d],
+    ...(RECTS[i + 1] ? [[RECTS[i + 1][0], d]] : []),
+  ]);
+  const loop = [
+    ...qd,
+    ...qd.map(([x, z]) => [-x, z]).reverse(),
+    ...qd.map(([x, z]) => [-x, -z]),
+    ...qd.map(([x, z]) => [x, -z]).reverse(),
+  ];
+  return loop.map((p, i) => {
+    const n = loop[(i + 1) % loop.length];
+    const k = p[0] == n[0] ? 0 : 2;
+    const j = 2 - k;
+    const [at, sign] = [C[k] + p[k / 2], Math.sign(p[k / 2])];
+    const [s, t] = [p[j / 2], n[j / 2]].sort((a, b) => a - b);
+    const m = MOUTHS.find(m => m[k / 2] == p[k / 2] && m[j / 2] > s && m[j / 2] < t);
+    const [mc, mw, mh, md] = m ? [m[j / 2], m[2], m[3], m[4]] : [s, 0, 0, 0];
+    const count = t - s > 6 ? Math.floor((t - s) / 2.4) : 0;
+    const panes = Array.from(
+      { length: count },
+      (_, w) => s + ((t - s) * (w + 0.5)) / count,
+    ).flatMap(c => [1.5, 4.9].filter(y => y > mh || Math.abs(c - mc) > mw + 0.8).map(y => [c, y]));
+    return { p, n, k, j, at, sign, s, t, m, mc, mw, mh, md, panes };
+  });
+};
 
 /**
  * The hall in the dome, all drawn here (shared/moonbase.ts collides with it as ghosts): its floor,
@@ -13,30 +50,10 @@ import { block, frame, glazed, lining, panel, quad } from './kit';
  * in it.
  */
 export const hall = (o: Out) => {
-  const rects = [...HALL, ...HALL.map(([a, b]) => [b, a]).reverse()];
-  for (const [c, d] of rects) {
+  for (const [c, d] of RECTS) {
     panel(o, 1, 0.02, [CX - c, 0, CZ - d], [CX + c, 0, CZ + d], CONCRETE, 1.85);
   }
-  // The wall's corners, round the centre: a quarter, then its mirrors.
-  const qd = rects.flatMap(([c, d], i) => [
-    [c, d],
-    ...(rects[i + 1] ? [[rects[i + 1][0], d]] : []),
-  ]);
-  const loop = [
-    ...qd,
-    ...qd.map(([x, z]) => [-x, z]).reverse(),
-    ...qd.map(([x, z]) => [-x, -z]),
-    ...qd.map(([x, z]) => [x, -z]).reverse(),
-  ];
-  loop.forEach((p, i) => {
-    const n = loop[(i + 1) % loop.length];
-    // The wall stands in the plane of the axis k at `at` and runs along j from s to t.
-    const k = p[0] == n[0] ? 0 : 2;
-    const j = 2 - k;
-    const [at, sign] = [C[k] + p[k / 2], Math.sign(p[k / 2])];
-    const [s, t] = [p[j / 2], n[j / 2]].sort((a, b) => a - b);
-    const m = MOUTHS.find(m => m[k / 2] == p[k / 2] && m[j / 2] > s && m[j / 2] < t);
-    const [mc, mw, mh, md] = m ? [m[j / 2], m[2], m[3], m[4]] : [s, 0, 0, 0];
+  walls().forEach(({ p, k, j, at, sign, s, t, m, mc, mw, mh, md, panes }) => {
     /** A piece of it from a to b, `off` proud. */
     const put = (
       a: number,
@@ -54,23 +71,28 @@ export const hall = (o: Out) => {
       [lo[j], hi[j]] = [C[j] + a, C[j] + b];
       panel(o, k, at - sign * off, lo, hi, c, l);
     };
-    lining(o, k, at, C[j] + s, C[j] + t, TOP, 1.7, m && [[C[j] + mc - mw, C[j] + mc + mw, mh]]);
+    // No skirting: the dark strip below is the hall's own.
+    lining(
+      o,
+      k,
+      at,
+      C[j] + s,
+      C[j] + t,
+      TOP,
+      1.7,
+      -sign,
+      m ? [[C[j] + mc - mw, C[j] + mc + mw, mh]] : [],
+      false,
+    );
     put(s, t, 0, 0.25, FRAME, 0, 0.02);
     put(s, t, TOP - 0.6, TOP - 0.4, LAMP, 0, 0.03);
-    // Windows on the long faces, a row for the floor and one for the mezzanine.
-    const count = t - s > 6 ? Math.floor((t - s) / 2.4) : 0;
-    for (let w = 0; w < count; w++) {
-      const c = s + ((t - s) * (w + 0.5)) / count;
-      for (const y of [1.5, 4.9]) {
-        if (y > mh || Math.abs(c - mc) > mw + 0.8) {
-          put(c - 0.72, c + 0.72, y, y + 1.4, FRAME, 0, 0.02);
-          const from = o.length;
-          put(c - 0.6, c + 0.6, y + 0.2, y + 1.2, GLASS, 0, 0.04);
-          const n = [0, 0, 0];
-          n[k] = -sign;
-          glazed(o, from, n, HALL_GLASS);
-        }
-      }
+    for (const [c, y] of panes) {
+      put(c - 0.72, c + 0.72, y, y + 1.4, FRAME, 0, 0.02);
+      const from = o.length;
+      put(c - 0.6, c + 0.6, y + 0.2, y + 1.2, GLASS, 0, 0.04);
+      const n = [0, 0, 0];
+      n[k] = -sign;
+      glazed(o, from, n, HALL_GLASS);
     }
     // The ledge, out to the inner shell.
     const pieces = Math.ceil((t - s) / 4.2);
@@ -120,5 +142,7 @@ export const hall = (o: Out) => {
     ];
     quad(o, [[CX, 16.2, CZ], rim(i), rim(i + 1), rim(i + 2)], LAMP);
   }
-  FIT.forEach(b => block(o, b));
+  // The railings, the console, the eagles and the machine are props.ts's (statue.ts).
+  const dressed = new Set([CONSOLE_BOX, ...PARAPETS, ...CRATES]);
+  FIT.filter(b => !dressed.has(b)).forEach(b => block(o, b));
 };

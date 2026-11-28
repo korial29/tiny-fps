@@ -11,11 +11,11 @@ import { hangar, satellite } from './satellite';
  * The moon's ground drawn once, its runners' colours by key (render.ts palette), and its Earth
  * apart: a part at a time, a yield between two (tasks.ts drive()).
  */
-export default function* (def: WorldDef, keys: string[]): Generator<undefined, Decor, undefined> {
+export default function* (def: WorldDef): Generator<undefined, Decor, undefined> {
   // concat(), not push(...): a spread of a million numbers overflows the stack.
   let land = yield* moonscaping(def);
   yield;
-  land = land.concat(furnishing(def, keys));
+  land = land.concat(furnishing(def));
   if (def.station) {
     yield;
     land = land.concat(satellite(def.station), hangar(def.station));

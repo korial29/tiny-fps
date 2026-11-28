@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { empty, reach } from '../../test/relief';
 import { STEP_H } from '../shared/constants';
 import { LAYOUT, MOON, PYLONS, rockMid, rockOf } from '../shared/moon';
-import { NX, NZ, S, gap, mask } from '../shared/moon/rift';
+import { KICKERS, NX, NZ, S, gap, mask } from '../shared/moon/rift';
 import { ground } from '../shared/relief';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
@@ -847,6 +847,36 @@ describe('moonscape, the horizon', () => {
 });
 
 describe('moonscape and the rovers', () => {
+  it("lays each ramp's orange band against its crack's edge, on closed ground, however the edge runs", () => {
+    // The band was a straight strip set from the edge on the ramp's middle line only: on a slanted
+    // edge one end hung over the void and the other stood back from the edge (the user, 2026-11-27).
+    const band = verts.filter(
+      p => p[8] < 0 && p[6] === 1 && Math.abs(p[7] - 0.42) < 1e-6 && Math.abs(p[9] - 0.08) < 1e-6,
+    );
+    for (const side of [1, -1]) {
+      for (const [rx, rz, ux, uz] of KICKERS) {
+        const mine = band
+          .map(p => [p[0], side * (p[2] - 140)])
+          .filter(([x, z]) => {
+            const [a, b] = [(x - rx) * ux + (z - rz) * uz, (z - rz) * ux - (x - rx) * uz];
+            return Math.abs(b) < 2.05 && a > -7 && a < 1.5;
+          });
+        const at = `${rx}, ${rz}, ${side}`;
+        expect(mine.length, at).toBeGreaterThanOrEqual(6);
+        const open = (x: number, z: number) => gap(Math.floor(x / S), Math.floor(z / S));
+        // None of it over the void, and its front edge within 35 cm of it.
+        expect(
+          mine.some(([x, z]) => open(x, z)),
+          at,
+        ).toBe(false);
+        expect(
+          mine.some(([x, z]) => open(x + 0.35 * ux, z + 0.35 * uz)),
+          at,
+        ).toBe(true);
+      }
+    }
+  });
+
   /** What is drawn in the arena that is not its stone floor's craters, the relief or the sky. */
   const things = verts.filter(p => p[8] !== TEX.STONE && inArena(p));
 
@@ -860,8 +890,10 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 468,291 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
-    expect(verts.length).toBe(468291);
+  it('is 469,671 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
+    // 468,291 until the ramps' bands were laid in eight pieces along their edge (1,068 more), then
+    // the dark rails and skirting on the base's walls (312 more, the hall's blocks being props now).
+    expect(verts.length).toBe(469671);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

@@ -163,9 +163,16 @@ export const vision = (def: WorldDef): number[] => {
 const ZONE = 4.2;
 const FRAME = 0.35;
 
-/** A square on each team's roof around its base, lit paint of the team's colour: pale inside, a strong frame. */
-export const zones = ({ teams }: WorldDef): number[] => {
+/**
+ * A square on each team's roof around its base, lit paint of the team's colour: pale inside, a
+ * strong frame. None on the moon: the flag's dais there has a lit ring at the flag's reach
+ * (client/moonbase/dais.ts).
+ */
+export const zones = ({ teams, scenery }: WorldDef): number[] => {
   const out: number[] = [];
+  if (scenery === 'moon') {
+    return out;
+  }
   teams.forEach(({ base: [x, y, z] }, team) => {
     const rgb = teamRgb(team);
     const pale = rgb.map(c => 0.25 + 0.45 * c);

@@ -353,8 +353,10 @@ export const TEX = {
   FABRIC: 13,
   /** Grained leather, near white so a tint is its colour, stitched in panels. Seats and luggage. */
   HIDE: 14,
-  /** Smooth satin composite panels, 1 m by 2 m, with fine seams: the moon base's floors and walls. */
+  /** Smooth satin composite panels, 1 m by 2 m, with fine seams: the moon base's floors. */
   HULL: 15,
+  /** A uniform off-white satin coat, no seams, slightly shiny: the moon base's walls inside. */
+  WALL: 16,
 } as const;
 
 /** One player in a snapshot: the state (its ev and fall read 0) and the ack. */

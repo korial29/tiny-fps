@@ -297,8 +297,8 @@ describe('MOON, bases and spawns', () => {
         ),
         `team ${team}: room`,
       ).toBe(false);
-      // In the hall, 2 m from the dome's centre toward the door; a ghost, drawn indoors.
-      expect([x, z - (team ? ZED - 236 : 236)]).toEqual([80, team ? 2 : -2]);
+      // In the middle of the hall, at the dome's centre, 2 m up on its dais; a ghost, drawn indoors.
+      expect([x, y, z]).toEqual([80, 2, team ? ZED - 236 : 236]);
       expect(top!.ghost).toBe(true);
       // Under the dome's roof: nothing between it and the sky but the dome.
       expect(ray(world, [x, y + 1.5, z], [0, 1, 0], 100)).toBeLessThan(10);
@@ -307,7 +307,7 @@ describe('MOON, bases and spawns', () => {
 
   it("scores a capture in the hall: a red carrier walks in by the door to his flag's dais", () => {
     const ctf = new Ctf(world, RULES);
-    const s = Sim.at(world).put(80, 1, ZED - 234);
+    const s = Sim.at(world).put(80, 2, ZED - 236);
     const [bx, by, bz] = teams[1].spawns[0];
     const b = Sim.at(world).put(bx, by, bz);
     const runners = [
@@ -317,7 +317,7 @@ describe('MOON, bases and spawns', () => {
     runners.forEach(r => ctf.join(r.id, r.team, r.state));
     ctf.tick(runners);
     expect(ctf.flags[TEAM.BLUE].state).toBe(FLAG.CARRIED);
-    // Ahead of red's door, then in along the middle of the hall.
+    // Ahead of red's door, then in along the middle of the hall and up the dais's steps.
     s.put(80, 0, 205, SOUTH);
     let at = 0;
     const steps = s.until(
@@ -327,14 +327,14 @@ describe('MOON, bases and spawns', () => {
         return at > 0;
       },
       KEY.FORWARD,
-      p => toward(p.x, p.z, 80, 234),
+      p => toward(p.x, p.z, 80, 236),
     );
     expect(steps).toBeGreaterThan(0);
     expect(ctf.score).toEqual([1, 0]);
     expect(ctf.flags.map(f => f.state)).toEqual([FLAG.HOME, FLAG.HOME]);
     // Scored on the dais, past the door (z 216.2), not outside.
-    expect(at).toBeGreaterThan(234 - FLAG_REACH - 0.2);
-    expect(s.p.y).toBeCloseTo(1, 3);
+    expect(at).toBeGreaterThan(236 - FLAG_REACH - 0.2);
+    expect(s.p.y).toBeCloseTo(2, 3);
   });
 });
 

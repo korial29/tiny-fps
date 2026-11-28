@@ -1,7 +1,7 @@
 // The moon base's furniture and fittings (docs/MOON.md), red's half: the kit's pieces and the hall's dressing.
-import { HEAD, KIND, KIT, MODULES, MOUTHS, TUBES, WALL } from '../../shared/moonbase';
-import { place, segment, solid } from '../mesh';
-import { UP, box, face, lit } from '../brick';
+import { HEAD, KIND, KIT, MODULES, MOUTHS, TUBES } from '../../shared/moonbase';
+import { segment, solid } from '../mesh';
+import { box, face, lit } from '../brick';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
 import {
@@ -18,14 +18,17 @@ import {
   LAMP,
   LINTELS,
   MAUVE,
-  PINK,
   RED,
   SNOW,
-  SOIL,
 } from './constants';
 import { inside, panel } from './kit';
 import { bevel, ring } from './round';
 import { station } from './console';
+import { samples } from './samples';
+import { suit } from './suit';
+import { corridors } from './corridor';
+import { desks } from './desk';
+import { statues } from './statue';
 
 /** What a halo fades to at its rim: about the dark face it lies on, as drawn indoors. */
 const UP_Y: Vec3 = [0, 1, 0];
@@ -229,24 +232,16 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         c([0.05, y, D], [L - 0.05, y + 0.015, D + 0.005], INK);
       }
     } else if (kind == KIND.PLANTS) {
-      // Three shelves of troughs under grow lights, in a frame.
+      // Three shelves of samples (moonbase/samples.ts) in a frame.
       for (const u of [0, L / 2 - 0.03, L - 0.06]) {
         cb([u, 0, 0], [u + 0.06, H, D], IRON, 0.02);
       }
       cb([0, H - 0.04, 0], [L, H, D], SNOW, 0.015);
-      for (const y of [0.3, 0.9, 1.5]) {
+      const ys = [0.3, 0.9, 1.5];
+      for (const y of ys) {
         cb([0, y, 0], [L, y + 0.04, D], SNOW, 0.015);
-        c([0.1, y + 0.04, 0.12], [L - 0.1, y + 0.18, D - 0.12], SOIL);
-        for (let u = 0.25; u < L - 0.15; u += 0.4) {
-          const h = 0.12 + 0.06 * ((u * 10 + y * 3) % 3);
-          c(
-            [u - 0.1, y + 0.18, 0.2],
-            [u + 0.1, y + 0.18 + h, D - 0.2],
-            (u * 10) % 2 < 1 ? [0.18, 0.5, 0.16] : [0.3, 0.62, 0.2],
-          );
-        }
-        lit(o, 1.1, () => c([0.1, y + 0.53, 0.3], [L - 0.1, y + 0.56, D - 0.3], PINK));
       }
+      samples(o, P, L, D, ys, H - 0.04);
     } else if (kind == KIND.LOCKERS) {
       cb([0, 0, 0], [L, H, D], BLUISH, 0.04);
       for (let i = 0; i < 6; i++) {
@@ -261,23 +256,7 @@ export const piece = (o: Out, [kind, x0, z0, x1, z1, y0, y1, f]: number[]) => {
         button(u + 0.4, 1.53, 0.025, D + 0.008, AMBER, 1.3, false, 12, 0.07);
       }
     } else if (kind == KIND.SUIT) {
-      // On a stand: a pole at its back, boots, legs, the life support pack, arms and the helmet.
-      c([0.1, 0, 0.1], [0.9, 0.06, 0.9], INK);
-      c([0.47, 0.06, 0.06], [0.53, 1.7, 0.14], IRON);
-      for (const u of [0.27, 0.54]) {
-        c([u - 0.02, 0.06, 0.36], [u + 0.21, 0.22, 0.68], IRON);
-        c([u, 0.22, 0.4], [u + 0.19, 0.95, 0.62], SNOW);
-      }
-      cb([0.22, 0.95, 0.32], [0.78, 1.58, 0.7], SNOW, 0.07);
-      cb([0.25, 1.0, 0.14], [0.75, 1.62, 0.32], GREY, 0.05);
-      for (const u of [0.08, 0.78]) {
-        c([u, 1.0, 0.4], [u + 0.14, 1.54, 0.6], SNOW);
-        c([u, 0.88, 0.4], [u + 0.14, 1.0, 0.6], IRON);
-      }
-      button(0.42, 1.36, 0.05, 0.7, CYAN, 1.3, false);
-      button(0.6, 1.38, 0.03, 0.7, RED, 1.6, false);
-      place(o, solid(2, 0, [1, 1]), P(0.5, 1.8, 0.5), UP, [0, 0, 0], 0.21, SNOW);
-      g(0.38, 1.74, 0.62, 1.88, 0.715, AMBER, 0.7);
+      suit(o, P, button);
     } else {
       // A panel on a wall: a plate, a display in its bezel, round buttons glowing on a dark inset,
       // a bar of light under them.
@@ -308,7 +287,7 @@ const PANELS = [
 
 /**
  * The dressing of the base, red's half: the lab kit on its ghosts, panels on the walls, a sign over
- * the door, cables under the east deck, cable trays and status lights along the tubes, hazard
+ * the door, cables under the east deck, the corridors in the tubes (corridor.ts), hazard
  * stripes and a beacon over each airlock.
  */
 export const dressing = (o: Out) => {
@@ -332,54 +311,10 @@ export const dressing = (o: Out) => {
   ]) {
     inside(o, () => box(o, [x, 2.94, CZ - 6.7], [x + w, 3.06, CZ + 6.7], INK));
   }
-  // Along each tube: a tray at 2 m on a wall, a status light every 5 m.
-  TUBES.forEach(({ min, max }, n) => {
-    const k = n ? 2 : 0;
-    const [a0, b0] = [min[k], n ? TUBES[0].min[2] : max[k]];
-    const at = min[2 - k] + WALL;
-    const lo = [0, 2, 0];
-    const hi = [0, 2.1, 0];
-    [lo[k], hi[k], lo[2 - k], hi[2 - k]] = [a0, b0, at, at + 0.12];
-    inside(o, () => box(o, lo as Vec3, hi as Vec3, INK));
-    // Each a rounded dark plate, a green bar of light in it and its glow round it.
-    const [a, out]: Vec3[] = [
-      [0, 0, 0],
-      [0, 0, 0],
-    ];
-    [a[k], out[2 - k]] = [k ? -1 : 1, 1];
-    for (let d = a0 + 2.5; d < b0 - 1; d += 5) {
-      const [p, q] = [
-        [0, 1.22, 0],
-        [0, 1.58, 0],
-      ];
-      [p[k], q[k], p[2 - k], q[2 - k]] = [d - 0.3, d + 0.3, at, at + 0.03];
-      inside(o, () => bevel(o, p as Vec3, q as Vec3, INK, 0.012));
-      const c: Vec3 = [0, 1.4, 0];
-      [c[k], c[2 - k]] = [d, at + 0.03];
-      ring(
-        o,
-        c,
-        a,
-        UP_Y,
-        [0.05, 0.13],
-        GREEN.map(x => x * 0.5),
-        DUSK,
-        12,
-        0.16,
-      );
-      ring(
-        o,
-        c.map((v, i) => v + out[i] * 0.002) as Vec3,
-        a,
-        UP_Y,
-        [0, 0.05],
-        hot(GREEN, 2),
-        GREEN.map(x => x * 1.4),
-        12,
-        0.16,
-      );
-    }
-  });
+  // Along each tube: the corridor's frames, panels, lights and pipes; round the hall, the desks.
+  corridors(o);
+  desks(o);
+  statues(o);
   // Over each airlock, inside: amber and black stripes on the lintel, a red beacon above.
   for (const l of LINTELS) {
     const k = l.max[0] - l.min[0] < 1 ? 0 : 2;

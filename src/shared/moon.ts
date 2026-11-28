@@ -43,8 +43,36 @@ const MASTS = [
   [103.2, 212.4],
 ];
 
-/** Red's flag: in the hall, 2 m from the dome's centre toward the door. */
-const FLAG = DOME[1] - 2;
+/** Red's flag: in the middle of the hall, at the dome's centre, on top of the command dais. */
+const FLAG = DOME[1];
+/**
+ * The flag's dais (the user, 2026-11-27): four octagonal tiers of a step each (STEP_H), half width
+ * and chamfer of each, bottom first, round the flag at 2 m: the top's middle strip takes the flag's
+ * whole reach, the bottom leaves 1.35 m before the mezzanine's stairs. Each tier collides as strips along z
+ * (see `tier()`); client/moonbase/dais.ts draws the true octagons.
+ */
+export const DAIS: [number, number][] = [
+  [4.25, 1.9],
+  [3.5, 1.5],
+  [2.75, 1.1],
+  [2, 0.5],
+];
+export const DAIS_STEP = STEP_H;
+/** The strips each side of a tier's middle that follow its chamfers. */
+const CUTS = 3;
+/** A tier of the dais round (x, z) as boxes, a middle one then CUTS a side, their widths stepping in along the chamfers. */
+const tier = (x: number, z: number, i: number, tint: Vec3): Brush[] => {
+  const [h, c] = DAIS[i];
+  const [y0, y1] = [i * DAIS_STEP, (i + 1) * DAIS_STEP];
+  const out = [box(x - h, y0, z - h + c, x + h, y1, z + h - c, PAINT, CONCRETE, tint)];
+  for (let j = 0; j < CUTS; j++) {
+    const w = h - ((j + 0.5) * c) / CUTS;
+    const [a, b] = [h - c + (j * c) / CUTS, h - c + ((j + 1) * c) / CUTS];
+    out.push(box(x - w, y0, z + a, x + w, y1, z + b, PAINT, CONCRETE, tint));
+    out.push(box(x - w, y0, z - b, x + w, y1, z - a, PAINT, CONCRETE, tint));
+  }
+  return out;
+};
 
 const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));
 const far = (a: number, b: number) => Math.sqrt(a * a + b * b);
@@ -704,10 +732,9 @@ const half: Brush[] = [
   ].map(b => ({ ...b, ghost: true })),
   // The base: the dome's ghosts, the modules, the tubes and their stairs.
   ...BASE,
-  // The flag's dais in the hall: a red step of 0.5 m and a dais at 1 m, ghosts as all in the hall,
-  // drawn by client/moonbase.ts (daises()), the zone's square of 8.4 m on top.
-  { ...box(75.25, 0, FLAG - 4.75, 84.75, 0.5, FLAG + 4.75, PAINT, CONCRETE, RED), ghost: true },
-  { ...box(75.75, 0.5, FLAG - 4.25, 84.25, 1, FLAG + 4.25, PAINT, CONCRETE, RED), ghost: true },
+  // The flag's dais in the hall, four tiers up to 2 m, ghosts as all in the hall, drawn by
+  // client/moonbase/dais.ts.
+  ...DAIS.flatMap((_, i) => tier(DOME[0], FLAG, i, RED)).map(b => ({ ...b, ghost: true })),
   // The landing pads, their spaceships' (ship.ts: a solid body, not a brush), and masts by the tubes.
   ...PADS.map(([x, z, r]) => box(x - r, 0, z - r, x + r, 0.25, z + r, METAL)),
   ...MASTS.map(([x, z]) => box(x - 0.2, 0, z - 0.2, x + 0.2, 10, z + 0.2, STEEL)),
@@ -756,7 +783,7 @@ const SPAWNS: Spawn[] = [
 const team = (z: number, s: Spawn[]) => {
   const side = (p: Vec3) => (z > ZED / 2 ? p : flipPoint(p));
   return {
-    base: [80, 1, z] as Vec3,
+    base: [80, DAIS.length * DAIS_STEP, z] as Vec3,
     spawns: s,
     rack: side([66, 0, 262]),
     blade: side([94, 0, 262]),

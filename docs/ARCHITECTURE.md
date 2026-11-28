@@ -132,7 +132,7 @@ runs to `rules.scoreLimit` (3) captures or `rules.timeLimit` (480 s), the most c
 
 ### Secondary fire
 
-(`gun.ts` `step()`, `Room.ring()`, `WEAPON.md`, the user 2026-11-23): G or the right button (`KEY.SPECIAL`) with the pistol in hand fires a burst of `BURST` (3) plain shots, half its cooldown apart; `burst`, the shots left, rides in bits 6-7 of the charge byte, so it is predicted. With the rail gun it is a ring all round (`STRIKE.RING`): `RING_COST` of the capsule, the gun overheated, and every enemy within `RING_R` (4 m) in sight takes 1 hp, is drained as by the bolt and shocked out of it. The client reads a ring off `shots` with the rail gun in hand and draws it with `tesla()` in `beams.ts`.
+(`gun.ts` `step()`, `Room.ring()`, `WEAPON.md`, the user 2026-11-23): G or the right button (`KEY.SPECIAL`) with the pistol in hand fires a burst of `BURST` (3) plain shots, half its cooldown apart; `burst`, the shots left, rides in bits 6-7 of the charge byte, so it is predicted. With the rail gun it is a ring all round (`STRIKE.RING`): `RING_COST` of the capsule, the gun overheated, and every enemy within `RING_R` (4 m) in sight takes 1 hp, is drained as by the bolt and shocked out of it. The client reads a ring off `shots` with the rail gun in hand and draws it with `tesla()` in `beams/tracer.ts`.
 
 ### Katana
 

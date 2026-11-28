@@ -105,8 +105,11 @@ export interface Balls {
     now: number,
     muzzle: (id: number) => Vec3 | undefined,
     discSound?: (kind: 'return' | 'catch', at: Vec3) => void,
-  ): { orbs: Orb[]; bursts: [Vec3, number, number?][] };
+  ): { orbs: Orb[]; bursts: Burst[] };
 }
+
+/** A burst: where, the ball's power, a missile's width in grenades', and the way a ball (not a grenade or a missile) flew. */
+export type Burst = [Vec3, number, number?, Vec3?];
 
 const at = (b: { x: number; y: number; z: number }): Vec3 => [b.x, b.y, b.z];
 /**
@@ -264,7 +267,7 @@ export const createBalls = (world: World): Balls => {
 
     frame(now, muzzle, discSound) {
       const orbs: Orb[] = [];
-      const bursts: [Vec3, number, number?][] = [];
+      const bursts: Burst[] = [];
       for (const cue of discSounds.splice(0)) {
         discSound?.(cue.kind, cue.at);
       }
@@ -287,7 +290,13 @@ export const createBalls = (world: World): Balls => {
           if (f.pop) {
             const at = f.path ? f.path[last] : f.end!;
             // A missile's burst is MISSILE_R wide, as many times a grenade's.
-            bursts.push(f.missile ? [at, f.power, MISSILE_R / NADE_R] : [at, f.power]);
+            bursts.push(
+              f.missile
+                ? [at, f.power, MISSILE_R / NADE_R]
+                : f.power === NADE
+                  ? [at, f.power]
+                  : [at, f.power, undefined, f.d],
+            );
           }
           if (f.own) {
             spent.add(key);

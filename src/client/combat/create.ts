@@ -58,6 +58,7 @@ import {
 } from './constants';
 import { muzzleOf, fired, swung, struck, voiceOf, life, dreadful } from './events';
 import type { Combat, Blade } from './types';
+import { surface } from '../melt';
 
 export const createCombat = (
   world: World,
@@ -687,7 +688,7 @@ export const createCombat = (
       );
       tracer.orbs(orbs);
       // The laser rifle's (power 0) burst red, with a deeper, louder thud.
-      for (const [at, k, wide = 1] of bursts) {
+      for (const [at, k, wide = 1, d] of bursts) {
         if (k === NADE) {
           // A grenade: a fireball, a deep blast, and the view shaken within three radii of it; a
           // missile's `wide` times as big.
@@ -704,7 +705,7 @@ export const createCombat = (
           audio.play(SOUND.HARPOON_HIT, at, 0.5, rate());
           continue;
         }
-        tracer.burst(at, !k);
+        tracer.burst(at, !k, false, d && surface(world, at, d));
         audio.play(SOUND.SPLASH, at, k ? 0 : 2.3, k ? 1 : 0.6);
       }
     },

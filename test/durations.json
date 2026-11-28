@@ -5,7 +5,7 @@
   "src/client/armor.test.ts": 11.8,
   "src/client/audio.test.ts": 1.8,
   "src/client/balls.test.ts": 0,
-  "src/client/beams.test.ts": 0.1,
+  "src/client/beams/tracer.test.ts": 0.1,
   "src/client/beats.test.ts": 0,
   "src/client/body.arms.test.ts": 5,
   "src/client/body.hunter.test.ts": 1.2,

@@ -245,6 +245,16 @@ export const PARAPETS = [
   ghost([-9, 12, -2.5, 12.5], 3.5, 4.6, STEEL, PAINT),
   ghost([2.5, 12, 9, 12.5], 3.5, 4.6, STEEL, PAINT),
 ];
+/** The mezzanine's stairs, facing the door: ghosts drawn as a steel gangway (client/moonbase/gangway.ts). */
+export const FLIGHT = stairs(
+  2,
+  DOME[1] + 5.6,
+  DOME[1] + 12,
+  DOME[0] - 1.5,
+  DOME[0] + 1.5,
+  0,
+  3.5,
+).map(b => ({ ...b, ghost: true }));
 /** The hall's three blocks on the floor: the two by the door drawn as eagles on plinths, the third as a machine. */
 export const CRATES = [
   ghost([-9.5, -10, -7.5, -8], 0, 1.4, STEEL),
@@ -265,10 +275,7 @@ export const FIT: Brush[] = [
   ])
     .filter(p => p[1] > -C0)
     .map(p => ghost(p, 3.1, 3.5, HULL, STEEL)),
-  ...stairs(2, DOME[1] + 5.6, DOME[1] + 12, DOME[0] - 1.5, DOME[0] + 1.5, 0, 3.5).map(b => ({
-    ...b,
-    ghost: true,
-  })),
+  ...FLIGHT,
   CONSOLE_BOX,
   ...PARAPETS,
   ...CRATES,

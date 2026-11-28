@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MOON, ZED } from '../shared/moon';
 import { TEAM_TINT } from '../shared/map';
-import { BASE, HALL, HEAD, KIT, MODULES, MOUTHS, TUBES } from '../shared/moonbase';
+import { BASE, FLIGHT, HALL, HEAD, KIT, MODULES, MOUTHS, TUBES } from '../shared/moonbase';
 import { TEX } from '../shared/types';
 import { build } from '../shared/world';
 import { PANE, STRIDE } from './mesh';
@@ -448,6 +448,23 @@ describe('furnishing', () => {
           p[8] === -2 && near(p, 4.4) && p[1] > 0.3 && (r > b ? p[6] > p[9] * 2 : p[9] > p[6] * 2),
       );
       expect(lights.length).toBeGreaterThan(100);
+    }
+  });
+
+  it("draws the mezzanine's stairs as a steel gangway on their steps: lit nosings, rails, no concrete", () => {
+    const [x0, x1] = [FLIGHT[0].min[0], FLIGHT[0].max[0]];
+    const [z0, z1] = [FLIGHT[0].min[2], FLIGHT.at(-1)!.max[2]];
+    for (const m of [(z: number) => z, (z: number) => ZED - z]) {
+      const [za, zb] = [m(z0), m(z1)].sort((a, b) => a - b);
+      const on = pts.filter(
+        p => p[0] > x0 - 0.1 && p[0] < x1 + 0.1 && p[2] > za - 0.1 && p[2] < zb + 0.1,
+      );
+      // A line of light under each tread's nosing, rails over a metre above the steps.
+      const leds = new Set(on.filter(p => p[8] === -2 && p[6] > 0.7).map(p => p[1].toFixed(2)));
+      expect(leds.size).toBeGreaterThanOrEqual(FLIGHT.length);
+      expect(on.some(p => p[1] > 4.5)).toBe(true);
+      // No textured block on them: flat colours and glows only.
+      expect(on.filter(p => p[8] >= 0 && p[1] > 0.05)).toEqual([]);
     }
   });
 

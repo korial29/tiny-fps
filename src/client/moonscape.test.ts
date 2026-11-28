@@ -890,10 +890,11 @@ describe('moonscape and the rovers', () => {
     expect(things.some(p => Math.hypot(p[0] - mx, p[2] - mz) < 2.5 && p[1] < 3)).toBe(true);
   });
 
-  it('is 469,671 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
+  it('is 469,095 vertices, the four static rovers, the two shuttles, the masts of the pads and the 3000 stars no longer among them', () => {
     // 468,291 until the ramps' bands were laid in eight pieces along their edge (1,068 more), then
-    // the dark rails and skirting on the base's walls (312 more, the hall's blocks being props now).
-    expect(verts.length).toBe(469671);
+    // the dark rails and skirting on the base's walls (312 more, the hall's blocks being props now),
+    // then the mezzanine's stairs drawn as a gangway with the props (576 fewer).
+    expect(verts.length).toBe(469095);
   });
 
   it("keeps the small craters 6 m clear of the map's own rover spawns, wherever they are", () => {

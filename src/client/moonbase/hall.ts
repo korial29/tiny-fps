@@ -1,5 +1,5 @@
 // The moon base's hall in the dome (docs/MOON.md), red's half.
-import { CONSOLE_BOX, CRATES, FIT, HALL, MOUTHS, PARAPETS } from '../../shared/moonbase';
+import { CONSOLE_BOX, CRATES, FIT, FLIGHT, HALL, MOUTHS, PARAPETS } from '../../shared/moonbase';
 import { TAU } from '../../shared/physics';
 import type { Vec3 } from '../mesh';
 import type { Out } from '../verts';
@@ -142,7 +142,8 @@ export const hall = (o: Out) => {
     ];
     quad(o, [[CX, 16.2, CZ], rim(i), rim(i + 1), rim(i + 2)], LAMP);
   }
-  // The railings, the console, the eagles and the machine are props.ts's (statue.ts).
-  const dressed = new Set([CONSOLE_BOX, ...PARAPETS, ...CRATES]);
+  // The railings, the console, the eagles and the machine are props.ts's (statue.ts), the stairs
+  // gangway.ts's.
+  const dressed = new Set([CONSOLE_BOX, ...PARAPETS, ...CRATES, ...FLIGHT]);
   FIT.filter(b => !dressed.has(b)).forEach(b => block(o, b));
 };

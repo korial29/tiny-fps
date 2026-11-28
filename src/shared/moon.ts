@@ -46,32 +46,32 @@ const MASTS = [
 /** Red's flag: in the middle of the hall, at the dome's centre, on top of the command dais. */
 const FLAG = DOME[1];
 /**
- * The flag's dais (the user, 2026-11-27): four octagonal tiers of a step each (STEP_H), half width
- * and chamfer of each, bottom first, round the flag at 2 m: the top's middle strip takes the flag's
- * whole reach, the bottom leaves 1.35 m before the mezzanine's stairs. Each tier collides as strips along z
- * (see `tier()`); client/moonbase/dais.ts draws the true octagons.
+ * The flag's dais (the user, 2026-11-27, round on 2026-11-28): four round tiers of a step each
+ * (STEP_H), their radii bottom first, round the flag at 2 m: the top takes the flag's whole reach,
+ * the bottom leaves 1.1 m before the mezzanine's stairs. Each tier collides as crossed boxes (see
+ * `tier()`); client/moonbase/dais.ts draws the true circles.
  */
-export const DAIS: [number, number][] = [
-  [4.25, 1.9],
-  [3.5, 1.5],
-  [2.75, 1.1],
-  [2, 0.5],
-];
+export const DAIS = [4.3, 3.55, 2.8, 2.05];
 export const DAIS_STEP = STEP_H;
-/** The strips each side of a tier's middle that follow its chamfers. */
-const CUTS = 3;
-/** A tier of the dais round (x, z) as boxes, a middle one then CUTS a side, their widths stepping in along the chamfers. */
+/**
+ * The crossed boxes of a tier, their half sides along x and z over its radius: corners every 10
+ * degrees from 5 (45 among them, the box under the flag's reach), pushed out so the union is as
+ * much out of the circle at a corner as it is in at the notch between two (4.7 % of the radius).
+ * Written out, not computed: Math.cos is not the same on every engine and the room must agree.
+ */
+const HALF = [
+  [1.043, 0.091],
+  [1.011, 0.271],
+  [0.949, 0.442],
+  [0.858, 0.6],
+];
+const CORNERS = [...HALF, [0.74, 0.74], ...HALF.map(([h, d]) => [d, h]).reverse()];
+/** A tier of the dais round (x, z) as boxes, ghosts: they overlap. */
 const tier = (x: number, z: number, i: number, tint: Vec3): Brush[] => {
-  const [h, c] = DAIS[i];
-  const [y0, y1] = [i * DAIS_STEP, (i + 1) * DAIS_STEP];
-  const out = [box(x - h, y0, z - h + c, x + h, y1, z + h - c, PAINT, CONCRETE, tint)];
-  for (let j = 0; j < CUTS; j++) {
-    const w = h - ((j + 0.5) * c) / CUTS;
-    const [a, b] = [h - c + (j * c) / CUTS, h - c + ((j + 1) * c) / CUTS];
-    out.push(box(x - w, y0, z + a, x + w, y1, z + b, PAINT, CONCRETE, tint));
-    out.push(box(x - w, y0, z - b, x + w, y1, z - a, PAINT, CONCRETE, tint));
-  }
-  return out;
+  const [r, y0, y1] = [DAIS[i], i * DAIS_STEP, (i + 1) * DAIS_STEP];
+  return CORNERS.map(([h, d]) =>
+    box(x - r * h, y0, z - r * d, x + r * h, y1, z + r * d, PAINT, CONCRETE, tint),
+  );
 };
 
 const sm = (t: number) => c1(t) * c1(t) * (3 - 2 * c1(t));

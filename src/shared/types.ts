@@ -312,6 +312,8 @@ export interface PlayerState {
   hot?: boolean;
   /** Ticks left drained by the bolt: slowed under SLOW_SPEED, and the host takes 1 hp each RAIL_DRAIN. Absent reads 0. */
   slow?: number;
+  /** Ticks left dazed by a melee hit (DAZE_TICKS), the speed held under a cap that climbs back. Absent reads 0. */
+  daze?: number;
   /** While down: the bolt's drain put him down, and he is disintegrated. Absent reads false. */
   fried?: boolean;
   /** The katana's cut is a charged one let go (see HEAVY): its swing is the heavy release's. Absent reads false. */

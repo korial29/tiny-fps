@@ -62,6 +62,12 @@ export interface Effects {
    */
   blow(b: number, taken?: boolean): void;
   /**
+   * The own melee blow landed (the user, 2026-11-28: the most feedback): a short shake of the eye
+   * and the look, rolled toward `side` (-1 left, 1 right, 0 none), and the view zoomed in a few
+   * degrees and back; `k` 1 for a hit, more for a heavy one or a kill.
+   */
+  smite(side: number, k: number): void;
+  /**
    * Advances dt seconds: the own player (eased, undefined before the first snapshot), the held keys,
    * the events, and the stride phase of its drawn legs (Gait.phase): with it the bob dips as a foot
    * lands, without it the stride counts the distance.
@@ -153,6 +159,8 @@ const KNOCKED = [-1.4, 1.8, 1.6];
 /** A hit: the same, and a floor at which the view lies, tilted (radians) and lowered to a hand's width. */
 const WOUND = [-1.5, 0.8, 1.5];
 const LIE = [0.9, 0.3];
+/** A landed melee blow: the eye's and the look's speed, the roll's toward the blow's side, and the degrees the view zooms in. */
+const SMITE = [-0.6, 0.9, 1.4, 5];
 
 /** While stumbling the view tilts: the roll and pitch swing (radians) and their rate (rad/s). */
 const REEL = [0.1, 0.05, 11];
@@ -176,6 +184,8 @@ export const createEffects = (): Effects => {
   let sprint = 0;
   let arc = 0;
   let thump = 0;
+  /** The zoom of a landed melee blow, 1 at the hit (times its strength), eased off. */
+  let slam = 0;
   let reel = 0;
   let fall = 0;
   let shots = 0;
@@ -255,6 +265,13 @@ export const createEffects = (): Effects => {
       thump = c == CUT.THRUST || arc ? 1 : thump;
     },
 
+    smite(side, k) {
+      y[1] += SMITE[0] * k;
+      p[1] += SMITE[1] * k * (shots++ % 2 ? -1 : 1) * 0.5;
+      r[1] += SMITE[2] * k * (side || (shots % 2 ? -1 : 1));
+      slam = Math.max(slam, k);
+    },
+
     blow(b, taken) {
       const [e, l, roll] = taken ? KNOCKED : FIST;
       const sd = b == BLOW.CROSS || b == BLOW.LUNGE ? 1 : -1;
@@ -317,6 +334,7 @@ export const createEffects = (): Effects => {
       blinded += dt;
       fx.glare = glareAt(blinded);
       thump *= Math.exp(-dt * 10);
+      slam *= Math.exp(-dt * 9);
       fx.kick *= Math.exp(-dt * 22);
       fx.lie += (+!!me?.down - fx.lie) * ease(5);
       // Floored by an arc: down on the roof as fast as he fell, then up again.
@@ -356,7 +374,7 @@ export const createEffects = (): Effects => {
       const burst = !!me && me.dash > DASH_COOLDOWN - DASH_TICKS;
       punch += (+burst - punch) * ease(burst ? 40 : 6);
       sprint += (clamp((v - RUN_SPEED) / (SPRINT_SPEED - RUN_SPEED)) - sprint) * ease(4);
-      fx.fov = sprint * SPRINT_FOV + punch * DASH_FOV + thump * PUNCH_FOV;
+      fx.fov = sprint * SPRINT_FOV + punch * DASH_FOV + thump * PUNCH_FOV - slam * SMITE[3];
       fx.lines +=
         (clamp((v - LINES_FROM) / (SPRINT_SPEED - LINES_FROM)) * SPRINT_LINES +
           punch * (1 - SPRINT_LINES) -

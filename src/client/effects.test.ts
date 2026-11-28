@@ -458,6 +458,7 @@ describe('shape', () => {
       'punch',
       'quake',
       'roll',
+      'smite',
       'stride',
       'update',
       'wound',

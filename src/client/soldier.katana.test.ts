@@ -4,7 +4,7 @@ import { STILL } from '../shared/physics';
 import { CUT, MODE } from '../shared/types';
 import type { PlayerState } from '../shared/types';
 import { grip } from './gun';
-import { BEHIND, PARRY_IN, PARRY_OUT, axes, ends } from './katana';
+import { BEHIND, BROAD, PARRY_IN, PARRY_OUT, axes, ends } from './katana';
 import { KATANA_LEFT } from './body';
 import { STRIDE, add, basis, dot, sub } from './mesh';
 import { JOINT as J, solve, turn } from './rig';
@@ -306,10 +306,19 @@ describe('a runner with the katana', () => {
       expect(q[1]).toBeLessThan(1 + 1.7);
       expect(q[2]).toBeLessThan(-3 - 1.1);
     }
-    // It eases out of the guard and back into it: the point goes centimetres a frame there.
+    // It eases out of the guard and back into it: the point goes centimetres a frame there. The
+    // bounds were set for the swings' lengths before the user's quicker, ampler cuts (2026-11-28):
+    // a frame now goes as much further as the swing is shorter and wider.
+    const before: Record<number, number> = {
+      [CUT.THRUST]: 28,
+      [CUT.LEFT]: 34,
+      [CUT.RIGHT]: 34,
+      [CUT.SLASH]: 40,
+    };
+    const pace = ((before[cut] ?? CUTS[cut].ticks) / CUTS[cut].ticks) * BROAD;
     const step = (i: number) => Math.hypot(...path.at(i)!.map((c, k) => c - path.at(i - 1)![k]));
-    [1, 2].forEach(i => expect(step(i)).toBeLessThan(0.3));
-    [-1, -2, -3, -4, -5, -6].forEach(i => expect(step(i)).toBeLessThan(0.2));
+    [1, 2].forEach(i => expect(step(i)).toBeLessThan(0.3 * pace));
+    [-1, -2, -3, -4, -5, -6].forEach(i => expect(step(i)).toBeLessThan(0.2 * pace));
   });
 
   it('turns the trunk into the cut: the shoulders go with the blade', () => {
@@ -339,11 +348,12 @@ describe('a runner with the katana', () => {
       soldier([], r, GREEN, 1);
       marks.push(r.trail.count);
     }
+    const n = CUTS[CUT.LEFT].ticks;
     expect(marks[1]).toBe(0);
-    expect(marks[12]).toBeGreaterThan(3);
-    // The cut is over at 0.6 of the swing (tick 20): the ribbon fades in about 0.15 s, and is gone.
-    expect(marks[20]).toBeGreaterThan(0);
-    expect(marks[31]).toBe(0);
+    expect(marks[Math.round(0.42 * n)]).toBeGreaterThan(3);
+    // The cut is over at 0.6 of the swing: the ribbon fades in about 0.15 s, and is gone by the end.
+    expect(marks[Math.round(0.6 * n)]).toBeGreaterThan(0);
+    expect(marks[n - 1]).toBe(0);
     // A runner with the gun never makes one.
     const gunner = new Map<number, Runner>();
     animate(gunner, [man({ ammo: 30, swing: 5, cut: CUT.LEFT })], DT);

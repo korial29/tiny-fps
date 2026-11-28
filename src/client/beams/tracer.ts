@@ -190,9 +190,14 @@ export const createTracer = (): Tracer => {
     spit(at) {
       sparks.push({ p: at, v: [rnd(), rnd() + 2, rnd()], age: 0 });
     },
-    gore(at, n, speed = 2) {
+    gore(at, n, speed = 2, dir) {
       for (let i = 0; i < n; i++) {
-        const v: Vec3 = [rnd() * speed, rnd() * speed + speed * 0.8, rnd() * speed];
+        // Thrown along `dir` (m/s) on top of the spray, when the blow has a way.
+        const v: Vec3 = [
+          rnd() * speed + (dir?.[0] ?? 0) * (0.6 + 0.4 * Math.abs(rnd())),
+          rnd() * speed + speed * 0.8 + (dir?.[1] ?? 0),
+          rnd() * speed + (dir?.[2] ?? 0) * (0.6 + 0.4 * Math.abs(rnd())),
+        ];
         sparks.push({ p: at, v, age: 0, blood: true });
       }
       sparks = sparks.slice(-MAX * SPARKS);

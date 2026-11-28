@@ -43,6 +43,7 @@ import { createCombat, sight, voiceOf } from '../combat';
 import { createDoors } from '../doors';
 import { createButton } from '../station/button';
 import { createEffects } from '../effects';
+import { createMelee } from '../melee';
 import { flagDraws } from '../flag';
 import { createFoley } from '../foley';
 import { GLOW, LOOK, PALETTE, FW, FH, mood, sprite } from '../face';
@@ -201,6 +202,8 @@ export const play = (
     beast,
     hunter,
   );
+  // A melee hit's scars, blood, sparks and sounds, and the own one's hit-stop, shake and zoom.
+  const melee = createMelee(world, audio, tracer, fx, beast);
   const taunts = createTaunts(
     audio,
     speaker,
@@ -922,6 +925,7 @@ export const play = (
       dt,
       now,
     );
+    melee.frame(me, others, dt);
     if (me?.down && gone(you.id)) {
       hud.down(fx.lie, st!.left, 'DISINTEGRATED');
     }
@@ -1028,10 +1032,11 @@ export const play = (
         k > 0.2 || spy ? me : undefined,
         v => {
           doors.draw(v, pov, dt);
+          melee.draw(v, visible);
           button?.draw(v, pov, st?.phase ?? PHASE.READY, now / 1000, dt);
           wrecks.draw(v);
         },
-        { width, height, now },
+        { width, height, now: melee.clock(now) },
       );
       if (painted) {
         displayed = predictor.viewTick(now);

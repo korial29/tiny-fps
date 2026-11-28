@@ -57,6 +57,9 @@ import {
   SLIDE_MIN_SPEED,
   SLIDE_TICKS,
   SLOW_SPEED,
+  DAZE_SPEED,
+  DAZE_TICKS,
+  SPRINT_SPEED,
   SPRINT_ACCEL,
   STEP_H,
   STUMBLE_DRAG,
@@ -183,6 +186,7 @@ export const STILL = {
   inRail: false,
   zapping: false,
   slow: 0,
+  daze: 0,
   fried: false,
   heavy: false,
   ev: 0,
@@ -1384,6 +1388,11 @@ export const move = (
   if (p.slow) {
     p.slow--;
     cap(p, SLOW_SPEED);
+  }
+  // Dazed by a melee hit: the cap climbs back to the sprint as the steps run out, once the stumble is over.
+  if (p.daze && !p.stun) {
+    p.daze--;
+    cap(p, DAZE_SPEED + ((SPRINT_SPEED - DAZE_SPEED) * (DAZE_TICKS - p.daze)) / DAZE_TICKS);
   }
   if (p.y < w.def.floor && p.mode !== MODE.SWIM) {
     // Fallen off the roofs: back at the spawn of the player's id in his team.

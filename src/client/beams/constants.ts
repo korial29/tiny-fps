@@ -36,10 +36,11 @@ export const SPARKS = 12;
 export const MAX = 16;
 /**
  * A pistol's or a laser rifle's burst (the user, 2026-11-28: finer, leaving a mark of molten
- * metal, melt/): its splash's widest radius as a share of the ball's halo, and its sparks and
- * their speed [pistol, rifle].
+ * metal, melt/): its splash's widest radius as a share of the ball's halo [pistol, rifle] (the
+ * user, 2026-11-28: the rifle's red ball a quarter of the pistol's, too coarse over the mark), and
+ * its sparks and their speed [pistol, rifle].
  */
-export const SPLASH_WIDE = 0.45;
+export const SPLASH_WIDE = [0.45, 0.45 / 4];
 export const BURST_SPARKS = [5, 7];
 export const BURST_SPEED = [2.2, 2.8];
 /** Seconds a bolt lasts, bolts kept at most, and the sparks of a shock. */

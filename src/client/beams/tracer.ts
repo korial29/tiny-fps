@@ -448,7 +448,7 @@ export const createTracer = (): Tracer => {
             out,
             p,
             fine
-              ? r * SPLASH_WIDE * (1.6 - 0.6 * k)
+              ? r * SPLASH_WIDE[+(h < 0)] * (1.6 - 0.6 * k)
               : (splash ? r * (3 - 2 * k) : r * 0.7 * k) * (1 + Math.abs(h)),
             (h < 0 ? RED[i] : tint(rgb, i, h)).map(c => c * (0.4 + 0.6 * k)),
             eye,

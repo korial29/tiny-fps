@@ -418,7 +418,7 @@ export const play = (
             for (const p of s.players) {
               if (roster.find(q => q.id == p.id)?.team != beat.team) {
                 tracer.strike([p.x, p.y, p.z], world.def.station?.gun);
-                tracer.burst([p.x, p.y + 1, p.z], true);
+                tracer.burst([p.x, p.y + 1, p.z], true, true);
                 if (p.id == you.id) {
                   fx.jolt();
                   fx.blind();

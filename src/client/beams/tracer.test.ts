@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { NADE, NADE_R } from '../shared/constants';
-import { BOOM, FLASH, SPLASH, createTracer } from './beams';
-import type { Orb } from './beams';
-import { STRIDE } from './mesh';
-import type { Vec3 } from './mesh';
+import { NADE, NADE_R, PLASMA_R } from '../../shared/constants';
+import { build } from '../../shared/world';
+import { MELT, MELTS, surface } from '../melt';
+import { BOOM, FLASH, SPLASH, createTracer } from '../beams';
+import type { Orb } from '../beams';
+import { STRIDE } from '../mesh';
+import type { Vec3 } from '../mesh';
 
 const EYE: Vec3 = [0, 1.6, 0];
 const FROM: Vec3 = [0.2, 1.4, -0.6];
@@ -176,20 +178,23 @@ describe('the flash of a shot', () => {
 });
 
 describe('the burst of a ball', () => {
-  it('splashes: a glow that swells as it fades, a bright light, and sparks round it', () => {
+  const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+  /** A wall across z = -40, as surface() finds it for a ball flying along -z. */
+  const FACE = { p: [0, 1.6, -40] as Vec3, n: [0, 0, 1] as Vec3 };
+
+  it('of the pistol splashes small, lights near, and throws a few sparks', () => {
     const t = createTracer();
     t.burst(TO);
     const v = drawn(t);
-    // The two discs of the splash, then 12 sparks of 4 triangles.
-    expect(v).toHaveLength(48 + 12 * 12);
+    // The two discs of the splash, then 5 sparks of 4 triangles; no mark without a face.
+    expect(v).toHaveLength(48 + 5 * 12);
     const [splash] = t.lights();
     expect(splash.p).toEqual(TO);
-    expect(splash.range).toBeGreaterThan(6);
-    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
+    expect(splash.range).toBe(3);
     t.update(SPLASH / 2);
     expect(w(drawn(t))).toBeGreaterThan(w(v));
     for (const x of drawn(t)) {
-      expect(Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2])).toBeLessThan(2);
+      expect(Math.hypot(x[0] - TO[0], x[1] - TO[1], x[2] - TO[2])).toBeLessThan(1);
     }
     t.update(SPLASH / 2 + 0.001);
     expect(t.lights()).toEqual([]);
@@ -199,15 +204,24 @@ describe('the burst of a ball', () => {
     expect(drawn(t)).toEqual([]);
   });
 
-  it('of the laser rifle splashes red, bigger, lights red, and throws twice the sparks', () => {
+  it('of the pistol and the rifle is a third of the old splash (the user, 2026-11-28: finer)', () => {
+    const [fine, big] = [createTracer(), createTracer()];
+    fine.burst(TO, true);
+    big.burst(TO, true, true);
+    const [f, b] = [drawn(fine), drawn(big)];
+    // The station's strike keeps the old splash and its 24 sparks.
+    expect(b).toHaveLength(48 + 24 * 12);
+    expect(f).toHaveLength(48 + 7 * 12);
+    expect(w(f)).toBeLessThan(w(b) / 3);
+  });
+
+  it('of the laser rifle splashes as small, lights red, and throws a few more sparks', () => {
     const [blue, red] = [createTracer(), createTracer()];
     blue.burst(TO);
     red.burst(TO, true);
     const [b, r] = [drawn(blue), drawn(red)];
-    // The two discs of the splash, then 24 sparks of 4 triangles.
-    expect(r).toHaveLength(48 + 24 * 12);
-    const w = (x: number[][]) => Math.hypot(...[0, 1, 2].map(k => x[1][k] - x[0][k]));
-    expect(w(r)).toBeCloseTo(w(b) * 1.6, 6);
+    expect(r).toHaveLength(48 + 7 * 12);
+    expect(w(r)).toBeCloseTo(w(b), 6);
     // Red over blue: in the splash's core, and every spark.
     expect(r[0][6]).toBeGreaterThan(r[0][9]);
     expect(r[r.length - 1][6]).toBeGreaterThan(r[r.length - 1][9]);
@@ -216,14 +230,79 @@ describe('the burst of a ball', () => {
     expect(blue.lights()[0].color[2]).toBeGreaterThan(blue.lights()[0].color[0]);
   });
 
-  it('keeps at most a handful of flashes and splashes, and of sparks', () => {
+  it('leaves on its face a mark of molten metal, flat on it, that cools from yellow to red and goes', () => {
     const t = createTracer();
-    for (let i = 0; i < 100; i++) {
-      t.burst(TO);
+    t.burst([0, 1.6, -40 + PLASMA_R], false, false, FACE);
+    // Past the splash and the sparks: the mark alone.
+    t.update(0.3);
+    const v = drawn(t);
+    // The ragged patch of 10 triangles, and its halo while hot.
+    expect(v).toHaveLength(2 * 30);
+    for (const x of v) {
+      // Flat on the wall, a few millimetres off it, within a few centimetres of the hit.
+      expect(x[2]).toBeCloseTo(-40 + 0.006, 6);
+      expect(Math.hypot(x[0], x[1] - 1.6)).toBeLessThan(0.08);
+      expect(x[8]).toBe(-2);
+    }
+    // Bright yellow: red and green over 1, little blue.
+    expect(v[0][6]).toBeGreaterThan(1);
+    expect(v[0][7]).toBeGreaterThan(1);
+    expect(v[0][9]).toBeLessThan(0.5);
+    t.update(MELT * 0.5);
+    const [x] = drawn(t);
+    // Cooler: orange to red, the green down.
+    expect(x[6]).toBeGreaterThan(2 * x[7]);
+    expect(drawn(t)).toHaveLength(30);
+    t.update(MELT);
+    expect(drawn(t)).toEqual([]);
+  });
+
+  it('keeps at most a handful of flashes and splashes, of sparks, and MELTS marks', () => {
+    const t = createTracer();
+    for (let i = 0; i < 200; i++) {
+      t.burst(TO, false, false, FACE);
       t.flash(FROM);
     }
-    expect(drawn(t).length).toBeLessThan(16 * 48 + 16 * 12 * 12 + 1);
+    t.update(0.3);
+    expect(drawn(t)).toHaveLength(MELTS * 2 * 30);
     expect(t.lights().length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe('the face a ball bursts on', () => {
+  /** A roof at y = 0 and a wall across z = -20. */
+  const WORLD = build({
+    brushes: [
+      { min: [-50, -30, -50], max: [50, 0, 50], top: 0, side: 0 },
+      { min: [-50, 0, -21], max: [50, 8, -20], top: 0, side: 0 },
+    ],
+    teams: [
+      { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+      { base: [0, 0, 0], spawns: [[0, 0, 0, 0]] },
+    ],
+    floor: -25,
+    sun: { dir: [0, 1, 0], color: [1, 1, 1] },
+    sky: [
+      [0, 0, 1],
+      [1, 1, 1],
+    ],
+  });
+  const close = (a: Vec3, b: Vec3) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 5));
+
+  it('is the wall or the roof the ball stopped PLASMA_R short of, with its normal', () => {
+    const wall = surface(WORLD, [1, 1.6, -20 + PLASMA_R], [0, 0, -1])!;
+    close(wall.p, [1, 1.6, -20]);
+    close(wall.n, [0, 0, 1]);
+    // Down onto the roof at a slant: the roof's normal, not the way back up the shot.
+    const d = [0, -Math.SQRT1_2, -Math.SQRT1_2] as Vec3;
+    const roof = surface(WORLD, [0, PLASMA_R * Math.SQRT2, -5], d)!;
+    close(roof.n, [0, 1, 0]);
+    expect(roof.p[1]).toBeCloseTo(0, 5);
+  });
+
+  it('is nothing on a body in the open, or with no way known', () => {
+    expect(surface(WORLD, [0, 1.6, -5], [0, 0, -1])).toBeUndefined();
+    expect(surface(WORLD, [1, 1.6, -20 + PLASMA_R], [0, 0, 0])).toBeUndefined();
   });
 });
 

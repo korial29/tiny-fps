@@ -121,12 +121,15 @@ describe('an own ball', () => {
     b.snapshot([ball(-16, true)], 1, 120);
     const at = (16 / PLASMA_SPEED) * 1000;
     expect(b.frame(at - 5, muzzle).bursts).toEqual([]);
-    expect(b.frame(at + 5, muzzle).bursts).toEqual([[[0, EYE, -16], 1]]);
+    expect(b.frame(at + 5, muzzle).bursts).toEqual([[[0, EYE, -16], 1, undefined, [-0, 0, -1]]]);
     // A burst behind it ends it at once.
     b.fire(me({ shots: 8 }), 1000);
     b.frame(1150, muzzle);
     b.snapshot([{ ...ball(-2, true), id: 8 }], 1, 1160);
-    expect(b.frame(1170, muzzle)).toEqual({ orbs: [], bursts: [[[0, EYE, -2], 1]] });
+    expect(b.frame(1170, muzzle)).toEqual({
+      orbs: [],
+      bursts: [[[0, EYE, -2], 1, undefined, [-0, 0, -1]]],
+    });
   });
 
   it('is not burst twice: the host’s word of a burst it already had changes nothing', () => {
@@ -181,11 +184,17 @@ describe('the others’ balls', () => {
     // As drawn, it reaches x = 9 a metre's flight after it was at 10.
     const at = 1000 + INTERP_DELAY + 1000 / PLASMA_SPEED;
     expect(b.frame(at - 2, muzzle).bursts).toEqual([]);
-    expect(b.frame(at + 2, muzzle)).toEqual({ orbs: [], bursts: [[[9, 1.6, 0], 1]] });
+    expect(b.frame(at + 2, muzzle)).toEqual({
+      orbs: [],
+      bursts: [[[9, 1.6, 0], 1, undefined, [-1, 0, 0]]],
+    });
     // One first seen burst (fired and burst between two snapshots) bursts once, at its time.
     b.snapshot([ball({ id: 4, x: 3, burst: true })], 1, 2000);
     expect(b.frame(2000 + INTERP_DELAY - 1, muzzle)).toEqual({ orbs: [], bursts: [] });
-    expect(b.frame(2000 + INTERP_DELAY, muzzle)).toEqual({ orbs: [], bursts: [[[3, 1.6, 0], 1]] });
+    expect(b.frame(2000 + INTERP_DELAY, muzzle)).toEqual({
+      orbs: [],
+      bursts: [[[3, 1.6, 0], 1, undefined, [0, 0, 0]]],
+    });
     expect(b.frame(2200, muzzle)).toEqual({ orbs: [], bursts: [] });
   });
 
